@@ -51,12 +51,40 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        let value = try getValue(for: key).lowercased()
-        switch value {
-        case "true", "yes", "1": return true
-        case "false", "no", "0": return false
-        default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+        let value = try getValue(for: key).lowercased().trimmingCharacters(in: .whitespaces)
+
+        switch configuration.boolDecodingStrategy {
+        case .standard:
+            switch value {
+            case "true", "yes", "1": return true
+            case "false", "no", "0": return false
+            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            }
+
+        case .flexible:
+            if flexibleTrueValues.contains(value) { return true }
+            if flexibleFalseValues.contains(value) { return false }
+            // Try numeric: any non-zero is true
+            if let num = Int(value) { return num != 0 }
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+
+        case .custom(let trueValues, let falseValues):
+            if trueValues.contains(value) { return true }
+            if falseValues.contains(value) { return false }
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
         }
+    }
+
+    // MARK: - Flexible Boolean Values (i18n)
+
+    private var flexibleTrueValues: Set<String> {
+        ["true", "yes", "1", "y", "t", "on", "full", "fulltank",
+         "oui", "si", "ja", "да", "是", "満", "voll", "真", "sí"]
+    }
+
+    private var flexibleFalseValues: Set<String> {
+        ["false", "no", "0", "n", "f", "off", "partial", "partialtank",
+         "non", "nein", "нет", "否", "部分", "假"]
     }
 
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
@@ -65,7 +93,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
         let value = try getValue(for: key)
-        guard let result = Double(value) else {
+        guard let result = parseDouble(value) else {
             throw CSVDecodingError.typeMismatch(expected: "Double", actual: value)
         }
         return result
@@ -73,10 +101,135 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Float.Type, forKey key: Key) throws -> Float {
         let value = try getValue(for: key)
-        guard let result = Float(value) else {
+        guard let result = parseDouble(value) else {
             throw CSVDecodingError.typeMismatch(expected: "Float", actual: value)
         }
-        return result
+        return Float(result)
+    }
+
+    // MARK: - Flexible Number Parsing
+
+    private func parseDouble(_ value: String) -> Double? {
+        switch configuration.numberDecodingStrategy {
+        case .standard:
+            return Double(value)
+
+        case .flexible:
+            return parseFlexibleDouble(value)
+
+        case .locale(let locale):
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            return formatter.number(from: value)?.doubleValue
+        }
+    }
+
+    /// Parses a Decimal value using the configured strategy.
+    private func parseDecimal(_ value: String) -> Decimal? {
+        switch configuration.numberDecodingStrategy {
+        case .standard:
+            return Decimal(string: value)
+
+        case .flexible:
+            // Normalize the string first, then parse as Decimal
+            guard let cleaned = normalizeNumberString(value) else { return nil }
+            return Decimal(string: cleaned)
+
+        case .locale(let locale):
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            return formatter.number(from: value)?.decimalValue
+        }
+    }
+
+    /// Normalizes a number string by removing currency and fixing decimal separators.
+    private func normalizeNumberString(_ value: String) -> String? {
+        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+
+        let removePatterns = ["$", "€", "£", "¥", "kr", "zł", "₹", "R$", "CHF", "CAD", "USD", "EUR", "GBP",
+                              "km", "mi", "l", "L", "gal", "liters", "litres", "gallons", "miles", "kilometers"]
+        for pattern in removePatterns {
+            cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .caseInsensitive)
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+
+        let hasComma = cleaned.contains(",")
+        let hasDot = cleaned.contains(".")
+
+        if hasComma && hasDot {
+            if let lastComma = cleaned.lastIndex(of: ","),
+               let lastDot = cleaned.lastIndex(of: ".") {
+                if lastComma > lastDot {
+                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+                } else {
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+                }
+            }
+        } else if hasComma && !hasDot {
+            let parts = cleaned.split(separator: ",")
+            if parts.count == 2 && parts[1].count <= 2 {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+            } else {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+            }
+        }
+
+        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    /// Parses a numeric value handling various decimal separators and currency symbols.
+    /// Supports both US (1,234.56) and EU (1.234,56) formats.
+    private func parseFlexibleDouble(_ value: String) -> Double? {
+        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+
+        // Remove common currency symbols and units
+        let removePatterns = ["$", "€", "£", "¥", "kr", "zł", "₹", "R$", "CHF", "CAD", "USD", "EUR", "GBP",
+                              "km", "mi", "l", "L", "gal", "liters", "litres", "gallons", "miles", "kilometers"]
+        for pattern in removePatterns {
+            cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .caseInsensitive)
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+
+        // Detect format: if both . and , exist, the last one is decimal separator
+        let hasComma = cleaned.contains(",")
+        let hasDot = cleaned.contains(".")
+
+        if hasComma && hasDot {
+            // Both exist: last occurrence is decimal separator
+            if let lastComma = cleaned.lastIndex(of: ","),
+               let lastDot = cleaned.lastIndex(of: ".") {
+                if lastComma > lastDot {
+                    // Comma is decimal (European: 1.234,56)
+                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+                } else {
+                    // Dot is decimal (US: 1,234.56)
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+                }
+            }
+        } else if hasComma && !hasDot {
+            // Only comma: check if it's thousands or decimal
+            let parts = cleaned.split(separator: ",")
+            if parts.count == 2 && parts[1].count <= 2 {
+                // Likely decimal (45,50 = 45.50)
+                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+            } else {
+                // Likely thousands separator (1,234 = 1234)
+                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+            }
+        }
+        // If only dot, it's already in the right format
+
+        // Remove any remaining non-numeric characters except . and -
+        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
+
+        return Double(cleaned)
     }
 
     func decode(_ type: Int.Type, forKey key: Key) throws -> Int {
@@ -169,7 +322,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
         // Handle Decimal specially
         if type == Decimal.self {
-            guard let decimal = Decimal(string: value) else {
+            guard let decimal = parseDecimal(value) else {
                 throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value)
             }
             return decimal as! T
@@ -243,6 +396,104 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
         case .custom(let closure):
             return try closure(value)
+
+        case .flexible:
+            guard let date = parseFlexibleDate(value, hint: nil) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+            }
+            return date
+
+        case .flexibleWithHint(let preferred):
+            guard let date = parseFlexibleDate(value, hint: preferred) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+            }
+            return date
+        }
+    }
+
+    // MARK: - Flexible Date Parsing
+
+    /// Common date formats to try, in order of prevalence.
+    private var dateFormats: [String] {[
+        // ISO 8601
+        "yyyy-MM-dd",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd'T'HH:mm:ssZ",
+        "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+
+        // European (day first)
+        "dd/MM/yyyy",
+        "dd-MM-yyyy",
+        "dd.MM.yyyy",
+        "dd/MM/yy",
+        "dd-MM-yy",
+        "dd.MM.yy",
+
+        // US (month first)
+        "MM/dd/yyyy",
+        "MM-dd-yyyy",
+        "MM/dd/yy",
+        "MM-dd-yy",
+
+        // With time
+        "dd/MM/yyyy HH:mm",
+        "dd/MM/yyyy HH:mm:ss",
+        "MM/dd/yyyy HH:mm",
+        "MM/dd/yyyy HH:mm:ss",
+
+        // Compact
+        "yyyyMMdd",
+        "ddMMyyyy",
+
+        // Verbose
+        "MMMM d, yyyy",
+        "d MMMM yyyy",
+        "MMM d, yyyy",
+        "d MMM yyyy"
+    ]}
+
+    /// Attempts to parse a date string using multiple formats.
+    private func parseFlexibleDate(_ value: String, hint: String?) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        // Try hint first if provided
+        if let hint = hint {
+            formatter.dateFormat = hint
+            if let date = formatter.date(from: trimmed) {
+                return date
+            }
+        }
+
+        // Try all known formats
+        for format in dateFormats {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: trimmed) {
+                return date
+            }
+        }
+
+        // Try relative date expressions
+        return parseRelativeDate(trimmed)
+    }
+
+    /// Parses relative date expressions like "today", "yesterday".
+    private func parseRelativeDate(_ value: String) -> Date? {
+        let lower = value.lowercased()
+        let calendar = Calendar.current
+
+        switch lower {
+        case "today":
+            return calendar.startOfDay(for: Date())
+        case "yesterday":
+            return calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))
+        default:
+            return nil
         }
     }
 

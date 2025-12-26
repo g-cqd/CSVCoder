@@ -38,11 +38,37 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     func decode(_ type: Bool.Type) throws -> Bool {
-        switch value.lowercased() {
-        case "true", "yes", "1": return true
-        case "false", "no", "0": return false
-        default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+        let lower = value.lowercased().trimmingCharacters(in: .whitespaces)
+
+        switch configuration.boolDecodingStrategy {
+        case .standard:
+            switch lower {
+            case "true", "yes", "1": return true
+            case "false", "no", "0": return false
+            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            }
+
+        case .flexible:
+            if flexibleTrueValues.contains(lower) { return true }
+            if flexibleFalseValues.contains(lower) { return false }
+            if let num = Int(lower) { return num != 0 }
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+
+        case .custom(let trueValues, let falseValues):
+            if trueValues.contains(lower) { return true }
+            if falseValues.contains(lower) { return false }
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
         }
+    }
+
+    private var flexibleTrueValues: Set<String> {
+        ["true", "yes", "1", "y", "t", "on", "full", "fulltank",
+         "oui", "si", "ja", "да", "是", "満", "voll", "真", "sí"]
+    }
+
+    private var flexibleFalseValues: Set<String> {
+        ["false", "no", "0", "n", "f", "off", "partial", "partialtank",
+         "non", "nein", "нет", "否", "部分", "假"]
     }
 
     func decode(_ type: String.Type) throws -> String {
@@ -50,17 +76,126 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     func decode(_ type: Double.Type) throws -> Double {
-        guard let result = Double(value) else {
+        guard let result = parseDouble(value) else {
             throw CSVDecodingError.typeMismatch(expected: "Double", actual: value)
         }
         return result
     }
 
     func decode(_ type: Float.Type) throws -> Float {
-        guard let result = Float(value) else {
+        guard let result = parseDouble(value) else {
             throw CSVDecodingError.typeMismatch(expected: "Float", actual: value)
         }
-        return result
+        return Float(result)
+    }
+
+    // MARK: - Flexible Number Parsing
+
+    private func parseDouble(_ value: String) -> Double? {
+        switch configuration.numberDecodingStrategy {
+        case .standard:
+            return Double(value)
+
+        case .flexible:
+            return parseFlexibleDouble(value)
+
+        case .locale(let locale):
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            return formatter.number(from: value)?.doubleValue
+        }
+    }
+
+    private func parseFlexibleDouble(_ value: String) -> Double? {
+        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+
+        let removePatterns = ["$", "€", "£", "¥", "kr", "zł", "₹", "R$", "CHF", "CAD", "USD", "EUR", "GBP",
+                              "km", "mi", "l", "L", "gal", "liters", "litres", "gallons", "miles", "kilometers"]
+        for pattern in removePatterns {
+            cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .caseInsensitive)
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+
+        let hasComma = cleaned.contains(",")
+        let hasDot = cleaned.contains(".")
+
+        if hasComma && hasDot {
+            if let lastComma = cleaned.lastIndex(of: ","),
+               let lastDot = cleaned.lastIndex(of: ".") {
+                if lastComma > lastDot {
+                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+                } else {
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+                }
+            }
+        } else if hasComma && !hasDot {
+            let parts = cleaned.split(separator: ",")
+            if parts.count == 2 && parts[1].count <= 2 {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+            } else {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+            }
+        }
+
+        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
+        return Double(cleaned)
+    }
+
+    private func parseDecimal(_ value: String) -> Decimal? {
+        switch configuration.numberDecodingStrategy {
+        case .standard:
+            return Decimal(string: value)
+
+        case .flexible:
+            guard let cleaned = normalizeNumberString(value) else { return nil }
+            return Decimal(string: cleaned)
+
+        case .locale(let locale):
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            return formatter.number(from: value)?.decimalValue
+        }
+    }
+
+    private func normalizeNumberString(_ value: String) -> String? {
+        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+
+        let removePatterns = ["$", "€", "£", "¥", "kr", "zł", "₹", "R$", "CHF", "CAD", "USD", "EUR", "GBP",
+                              "km", "mi", "l", "L", "gal", "liters", "litres", "gallons", "miles", "kilometers"]
+        for pattern in removePatterns {
+            cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .caseInsensitive)
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+
+        let hasComma = cleaned.contains(",")
+        let hasDot = cleaned.contains(".")
+
+        if hasComma && hasDot {
+            if let lastComma = cleaned.lastIndex(of: ","),
+               let lastDot = cleaned.lastIndex(of: ".") {
+                if lastComma > lastDot {
+                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+                } else {
+                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+                }
+            }
+        } else if hasComma && !hasDot {
+            let parts = cleaned.split(separator: ",")
+            if parts.count == 2 && parts[1].count <= 2 {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+            } else {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+            }
+        }
+
+        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     func decode(_ type: Int.Type) throws -> Int {
@@ -141,7 +276,7 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
 
         // Handle Decimal specially
         if type == Decimal.self {
-            guard let decimal = Decimal(string: value) else {
+            guard let decimal = parseDecimal(value) else {
                 throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value)
             }
             return decimal as! T
@@ -203,6 +338,87 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
 
         case .custom(let closure):
             return try closure(value)
+
+        case .flexible:
+            guard let date = parseFlexibleDate(value, hint: nil) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+            }
+            return date
+
+        case .flexibleWithHint(let preferred):
+            guard let date = parseFlexibleDate(value, hint: preferred) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+            }
+            return date
+        }
+    }
+
+    // MARK: - Flexible Date Parsing
+
+    private var dateFormats: [String] {[
+        "yyyy-MM-dd",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd'T'HH:mm:ssZ",
+        "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "dd/MM/yyyy",
+        "dd-MM-yyyy",
+        "dd.MM.yyyy",
+        "dd/MM/yy",
+        "dd-MM-yy",
+        "dd.MM.yy",
+        "MM/dd/yyyy",
+        "MM-dd-yyyy",
+        "MM/dd/yy",
+        "MM-dd-yy",
+        "dd/MM/yyyy HH:mm",
+        "dd/MM/yyyy HH:mm:ss",
+        "MM/dd/yyyy HH:mm",
+        "MM/dd/yyyy HH:mm:ss",
+        "yyyyMMdd",
+        "ddMMyyyy",
+        "MMMM d, yyyy",
+        "d MMMM yyyy",
+        "MMM d, yyyy",
+        "d MMM yyyy"
+    ]}
+
+    private func parseFlexibleDate(_ value: String, hint: String?) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        if let hint = hint {
+            formatter.dateFormat = hint
+            if let date = formatter.date(from: trimmed) {
+                return date
+            }
+        }
+
+        for format in dateFormats {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: trimmed) {
+                return date
+            }
+        }
+
+        return parseRelativeDate(trimmed)
+    }
+
+    private func parseRelativeDate(_ value: String) -> Date? {
+        let lower = value.lowercased()
+        let calendar = Calendar.current
+
+        switch lower {
+        case "today":
+            return calendar.startOfDay(for: Date())
+        case "yesterday":
+            return calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))
+        default:
+            return nil
         }
     }
 }

@@ -12,7 +12,7 @@ public final class CSVDecoder: Sendable {
 
     /// Configuration for CSV parsing.
     public struct Configuration: Sendable {
-        /// The delimiter character used to separate fields. Default is semicolon (;).
+        /// The delimiter character used to separate fields. Default is comma (,).
         public var delimiter: Character
 
         /// Whether the first row contains headers. Default is true.
@@ -27,19 +27,29 @@ public final class CSVDecoder: Sendable {
         /// The date decoding strategy.
         public var dateDecodingStrategy: DateDecodingStrategy
 
+        /// The number decoding strategy.
+        public var numberDecodingStrategy: NumberDecodingStrategy
+
+        /// The boolean decoding strategy.
+        public var boolDecodingStrategy: BoolDecodingStrategy
+
         /// Creates a new configuration with default values.
         public init(
             delimiter: Character = ",",
             hasHeaders: Bool = true,
             encoding: String.Encoding = .utf8,
             trimWhitespace: Bool = true,
-            dateDecodingStrategy: DateDecodingStrategy = .deferredToDate
+            dateDecodingStrategy: DateDecodingStrategy = .deferredToDate,
+            numberDecodingStrategy: NumberDecodingStrategy = .standard,
+            boolDecodingStrategy: BoolDecodingStrategy = .standard
         ) {
             self.delimiter = delimiter
             self.hasHeaders = hasHeaders
             self.encoding = encoding
             self.trimWhitespace = trimWhitespace
             self.dateDecodingStrategy = dateDecodingStrategy
+            self.numberDecodingStrategy = numberDecodingStrategy
+            self.boolDecodingStrategy = boolDecodingStrategy
         }
     }
 
@@ -57,6 +67,30 @@ public final class CSVDecoder: Sendable {
         case formatted(String)
         /// Decode using a custom closure.
         @preconcurrency case custom(@Sendable (String) throws -> Date)
+        /// Automatically detect format from 20+ common patterns (ISO, EU, US, etc.)
+        case flexible
+        /// Try a preferred format first, then fall back to auto-detection.
+        case flexibleWithHint(preferred: String)
+    }
+
+    /// Strategies for decoding numeric values (Double, Float, Decimal).
+    public enum NumberDecodingStrategy: Sendable {
+        /// Use Swift's standard number parsing. Fails on European formats or currency symbols.
+        case standard
+        /// Auto-detect US (1,234.56) and EU (1.234,56) formats; strip currency symbols.
+        case flexible
+        /// Use a specific locale for number formatting.
+        case locale(Locale)
+    }
+
+    /// Strategies for decoding boolean values.
+    public enum BoolDecodingStrategy: Sendable {
+        /// Standard values: true/yes/1, false/no/0
+        case standard
+        /// Extended i18n values: oui/non, ja/nein, да/нет, 是/否, etc.
+        case flexible
+        /// Custom true/false value sets.
+        case custom(trueValues: Set<String>, falseValues: Set<String>)
     }
 
     /// The configuration used for decoding.
