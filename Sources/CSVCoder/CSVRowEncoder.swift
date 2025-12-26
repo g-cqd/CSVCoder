@@ -8,10 +8,11 @@
 import Foundation
 
 /// An encoder for a single CSV row.
-struct CSVRowEncoder: Encoder {
+/// nonisolated utility type for encoding
+nonisolated struct CSVRowEncoder: Encoder {
     let configuration: CSVEncoder.Configuration
     let codingPath: [CodingKey]
-    var userInfo: [CodingUserInfoKey: Any] { [:] }
+    nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     let storage: CSVEncodingStorage
 
@@ -21,21 +22,21 @@ struct CSVRowEncoder: Encoder {
         self.storage = storage
     }
 
-    func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
+    nonisolated func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
         KeyedEncodingContainer(CSVKeyedEncodingContainer(configuration: configuration, codingPath: codingPath, storage: storage))
     }
 
-    func unkeyedContainer() -> UnkeyedEncodingContainer {
+    nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
         fatalError("Unkeyed containers are not supported in CSV encoding")
     }
 
-    func singleValueContainer() -> SingleValueEncodingContainer {
+    nonisolated func singleValueContainer() -> SingleValueEncodingContainer {
         fatalError("Single value containers are not supported at root level")
     }
 }
 
 /// A keyed encoding container for CSV data.
-struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
+nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
     let configuration: CSVEncoder.Configuration
     let codingPath: [CodingKey]
     private let storage: CSVEncodingStorage
@@ -268,9 +269,9 @@ struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol
 
 /// Protocol for handling optional encoding.
 private protocol OptionalEncodable {
-    var isNil: Bool { get }
+    nonisolated var isNil: Bool { get }
 }
 
 extension Optional: OptionalEncodable {
-    var isNil: Bool { self == nil }
+    nonisolated var isNil: Bool { self == nil }
 }

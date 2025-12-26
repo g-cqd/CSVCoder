@@ -8,7 +8,8 @@
 import Foundation
 
 /// An encoder that encodes Encodable types to CSV data.
-public final class CSVEncoder: Sendable {
+/// nonisolated utility class with immutable configuration
+public nonisolated final class CSVEncoder: Sendable {
 
     /// Configuration for CSV encoding.
     public struct Configuration: Sendable {

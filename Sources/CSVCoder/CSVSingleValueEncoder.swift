@@ -8,10 +8,11 @@
 import Foundation
 
 /// An encoder for single values in CSV fields.
-struct CSVSingleValueEncoder: Encoder {
+/// nonisolated utility type for encoding
+nonisolated struct CSVSingleValueEncoder: Encoder {
     let configuration: CSVEncoder.Configuration
     let codingPath: [CodingKey]
-    var userInfo: [CodingUserInfoKey: Any] { [:] }
+    nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     private let storage: CSVEncodingStorage
 
@@ -21,21 +22,21 @@ struct CSVSingleValueEncoder: Encoder {
         self.storage = storage
     }
 
-    func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
+    nonisolated func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
         fatalError("Keyed containers not supported for single values")
     }
 
-    func unkeyedContainer() -> UnkeyedEncodingContainer {
+    nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
         fatalError("Unkeyed containers not supported for single values")
     }
 
-    func singleValueContainer() -> SingleValueEncodingContainer {
+    nonisolated func singleValueContainer() -> SingleValueEncodingContainer {
         CSVSingleValueEncodingContainer(configuration: configuration, codingPath: codingPath, storage: storage)
     }
 }
 
 /// A single value container for CSV encoding.
-struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer {
+nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer {
     let configuration: CSVEncoder.Configuration
     let codingPath: [CodingKey]
     private let storage: CSVEncodingStorage
@@ -174,7 +175,8 @@ struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer {
 }
 
 /// Storage for encoded CSV values during encoding.
-final class CSVEncodingStorage: @unchecked Sendable {
+/// nonisolated with thread-safe access via NSLock
+nonisolated final class CSVEncodingStorage: @unchecked Sendable {
     private var values: [String: String] = [:]
     private var orderedKeys: [String] = []
     private let lock = NSLock()
