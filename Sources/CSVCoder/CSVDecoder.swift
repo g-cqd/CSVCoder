@@ -29,7 +29,7 @@ public final class CSVDecoder: Sendable {
 
         /// Creates a new configuration with default values.
         public init(
-            delimiter: Character = ";",
+            delimiter: Character = ",",
             hasHeaders: Bool = true,
             encoding: String.Encoding = .utf8,
             trimWhitespace: Bool = true,

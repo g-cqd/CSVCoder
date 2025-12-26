@@ -167,6 +167,30 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             return try decodeDate(from: value) as! T
         }
 
+        // Handle Decimal specially
+        if type == Decimal.self {
+            guard let decimal = Decimal(string: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value)
+            }
+            return decimal as! T
+        }
+
+        // Handle UUID specially
+        if type == UUID.self {
+            guard let uuid = UUID(uuidString: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value)
+            }
+            return uuid as! T
+        }
+
+        // Handle URL specially
+        if type == URL.self {
+            guard let url = URL(string: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value)
+            }
+            return url as! T
+        }
+
         // Handle Optional types
         if let optionalType = T.self as? OptionalDecodable.Type {
             if value.isEmpty {

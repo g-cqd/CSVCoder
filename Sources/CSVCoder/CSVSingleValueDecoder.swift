@@ -139,6 +139,30 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             return try decodeDate() as! T
         }
 
+        // Handle Decimal specially
+        if type == Decimal.self {
+            guard let decimal = Decimal(string: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value)
+            }
+            return decimal as! T
+        }
+
+        // Handle UUID specially
+        if type == UUID.self {
+            guard let uuid = UUID(uuidString: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value)
+            }
+            return uuid as! T
+        }
+
+        // Handle URL specially
+        if type == URL.self {
+            guard let url = URL(string: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value)
+            }
+            return url as! T
+        }
+
         // For other types, they need to implement init(from:) properly
         throw CSVDecodingError.unsupportedType("Cannot decode \(type) from single CSV value")
     }
