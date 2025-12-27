@@ -12,10 +12,18 @@ struct CSVRowDecoder: Decoder {
     let row: [String: String]
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
+    let rowIndex: Int?
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
+    init(row: [String: String], configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int? = nil) {
+        self.row = row
+        self.configuration = configuration
+        self.codingPath = codingPath
+        self.rowIndex = rowIndex
+    }
+
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        KeyedDecodingContainer(CSVKeyedDecodingContainer(row: row, configuration: configuration, codingPath: codingPath))
+        KeyedDecodingContainer(CSVKeyedDecodingContainer(row: row, configuration: configuration, codingPath: codingPath, rowIndex: rowIndex))
     }
 
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
@@ -32,15 +40,28 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     let row: [String: String]
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
+    let rowIndex: Int?
     var allKeys: [Key] { row.keys.compactMap { Key(stringValue: $0) } }
 
     func contains(_ key: Key) -> Bool {
         row[key.stringValue] != nil
     }
 
+    private func makeLocation(for key: Key, includeAvailableKeys: Bool = false) -> CSVLocation {
+        CSVLocation(
+            row: rowIndex,
+            column: key.stringValue,
+            codingPath: codingPath + [key],
+            availableKeys: includeAvailableKeys ? Array(row.keys) : nil
+        )
+    }
+
     private func getValue(for key: Key) throws -> String {
         guard let value = row[key.stringValue] else {
-            throw CSVDecodingError.keyNotFound(key.stringValue)
+            throw CSVDecodingError.keyNotFound(
+                key.stringValue,
+                location: makeLocation(for: key, includeAvailableKeys: true)
+            )
         }
         return value
     }
@@ -52,13 +73,14 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
         let value = try getValue(for: key).lowercased().trimmingCharacters(in: .whitespaces)
+        let location = makeLocation(for: key)
 
         switch configuration.boolDecodingStrategy {
         case .standard:
             switch value {
             case "true", "yes", "1": return true
             case "false", "no", "0": return false
-            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
             }
 
         case .flexible:
@@ -66,12 +88,12 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             if flexibleFalseValues.contains(value) { return false }
             // Try numeric: any non-zero is true
             if let num = Int(value) { return num != 0 }
-            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
 
         case .custom(let trueValues, let falseValues):
             if trueValues.contains(value) { return true }
             if falseValues.contains(value) { return false }
-            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
         }
     }
 
@@ -94,7 +116,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
         let value = try getValue(for: key)
         guard let result = parseDouble(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Double", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Double", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -102,7 +124,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Float.Type, forKey key: Key) throws -> Float {
         let value = try getValue(for: key)
         guard let result = parseDouble(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Float", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Float", actual: value, location: makeLocation(for: key))
         }
         return Float(result)
     }
@@ -235,7 +257,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Int.Type, forKey key: Key) throws -> Int {
         let value = try getValue(for: key)
         guard let result = Int(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -243,7 +265,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 {
         let value = try getValue(for: key)
         guard let result = Int8(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -251,7 +273,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 {
         let value = try getValue(for: key)
         guard let result = Int16(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -259,7 +281,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 {
         let value = try getValue(for: key)
         guard let result = Int32(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -267,7 +289,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 {
         let value = try getValue(for: key)
         guard let result = Int64(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -275,7 +297,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt {
         let value = try getValue(for: key)
         guard let result = UInt(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -283,7 +305,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 {
         let value = try getValue(for: key)
         guard let result = UInt8(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -291,7 +313,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 {
         let value = try getValue(for: key)
         guard let result = UInt16(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -299,7 +321,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 {
         let value = try getValue(for: key)
         guard let result = UInt32(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value, location: makeLocation(for: key))
         }
         return result
     }
@@ -307,23 +329,24 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 {
         let value = try getValue(for: key)
         guard let result = UInt64(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value, location: makeLocation(for: key))
         }
         return result
     }
 
     func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
         let value = try getValue(for: key)
+        let location = makeLocation(for: key)
 
         // Handle Date specially
         if type == Date.self {
-            return try decodeDate(from: value) as! T
+            return try decodeDate(from: value, key: key) as! T
         }
 
         // Handle Decimal specially
         if type == Decimal.self {
             guard let decimal = parseDecimal(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value, location: location)
             }
             return decimal as! T
         }
@@ -331,7 +354,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
         // Handle UUID specially
         if type == UUID.self {
             guard let uuid = UUID(uuidString: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value, location: location)
             }
             return uuid as! T
         }
@@ -339,7 +362,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
         // Handle URL specially
         if type == URL.self {
             guard let url = URL(string: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value, location: location)
             }
             return url as! T
         }
@@ -360,27 +383,29 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
         return try T(from: singleValueDecoder)
     }
 
-    private func decodeDate(from value: String) throws -> Date {
+    private func decodeDate<K: CodingKey>(from value: String, key: K) throws -> Date {
+        let location = CSVLocation(row: rowIndex, column: key.stringValue, codingPath: codingPath + [key])
+
         switch configuration.dateDecodingStrategy {
         case .deferredToDate:
-            throw CSVDecodingError.typeMismatch(expected: "Date (use a date strategy)", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Date (use a date strategy)", actual: value, location: location)
 
         case .secondsSince1970:
             guard let seconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value, location: location)
             }
             return Date(timeIntervalSince1970: seconds)
 
         case .millisecondsSince1970:
             guard let milliseconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value, location: location)
             }
             return Date(timeIntervalSince1970: milliseconds / 1000)
 
         case .iso8601:
             let formatter = ISO8601DateFormatter()
             guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value, location: location)
             }
             return date
 
@@ -390,7 +415,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             formatter.locale = Locale.autoupdatingCurrent
             formatter.timeZone = TimeZone.autoupdatingCurrent
             guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date with format \(format)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Date with format \(format)", actual: value, location: location)
             }
             return date
 
@@ -399,13 +424,13 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
         case .flexible:
             guard let date = parseFlexibleDate(value, hint: nil) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
             }
             return date
 
         case .flexibleWithHint(let preferred):
             guard let date = parseFlexibleDate(value, hint: preferred) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
             }
             return date
         }

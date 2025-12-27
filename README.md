@@ -5,16 +5,26 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 ## Features
 
 - **Type-safe CSV encoding/decoding** via Swift's `Codable` protocol
+- **Zero-boilerplate macros** (`@CSVIndexed`, `@CSVColumn`) for headerless CSV
+- **Streaming encoding/decoding** for O(1) memory with large files
+- **Parallel encoding/decoding** for multi-core performance
+- **Smart error suggestions** with typo detection and strategy hints
 - **Configurable delimiters** (comma, semicolon, tab, etc.)
 - **Multiple date encoding strategies** (ISO 8601, Unix timestamp, custom format)
+- **Flexible decoding strategies** for dates, numbers, and booleans with auto-detection
+- **Key decoding strategies** (snake_case, kebab-case, PascalCase conversion)
+- **Index-based decoding** for headerless CSV files
+- **CSVIndexedDecodable** for automatic column ordering via CodingKeys
+- **Rich error diagnostics** with row/column location information
 - **Optional value handling** with configurable nil encoding
+- **SIMD-accelerated** parsing and field scanning
 - **Thread-safe** with `Sendable` conformance
 - **Swift 6.2 Approachable Concurrency** compatible with `nonisolated` types
 
 ## Requirements
 
 - iOS 18.0+ / macOS 15.0+
-- Swift 6.0+
+- Swift 6.2+
 
 ## Installation
 
@@ -99,6 +109,259 @@ let encoder = CSVEncoder(configuration: config)
 let person = Person(name: "Alice", age: 30, email: "alice@example.com")
 let row = try encoder.encodeRow(person)
 // Output: Alice,30,alice@example.com
+```
+
+### Streaming Encoding
+
+Encode large datasets with O(1) memory usage:
+
+```swift
+// Stream encode to file
+try await encoder.encode(asyncSequence, to: fileURL)
+
+// Stream encode array to file
+try await encoder.encode(largeArray, to: fileURL)
+
+// Encode to async stream of rows
+for try await row in encoder.encodeToStream(asyncSequence) {
+    sendToNetwork(row)
+}
+```
+
+### Parallel Encoding
+
+Utilize multiple cores for faster encoding:
+
+```swift
+// Parallel encode to file
+try await encoder.encodeParallel(records, to: fileURL,
+    parallelConfig: .init(parallelism: 8))
+
+// Parallel encode to Data
+let data = try await encoder.encodeParallel(records)
+
+// Batched parallel for progress reporting
+for try await batch in encoder.encodeParallelBatched(records,
+    parallelConfig: .init(chunkSize: 10_000)) {
+    print("Encoded \(batch.count) rows")
+}
+```
+
+## Advanced Decoding
+
+### Key Decoding Strategies
+
+Automatically convert CSV header names to Swift property names:
+
+```swift
+struct User: Codable {
+    let firstName: String
+    let lastName: String
+    let emailAddress: String
+}
+
+let csv = """
+first_name,last_name,email_address
+John,Doe,john@example.com
+"""
+
+// snake_case headers → camelCase properties
+let config = CSVDecoder.Configuration(
+    keyDecodingStrategy: .convertFromSnakeCase
+)
+let decoder = CSVDecoder(configuration: config)
+let users = try decoder.decode([User].self, from: csv)
+```
+
+Available strategies:
+- `.useDefaultKeys` - Use headers as-is (default)
+- `.convertFromSnakeCase` - `first_name` → `firstName`
+- `.convertFromKebabCase` - `first-name` → `firstName`
+- `.convertFromScreamingSnakeCase` - `FIRST_NAME` → `firstName`
+- `.convertFromPascalCase` - `FirstName` → `firstName`
+- `.custom((String) -> String)` - Custom transformation
+
+### Column Mapping
+
+Map specific CSV headers to property names:
+
+```swift
+struct Product: Codable {
+    let id: Int
+    let name: String
+    let price: Double
+}
+
+let csv = """
+product_id,product_name,unit_price
+1,Widget,9.99
+"""
+
+let config = CSVDecoder.Configuration(
+    columnMapping: [
+        "product_id": "id",
+        "product_name": "name",
+        "unit_price": "price"
+    ]
+)
+```
+
+### Index-Based Decoding
+
+Decode headerless CSV files by column index:
+
+```swift
+let csv = """
+Alice,30,95.5
+Bob,25,88.0
+"""
+
+let config = CSVDecoder.Configuration(
+    hasHeaders: false,
+    indexMapping: [0: "name", 1: "age", 2: "score"]
+)
+let decoder = CSVDecoder(configuration: config)
+let records = try decoder.decode([Person].self, from: csv)
+```
+
+### @CSVIndexed Macro (Zero Boilerplate)
+
+Eliminate all boilerplate for headerless CSV with the `@CSVIndexed` macro:
+
+```swift
+@CSVIndexed
+struct Person: Codable {
+    let name: String
+    let age: Int
+    let score: Double
+}
+
+// No manual CodingKeys or typealias needed
+let config = CSVDecoder.Configuration(hasHeaders: false)
+let decoder = CSVDecoder(configuration: config)
+let people = try decoder.decode([Person].self, from: csv)
+```
+
+The macro generates `CodingKeys`, `CSVCodingKeys`, and protocol conformance automatically.
+
+#### Custom Column Names with @CSVColumn
+
+Map properties to different CSV column names:
+
+```swift
+@CSVIndexed
+struct Product: Codable {
+    let id: Int
+
+    @CSVColumn("product_name")
+    let name: String
+
+    @CSVColumn("unit_price")
+    let price: Double
+}
+```
+
+### CSVIndexedDecodable (Manual Protocol)
+
+For more control, conform to `CSVIndexedDecodable` manually:
+
+```swift
+struct Person: CSVIndexedDecodable {
+    let name: String
+    let age: Int
+    let score: Double
+
+    // CodingKeys order defines column order
+    enum CodingKeys: String, CodingKey, CaseIterable {
+        case name, age, score  // Column 0, 1, 2
+    }
+
+    typealias CSVCodingKeys = CodingKeys
+}
+
+// No indexMapping needed - decoder auto-detects CSVIndexedDecodable conformance
+let config = CSVDecoder.Configuration(hasHeaders: false)
+let decoder = CSVDecoder(configuration: config)
+let people = try decoder.decode([Person].self, from: csv)
+```
+
+The order of cases in `CodingKeys` determines the column mapping automatically. The decoder detects `CSVIndexedDecodable` conformance at runtime, so you use the same `decode()` method as regular `Codable` types.
+
+### Flexible Decoding Strategies
+
+#### Date Decoding
+
+Auto-detect dates from 20+ common formats:
+
+```swift
+let config = CSVDecoder.Configuration(
+    dateDecodingStrategy: .flexible  // Auto-detect ISO, US, EU formats
+)
+```
+
+Or provide a hint for better performance:
+
+```swift
+let config = CSVDecoder.Configuration(
+    dateDecodingStrategy: .flexibleWithHint(preferred: "yyyy-MM-dd")
+)
+```
+
+Available strategies:
+- `.deferredToDate` - Use Date's Decodable implementation (default)
+- `.iso8601` - ISO 8601 format
+- `.secondsSince1970` / `.millisecondsSince1970` - Unix timestamps
+- `.formatted(String)` - Custom date format
+- `.flexible` - Auto-detect from common patterns
+- `.flexibleWithHint(preferred:)` - Try preferred format first, then auto-detect
+- `.custom((String) throws -> Date)` - Custom closure
+
+#### Number Decoding
+
+Handle international number formats:
+
+```swift
+let config = CSVDecoder.Configuration(
+    numberDecodingStrategy: .flexible  // Auto-detect US/EU formats, strip currency
+)
+```
+
+Available strategies:
+- `.standard` - Swift's standard number parsing (default)
+- `.flexible` - Auto-detect `1,234.56` (US) and `1.234,56` (EU), strip currency symbols
+- `.locale(Locale)` - Use specific locale for parsing
+
+#### Boolean Decoding
+
+Support international boolean values:
+
+```swift
+let config = CSVDecoder.Configuration(
+    boolDecodingStrategy: .flexible  // Recognize oui/non, ja/nein, да/нет, etc.
+)
+```
+
+Available strategies:
+- `.standard` - Recognize true/yes/1, false/no/0 (default)
+- `.flexible` - Extended i18n values (oui/non, ja/nein, да/нет, 是/否, etc.)
+- `.custom(trueValues:falseValues:)` - Custom value sets
+
+### Error Diagnostics
+
+Decoding errors include precise location information:
+
+```swift
+do {
+    let records = try decoder.decode([Person].self, from: csv)
+} catch let error as CSVDecodingError {
+    print(error.errorDescription!)
+    // "Type mismatch: expected Int, found 'invalid' at row 3, column 'age'"
+
+    if let location = error.location {
+        print("Row: \(location.row ?? 0)")      // 3
+        print("Column: \(location.column ?? "")")  // "age"
+    }
+}
 ```
 
 ## Swift 6.2 Approachable Concurrency

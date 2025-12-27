@@ -189,9 +189,11 @@ public nonisolated final class CSVEncoder: Sendable {
         return storage.allKeys()
     }
 
-    // MARK: - Private Helpers
+    // MARK: - Field Escaping
 
-    private func escapeField(_ value: String) -> String {
+    /// Escapes a field value for CSV output per RFC 4180.
+    /// Quotes fields containing delimiters, quotes, or newlines.
+    func escapeField(_ value: String) -> String {
         let delimiter = String(configuration.delimiter)
 
         // Check if escaping is needed

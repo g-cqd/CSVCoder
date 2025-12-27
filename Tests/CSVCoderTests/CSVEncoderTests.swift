@@ -353,4 +353,217 @@ struct CSVEncoderTests {
         #expect(csv.contains("\r\n"))
         #expect(!csv.contains("\n") || csv.components(separatedBy: "\r\n").count > 1)
     }
+
+    // MARK: - Streaming Encoding Tests
+
+    struct SendableRecord: Codable, Equatable, Sendable {
+        let id: Int
+        let name: String
+        let value: Double
+    }
+
+    @Test("Stream encode to file")
+    func streamEncodeToFile() async throws {
+        let records = (0..<100).map { SendableRecord(id: $0, name: "Item\($0)", value: Double($0) * 1.5) }
+
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_encode_test.csv")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let encoder = CSVEncoder()
+        try await encoder.encode(records, to: tempURL)
+
+        // Verify by decoding
+        let decoder = CSVDecoder()
+        let decoded = try await decoder.decode([SendableRecord].self, from: tempURL)
+
+        #expect(decoded == records)
+    }
+
+    @Test("Stream encode from AsyncSequence")
+    func streamEncodeFromAsyncSequence() async throws {
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_async_test.csv")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let records = (0..<50).map { SendableRecord(id: $0, name: "Async\($0)", value: Double($0)) }
+        let stream = AsyncStream { continuation in
+            for record in records {
+                continuation.yield(record)
+            }
+            continuation.finish()
+        }
+
+        let encoder = CSVEncoder()
+        try await encoder.encode(stream, to: tempURL)
+
+        let decoder = CSVDecoder()
+        let decoded = try await decoder.decode([SendableRecord].self, from: tempURL)
+
+        #expect(decoded == records)
+    }
+
+    @Test("Stream encode to async stream")
+    func streamEncodeToAsyncStream() async throws {
+        let records = [
+            SendableRecord(id: 1, name: "First", value: 1.0),
+            SendableRecord(id: 2, name: "Second", value: 2.0)
+        ]
+
+        let inputStream = AsyncStream { continuation in
+            for record in records {
+                continuation.yield(record)
+            }
+            continuation.finish()
+        }
+
+        let encoder = CSVEncoder()
+        var rows: [String] = []
+
+        for try await row in encoder.encodeToStream(inputStream) {
+            rows.append(row)
+        }
+
+        // Should have header + 2 data rows
+        #expect(rows.count == 3)
+        #expect(rows[0].contains("id"))
+        #expect(rows[1].contains("First"))
+        #expect(rows[2].contains("Second"))
+    }
+
+    // MARK: - Parallel Encoding Tests
+
+    @Test("Parallel encode preserves order")
+    func parallelEncodePreservesOrder() async throws {
+        let records = (0..<1000).map { SendableRecord(id: $0, name: "Record\($0)", value: Double($0)) }
+
+        let encoder = CSVEncoder()
+        let data = try await encoder.encodeParallel(records, parallelConfig: .init(parallelism: 4))
+
+        // Use sync decode from string to avoid type ambiguity
+        let csv = String(data: data, encoding: .utf8)!
+        let decoder = CSVDecoder()
+        let decoded = try decoder.decode([SendableRecord].self, from: csv)
+
+        #expect(decoded == records)
+    }
+
+    @Test("Parallel encode to file")
+    func parallelEncodeToFile() async throws {
+        let records = (0..<500).map { SendableRecord(id: $0, name: "Parallel\($0)", value: Double($0) * 2.0) }
+
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("parallel_encode_test.csv")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let encoder = CSVEncoder()
+        try await encoder.encodeParallel(records, to: tempURL, parallelConfig: .init(parallelism: 8))
+
+        let decoder = CSVDecoder()
+        let decoded = try await decoder.decode([SendableRecord].self, from: tempURL)
+
+        #expect(decoded == records)
+    }
+
+    @Test("Parallel encode to string")
+    func parallelEncodeToString() async throws {
+        let records = [
+            SendableRecord(id: 1, name: "A", value: 1.0),
+            SendableRecord(id: 2, name: "B", value: 2.0),
+            SendableRecord(id: 3, name: "C", value: 3.0)
+        ]
+
+        let encoder = CSVEncoder()
+        let csv = try await encoder.encodeParallelToString(records)
+
+        #expect(csv.contains("id,name,value") || csv.contains("name,id,value"))
+        #expect(csv.contains("A"))
+        #expect(csv.contains("B"))
+        #expect(csv.contains("C"))
+    }
+
+    @Test("Parallel batched encode yields chunks")
+    func parallelBatchedEncodeYieldsChunks() async throws {
+        let records = (0..<100).map { SendableRecord(id: $0, name: "Batch\($0)", value: Double($0)) }
+
+        let encoder = CSVEncoder()
+        var batches: [[String]] = []
+
+        for try await batch in encoder.encodeParallelBatched(records, parallelConfig: .init(chunkSize: 25)) {
+            batches.append(batch)
+        }
+
+        // Should have header batch + data batches
+        #expect(batches.count >= 2)
+
+        // First batch should be header
+        #expect(batches[0].first?.contains("id") == true)
+
+        // Total rows (excluding header) should match record count
+        let totalDataRows = batches.dropFirst().reduce(0) { $0 + $1.count }
+        #expect(totalDataRows == records.count)
+    }
+
+    @Test("Parallel encode empty array")
+    func parallelEncodeEmptyArray() async throws {
+        let records: [SendableRecord] = []
+
+        let encoder = CSVEncoder()
+        let data = try await encoder.encodeParallel(records)
+
+        #expect(data.isEmpty)
+    }
+
+    @Test("Parallel encode roundtrip with special characters")
+    func parallelEncodeRoundtripSpecialCharacters() async throws {
+        let records = [
+            SendableRecord(id: 1, name: "Has, comma", value: 1.0),
+            SendableRecord(id: 2, name: "Has \"quotes\"", value: 2.0),
+            SendableRecord(id: 3, name: "Has\nnewline", value: 3.0)
+        ]
+
+        let encoder = CSVEncoder()
+        let data = try await encoder.encodeParallel(records)
+
+        // Use sync decode from string to avoid type ambiguity
+        let csv = String(data: data, encoding: .utf8)!
+        let decoder = CSVDecoder()
+        let decoded = try decoder.decode([SendableRecord].self, from: csv)
+
+        #expect(decoded == records)
+    }
+
+    // MARK: - CSVRowBuilder Tests
+
+    @Test("CSVRowBuilder escapes fields correctly")
+    func csvRowBuilderEscapesFields() {
+        let builder = CSVRowBuilder(delimiter: ",", lineEnding: .lf)
+        var buffer: [UInt8] = []
+
+        builder.buildRow(["normal", "has,comma", "has\"quote"], into: &buffer)
+
+        let result = String(decoding: buffer, as: UTF8.self)
+        #expect(result.contains("normal"))
+        #expect(result.contains("\"has,comma\""))
+        #expect(result.contains("\"has\"\"quote\""))
+    }
+
+    @Test("CSVRowBuilder uses custom delimiter")
+    func csvRowBuilderUsesCustomDelimiter() {
+        let builder = CSVRowBuilder(delimiter: ";", lineEnding: .lf)
+        var buffer: [UInt8] = []
+
+        builder.buildRow(["a", "b", "c"], into: &buffer)
+
+        let result = String(decoding: buffer, as: UTF8.self)
+        #expect(result.contains("a;b;c"))
+    }
+
+    @Test("CSVRowBuilder uses CRLF line ending")
+    func csvRowBuilderUsesCRLFLineEnding() {
+        let builder = CSVRowBuilder(delimiter: ",", lineEnding: .crlf)
+        var buffer: [UInt8] = []
+
+        builder.buildRow(["a", "b"], into: &buffer)
+
+        let result = String(decoding: buffer, as: UTF8.self)
+        #expect(result.hasSuffix("\r\n"))
+    }
 }

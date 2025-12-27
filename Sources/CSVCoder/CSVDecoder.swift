@@ -33,6 +33,18 @@ public final class CSVDecoder: Sendable {
         /// The boolean decoding strategy.
         public var boolDecodingStrategy: BoolDecodingStrategy
 
+        /// The key decoding strategy for mapping CSV headers to property names.
+        public var keyDecodingStrategy: KeyDecodingStrategy
+
+        /// Custom column mapping from CSV header names to property names.
+        /// Takes precedence over keyDecodingStrategy for specified columns.
+        public var columnMapping: [String: String]
+
+        /// Maps column indices to property names for headerless or index-based decoding.
+        /// When set, columns are accessed by index instead of header name.
+        /// Example: `[0: "name", 1: "age", 2: "score"]`
+        public var indexMapping: [Int: String]
+
         /// Creates a new configuration with default values.
         public init(
             delimiter: Character = ",",
@@ -41,7 +53,10 @@ public final class CSVDecoder: Sendable {
             trimWhitespace: Bool = true,
             dateDecodingStrategy: DateDecodingStrategy = .deferredToDate,
             numberDecodingStrategy: NumberDecodingStrategy = .standard,
-            boolDecodingStrategy: BoolDecodingStrategy = .standard
+            boolDecodingStrategy: BoolDecodingStrategy = .standard,
+            keyDecodingStrategy: KeyDecodingStrategy = .useDefaultKeys,
+            columnMapping: [String: String] = [:],
+            indexMapping: [Int: String] = [:]
         ) {
             self.delimiter = delimiter
             self.hasHeaders = hasHeaders
@@ -50,6 +65,9 @@ public final class CSVDecoder: Sendable {
             self.dateDecodingStrategy = dateDecodingStrategy
             self.numberDecodingStrategy = numberDecodingStrategy
             self.boolDecodingStrategy = boolDecodingStrategy
+            self.keyDecodingStrategy = keyDecodingStrategy
+            self.columnMapping = columnMapping
+            self.indexMapping = indexMapping
         }
     }
 
@@ -93,6 +111,26 @@ public final class CSVDecoder: Sendable {
         case custom(trueValues: Set<String>, falseValues: Set<String>)
     }
 
+    /// Strategies for mapping CSV header names to property names.
+    public enum KeyDecodingStrategy: Sendable {
+        /// Use keys as-is without transformation.
+        case useDefaultKeys
+        /// Convert snake_case headers to camelCase properties.
+        /// Example: "first_name" → "firstName"
+        case convertFromSnakeCase
+        /// Convert kebab-case headers to camelCase properties.
+        /// Example: "first-name" → "firstName"
+        case convertFromKebabCase
+        /// Convert SCREAMING_SNAKE_CASE headers to camelCase properties.
+        /// Example: "FIRST_NAME" → "firstName"
+        case convertFromScreamingSnakeCase
+        /// Convert PascalCase headers to camelCase properties.
+        /// Example: "FirstName" → "firstName"
+        case convertFromPascalCase
+        /// Apply a custom transformation function.
+        @preconcurrency case custom(@Sendable (String) -> String)
+    }
+
     /// The configuration used for decoding.
     public let configuration: Configuration
 
@@ -102,6 +140,10 @@ public final class CSVDecoder: Sendable {
     }
 
     /// Decodes an array of values from the given CSV data.
+    ///
+    /// For headerless CSV, the decoder automatically detects `CSVIndexedDecodable`
+    /// conformance and uses the type's `CodingKeys` order for column mapping.
+    ///
     /// - Parameters:
     ///   - type: The type to decode.
     ///   - data: The CSV data to decode.
@@ -114,28 +156,57 @@ public final class CSVDecoder: Sendable {
     }
 
     /// Decodes an array of values from the given CSV string.
+    ///
+    /// For headerless CSV, the decoder automatically detects `CSVIndexedDecodable`
+    /// conformance and uses the type's `CodingKeys` order for column mapping.
+    ///
     /// - Parameters:
     ///   - type: The type to decode.
     ///   - string: The CSV string to decode.
     /// - Returns: An array of decoded values.
     public func decode<T: Decodable>(_ type: [T].Type, from string: String) throws -> [T] {
+        // Runtime detection of CSVIndexedDecodable conformance
+        let columnOrder = (T.self as? _CSVIndexedDecodableMarker.Type)?._csvColumnOrder
+        return try decodeRows(type, from: string, columnOrder: columnOrder)
+    }
+
+    /// Internal method that handles both regular Decodable and CSVIndexedDecodable.
+    private func decodeRows<T: Decodable>(
+        _ type: [T].Type,
+        from string: String,
+        columnOrder: [String]?
+    ) throws -> [T] {
         let parser = CSVParser(string: string, configuration: configuration)
         let rows = try parser.parse()
 
         guard !rows.isEmpty else { return [] }
 
-        let headers: [String]
+        let rawHeaders: [String]
         let dataRows: [[String]]
 
         if configuration.hasHeaders {
-            headers = rows[0]
+            rawHeaders = rows[0]
             dataRows = Array(rows.dropFirst())
         } else {
-            headers = (0..<(rows.first?.count ?? 0)).map { "column\($0)" }
+            rawHeaders = (0..<(rows.first?.count ?? 0)).map { "column\($0)" }
             dataRows = rows
         }
 
-        return try dataRows.compactMap { row in
+        // Determine headers based on: indexMapping > columnOrder > rawHeaders
+        let headers: [String]
+        if !configuration.indexMapping.isEmpty {
+            // Explicit index mapping takes precedence
+            let maxIndex = configuration.indexMapping.keys.max() ?? 0
+            headers = (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
+        } else if let columnOrder = columnOrder, !configuration.hasHeaders {
+            // Use CSVIndexedDecodable column order for headerless CSV
+            headers = columnOrder
+        } else {
+            // Apply key transformation and column mapping
+            headers = rawHeaders.map { transformKey($0) }
+        }
+
+        return try dataRows.enumerated().compactMap { rowIndex, row in
             var dictionary: [String: String] = [:]
             for (index, header) in headers.enumerated() {
                 if index < row.count {
@@ -145,10 +216,69 @@ public final class CSVDecoder: Sendable {
             let decoder = CSVRowDecoder(
                 row: dictionary,
                 configuration: configuration,
-                codingPath: []
+                codingPath: [],
+                rowIndex: rowIndex + (configuration.hasHeaders ? 2 : 1) // 1-based, account for header
             )
             return try T(from: decoder)
         }
+    }
+
+    /// Transforms a CSV header key using the configured strategy.
+    func transformKey(_ key: String) -> String {
+        // Custom column mapping takes precedence
+        if let mapped = configuration.columnMapping[key] {
+            return mapped
+        }
+
+        switch configuration.keyDecodingStrategy {
+        case .useDefaultKeys:
+            return key
+
+        case .convertFromSnakeCase:
+            return convertFromSnakeCase(key)
+
+        case .convertFromKebabCase:
+            return convertFromKebabCase(key)
+
+        case .convertFromScreamingSnakeCase:
+            return convertFromScreamingSnakeCase(key)
+
+        case .convertFromPascalCase:
+            return convertFromPascalCase(key)
+
+        case .custom(let transform):
+            return transform(key)
+        }
+    }
+
+    /// Converts snake_case to camelCase.
+    private func convertFromSnakeCase(_ key: String) -> String {
+        let parts = key.split(separator: "_")
+        guard let first = parts.first else { return key }
+        let rest = parts.dropFirst().map { $0.capitalized }
+        return String(first).lowercased() + rest.joined()
+    }
+
+    /// Converts kebab-case to camelCase.
+    private func convertFromKebabCase(_ key: String) -> String {
+        let parts = key.split(separator: "-")
+        guard let first = parts.first else { return key }
+        let rest = parts.dropFirst().map { $0.capitalized }
+        return String(first).lowercased() + rest.joined()
+    }
+
+    /// Converts SCREAMING_SNAKE_CASE to camelCase.
+    private func convertFromScreamingSnakeCase(_ key: String) -> String {
+        let parts = key.lowercased().split(separator: "_")
+        guard let first = parts.first else { return key }
+        let rest = parts.dropFirst().map { $0.capitalized }
+        return String(first) + rest.joined()
+    }
+
+    /// Converts PascalCase to camelCase.
+    private func convertFromPascalCase(_ key: String) -> String {
+        guard let first = key.first else { return key }
+        return first.lowercased() + String(key.dropFirst())
     }
 
     /// Decodes a single row from a dictionary representation.
@@ -163,5 +293,46 @@ public final class CSVDecoder: Sendable {
             codingPath: []
         )
         return try T(from: decoder)
+    }
+
+    // MARK: - Type-Inferred Decode Methods
+
+    /// Decodes an array of values from CSV data with type inference.
+    ///
+    /// Example:
+    /// ```swift
+    /// let people: [Person] = try decoder.decode(from: data)
+    /// ```
+    ///
+    /// - Parameter data: The CSV data to decode.
+    /// - Returns: An array of decoded values.
+    public func decode<T: Decodable>(from data: Data) throws -> [T] {
+        try decode([T].self, from: data)
+    }
+
+    /// Decodes an array of values from a CSV string with type inference.
+    ///
+    /// Example:
+    /// ```swift
+    /// let people: [Person] = try decoder.decode(from: csvString)
+    /// ```
+    ///
+    /// - Parameter string: The CSV string to decode.
+    /// - Returns: An array of decoded values.
+    public func decode<T: Decodable>(from string: String) throws -> [T] {
+        try decode([T].self, from: string)
+    }
+
+    /// Decodes a single row from a dictionary with type inference.
+    ///
+    /// Example:
+    /// ```swift
+    /// let person: Person = try decoder.decode(from: rowDict)
+    /// ```
+    ///
+    /// - Parameter row: The dictionary representing a single CSV row.
+    /// - Returns: The decoded value.
+    public func decode<T: Decodable>(from row: [String: String]) throws -> T {
+        try decode(T.self, from: row)
     }
 }

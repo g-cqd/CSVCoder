@@ -1,6 +1,7 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 
 import PackageDescription
+import CompilerPluginSupport
 
 let package = Package(
     name: "CSVCoder",
@@ -17,15 +18,52 @@ let package = Package(
             targets: ["CSVCoder"]
         )
     ],
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
+        .package(url: "https://github.com/google/swift-benchmark", from: "0.1.2"),
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.1"..<"700.0.0")
+    ],
     targets: [
+        // Main library
         .target(
             name: "CSVCoder",
-            swiftSettings: [
-                .swiftLanguageMode(.v6)
+            dependencies: ["CSVCoderMacros"]
+        ),
+
+        // Macro implementation (compiler plugin)
+        .macro(
+            name: "CSVCoderMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
             ]
         ),
+
+        // Tests
         .testTarget(
             name: "CSVCoderTests",
+            dependencies: ["CSVCoder"]
+        ),
+        .testTarget(
+            name: "CSVCoderMacrosTests",
+            dependencies: [
+                "CSVCoderMacros",
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax")
+            ]
+        ),
+
+        // Benchmarks
+        .executableTarget(
+            name: "CSVCoderBenchmarks",
+            dependencies: [
+                "CSVCoder",
+                .product(name: "Benchmark", package: "swift-benchmark")
+            ]
+        ),
+        .executableTarget(
+            name: "LargeFileBenchmark",
             dependencies: ["CSVCoder"]
         )
     ]
