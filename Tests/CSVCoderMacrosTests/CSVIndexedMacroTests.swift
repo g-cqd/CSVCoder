@@ -300,6 +300,200 @@ struct CSVIndexedMacroTests {
             macros: testMacros
         )
     }
+
+    // MARK: - Access Level Tests
+
+    @Test("Macro generates public CodingKeys and typealias for public struct")
+    func macroHandlesPublicStruct() {
+        assertMacroExpansion(
+            """
+            @CSVIndexed
+            public struct PublicRecord: Codable {
+                public let name: String
+                public let value: Int
+            }
+            """,
+            expandedSource: """
+            public struct PublicRecord: Codable {
+                public let name: String
+                public let value: Int
+
+                public enum CodingKeys: String, CodingKey, CaseIterable {
+                    case name
+                    case value
+                }
+
+                public typealias CSVCodingKeys = CodingKeys
+            }
+
+            extension PublicRecord: CSVIndexedDecodable {
+            }
+
+            extension PublicRecord: CSVIndexedEncodable {
+            }
+            """,
+            macros: testMacros
+        )
+    }
+
+    @Test("Macro generates public members with @CSVColumn for public struct")
+    func macroHandlesPublicStructWithCSVColumn() {
+        assertMacroExpansion(
+            """
+            @CSVIndexed
+            public struct PublicProduct: Codable, Sendable {
+                @CSVColumn("Product Name")
+                public let name: String
+
+                @CSVColumn("Unit Price")
+                public let price: Double
+            }
+            """,
+            expandedSource: """
+            public struct PublicProduct: Codable, Sendable {
+                public let name: String
+
+                public let price: Double
+
+                public enum CodingKeys: String, CodingKey, CaseIterable {
+                    case name = "Product Name"
+                    case price = "Unit Price"
+                }
+
+                public typealias CSVCodingKeys = CodingKeys
+            }
+
+            extension PublicProduct: CSVIndexedDecodable {
+            }
+
+            extension PublicProduct: CSVIndexedEncodable {
+            }
+            """,
+            macros: testMacros
+        )
+    }
+
+    @Test("Macro generates internal CodingKeys for internal struct")
+    func macroHandlesInternalStruct() {
+        assertMacroExpansion(
+            """
+            @CSVIndexed
+            internal struct InternalRecord: Codable {
+                let name: String
+            }
+            """,
+            expandedSource: """
+            internal struct InternalRecord: Codable {
+                let name: String
+
+                enum CodingKeys: String, CodingKey, CaseIterable {
+                    case name
+                }
+
+                typealias CSVCodingKeys = CodingKeys
+            }
+
+            extension InternalRecord: CSVIndexedDecodable {
+            }
+
+            extension InternalRecord: CSVIndexedEncodable {
+            }
+            """,
+            macros: testMacros
+        )
+    }
+
+    @Test("Macro generates fileprivate CodingKeys for fileprivate struct")
+    func macroHandlesFileprivateStruct() {
+        assertMacroExpansion(
+            """
+            @CSVIndexed
+            fileprivate struct FileprivateRecord: Codable {
+                let name: String
+            }
+            """,
+            expandedSource: """
+            fileprivate struct FileprivateRecord: Codable {
+                let name: String
+
+                fileprivate enum CodingKeys: String, CodingKey, CaseIterable {
+                    case name
+                }
+
+                fileprivate typealias CSVCodingKeys = CodingKeys
+            }
+
+            extension FileprivateRecord: CSVIndexedDecodable {
+            }
+
+            extension FileprivateRecord: CSVIndexedEncodable {
+            }
+            """,
+            macros: testMacros
+        )
+    }
+
+    @Test("Macro generates private CodingKeys for private struct")
+    func macroHandlesPrivateStruct() {
+        assertMacroExpansion(
+            """
+            @CSVIndexed
+            private struct PrivateRecord: Codable {
+                let name: String
+            }
+            """,
+            expandedSource: """
+            private struct PrivateRecord: Codable {
+                let name: String
+
+                private enum CodingKeys: String, CodingKey, CaseIterable {
+                    case name
+                }
+
+                private typealias CSVCodingKeys = CodingKeys
+            }
+
+            extension PrivateRecord: CSVIndexedDecodable {
+            }
+
+            extension PrivateRecord: CSVIndexedEncodable {
+            }
+            """,
+            macros: testMacros
+        )
+    }
+
+    @Test("Macro defaults to internal for struct with no explicit access level")
+    func macroDefaultsToInternal() {
+        // This is the same as the basic test but explicitly verifies
+        // that no access modifier means internal (no prefix)
+        assertMacroExpansion(
+            """
+            @CSVIndexed
+            struct DefaultRecord: Codable {
+                let value: Int
+            }
+            """,
+            expandedSource: """
+            struct DefaultRecord: Codable {
+                let value: Int
+
+                enum CodingKeys: String, CodingKey, CaseIterable {
+                    case value
+                }
+
+                typealias CSVCodingKeys = CodingKeys
+            }
+
+            extension DefaultRecord: CSVIndexedDecodable {
+            }
+
+            extension DefaultRecord: CSVIndexedEncodable {
+            }
+            """,
+            macros: testMacros
+        )
+    }
 }
 
 #endif

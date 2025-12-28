@@ -48,6 +48,9 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
             throw CSVIndexedMacroError.notAStruct
         }
 
+        // Determine access level from struct modifiers
+        let accessLevel = extractAccessLevel(from: structDecl.modifiers)
+
         // Extract stored properties
         let storedProperties = extractStoredProperties(from: structDecl)
         guard !storedProperties.isEmpty else {
@@ -60,13 +63,13 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         var members: [DeclSyntax] = []
 
         if existingCodingKeys == nil {
-            // Generate CodingKeys enum
-            let codingKeysDecl = generateCodingKeys(properties: storedProperties)
+            // Generate CodingKeys enum with appropriate access level
+            let codingKeysDecl = generateCodingKeys(properties: storedProperties, accessLevel: accessLevel)
             members.append(codingKeysDecl)
         }
 
-        // Generate typealias CSVCodingKeys = CodingKeys
-        let typealiasDecl: DeclSyntax = "typealias CSVCodingKeys = CodingKeys"
+        // Generate typealias CSVCodingKeys = CodingKeys with appropriate access level
+        let typealiasDecl = generateTypealias(accessLevel: accessLevel)
         members.append(typealiasDecl)
 
         return members
@@ -86,6 +89,43 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         let encodableExt = try ExtensionDeclSyntax("extension \(type): CSVIndexedEncodable {}")
 
         return [decodableExt, encodableExt]
+    }
+
+    // MARK: - Access Level Handling
+
+    /// Access levels that can be applied to generated members.
+    private enum AccessLevel: String {
+        case `public` = "public "
+        case `open` = "open "
+        case `internal` = ""
+        case `fileprivate` = "fileprivate "
+        case `private` = "private "
+    }
+
+    /// Extracts the access level from declaration modifiers.
+    private static func extractAccessLevel(from modifiers: DeclModifierListSyntax) -> AccessLevel {
+        for modifier in modifiers {
+            switch modifier.name.tokenKind {
+            case .keyword(.public):
+                return .public
+            case .keyword(.open):
+                return .open
+            case .keyword(.fileprivate):
+                return .fileprivate
+            case .keyword(.private):
+                return .private
+            case .keyword(.internal):
+                return .internal
+            default:
+                continue
+            }
+        }
+        return .internal
+    }
+
+    /// Generates the typealias declaration with appropriate access level.
+    private static func generateTypealias(accessLevel: AccessLevel) -> DeclSyntax {
+        "\(raw: accessLevel.rawValue)typealias CSVCodingKeys = CodingKeys"
     }
 
     // MARK: - Helpers
@@ -160,7 +200,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     }
 
     /// Generates CodingKeys enum with CaseIterable conformance.
-    private static func generateCodingKeys(properties: [(name: String, customName: String?)]) -> DeclSyntax {
+    private static func generateCodingKeys(properties: [(name: String, customName: String?)], accessLevel: AccessLevel) -> DeclSyntax {
         var casesCode = ""
         for (index, prop) in properties.enumerated() {
             if index > 0 { casesCode += "\n" }
@@ -172,7 +212,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         }
 
         return """
-            enum CodingKeys: String, CodingKey, CaseIterable {
+            \(raw: accessLevel.rawValue)enum CodingKeys: String, CodingKey, CaseIterable {
             \(raw: casesCode)
             }
             """
