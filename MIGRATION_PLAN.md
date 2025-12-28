@@ -28,11 +28,11 @@ Migrate from hardcoded parsing logic to Foundation's locale-aware FormatStyle/Pa
 
 ## Phase 2: LotoFuel Migration
 
-### 2.1 CSVDataNormalizer Simplification
-- [ ] Remove `parseDouble()` - delegate to CSVCoder
-- [ ] Remove `parseDate()` - delegate to CSVCoder
-- [ ] Keep `parseBool()` only if domain-specific values needed
-- [ ] Keep unit conversion methods (domain logic)
+### 2.1 CSVDataNormalizer Assessment
+- [x] Analyzed usage: CSVParser uses it for pre-decode validation (odometer sequence, duplicates)
+- [x] Decision: Keep CSVDataNormalizer for direct string parsing use cases
+- [x] Rationale: CSVCoder strategies work at decode time; normalizer works pre-decode
+- [ ] Future: Consider exposing LocaleUtilities for direct use (lower priority)
 
 ### 2.2 FuelioCSVReader Update
 - [ ] Use new `.parseStrategy` or `.currency` strategy
