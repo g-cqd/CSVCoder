@@ -161,15 +161,16 @@ extension CSVDecoder {
                         }
                     }
                     
-                    headers = self.resolveHeaders(
+                    let resolvedHeaders = self.resolveHeaders(
                         rawHeaders: firstRowStrings,
                         columnOrder: columnOrder,
                         columnCount: rowView.count
                     )
-                    
+                    headers = resolvedHeaders
+
                     // Build map
                     var map: [String: Int] = [:]
-                    for (index, header) in headers!.enumerated() {
+                    for (index, header) in resolvedHeaders.enumerated() {
                         map[header] = index
                     }
                     headerMap = map

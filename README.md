@@ -376,37 +376,36 @@ Benchmark results on Apple Silicon (M-series):
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 100 rows (simple) | 237 µs | ~422K rows/s |
 | 1K rows (simple) | 2.4 ms | ~417K rows/s |
-| 10K rows (simple) | 24.7 ms | ~405K rows/s |
-| 100K rows (simple) | 249 ms | ~402K rows/s |
-| 1K rows (complex, 8 fields) | 6.0 ms | ~167K rows/s |
-| 1K rows (quoted fields) | 2.7 ms | ~370K rows/s |
-| 1K rows (50 columns wide) | 24.0 ms | ~42K rows/s |
-| 1K rows (200-byte fields) | 4.7 ms | ~213K rows/s |
-| 10K rows (numeric fields) | 24.3 ms | ~412K rows/s |
-| 100K rows from Data (zero-copy) | 252 ms | ~397K rows/s |
+| 10K rows (simple) | 24.4 ms | ~410K rows/s |
+| 100K rows (simple) | 244 ms | ~410K rows/s |
+| 1M rows (simple) | 2.48 s | ~403K rows/s |
+| 10K rows (complex, 8 fields) | 61 ms | ~164K rows/s |
+| 10K rows (quoted fields) | 27 ms | ~370K rows/s |
+| 10K rows (50 columns wide) | 420 ms | ~24K rows/s |
+| 10K rows (500-byte fields) | 167 ms | ~60K rows/s |
+| 100K rows (numeric fields) | 432 ms | ~231K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 100 rows | 187 µs | ~535K rows/s |
 | 1K rows | 1.9 ms | ~526K rows/s |
-| 10K rows | 19.0 ms | ~526K rows/s |
-| 100K rows | 188 ms | ~532K rows/s |
-| 1K rows (200-byte fields) | 5.9 ms | ~169K rows/s |
-| 1K rows (quoted fields) | 1.8 ms | ~556K rows/s |
-| 10K rows to Data | 18.4 ms | ~543K rows/s |
-| 10K rows to String | 18.5 ms | ~541K rows/s |
+| 10K rows | 17.9 ms | ~559K rows/s |
+| 100K rows | 177 ms | ~565K rows/s |
+| 1M rows | 1.77 s | ~565K rows/s |
+| 10K rows (quoted fields) | 17.6 ms | ~568K rows/s |
+| 10K rows (500-byte fields) | 135 ms | ~74K rows/s |
+| 100K rows to Data | 244 ms | ~410K rows/s |
+| 100K rows to String | 261 ms | ~383K rows/s |
 
-### Special Strategies
+### Special Strategies (1K rows)
 
-| Benchmark | Time |
-|-----------|------|
-| snake_case key conversion | 6.8 µs |
-| Flexible date parsing | 543 µs |
-| Flexible number parsing | 62 µs |
+| Benchmark | Time | Throughput |
+|-----------|------|------------|
+| snake_case key conversion | 4.3 ms | ~233K rows/s |
+| Flexible date parsing | 267 ms | ~3.7K rows/s |
+| Flexible number parsing | 25.7 ms | ~39K rows/s |
 
 Run benchmarks locally:
 ```bash

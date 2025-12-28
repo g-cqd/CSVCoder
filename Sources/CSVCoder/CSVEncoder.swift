@@ -195,10 +195,10 @@ public nonisolated final class CSVEncoder: Sendable {
             
             // Handle Header on first row
             if headers == nil {
-                headers = storage.allKeys().map { transformKey($0) }
+                let resolvedHeaders = storage.allKeys().map { transformKey($0) }
+                headers = resolvedHeaders
                 if configuration.hasHeaders {
-                    let headerKeys = headers!
-                    for (i, key) in headerKeys.enumerated() {
+                    for (i, key) in resolvedHeaders.enumerated() {
                         if i > 0 { buffer.append(delimiterByte) }
                         appendEscaped(key, to: &buffer, delimiter: delimiterByte)
                     }
@@ -238,10 +238,10 @@ public nonisolated final class CSVEncoder: Sendable {
             try value.encode(to: encoder)
             
             if headers == nil {
-                headers = storage.allKeys().map { transformKey($0) }
+                let resolvedHeaders = storage.allKeys().map { transformKey($0) }
+                headers = resolvedHeaders
                 if configuration.hasHeaders {
-                    let headerKeys = headers!
-                    for (i, key) in headerKeys.enumerated() {
+                    for (i, key) in resolvedHeaders.enumerated() {
                         if i > 0 { try writer.write(delimiter) }
                         try writer.write(escapeField(key))
                     }

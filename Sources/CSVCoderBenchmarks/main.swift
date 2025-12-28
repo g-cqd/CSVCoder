@@ -21,6 +21,14 @@ struct ComplexRecord: Codable, Sendable {
     let notes: String
 }
 
+struct QuotedRecord: Codable, Sendable {
+    let name: String
+    let description: String
+    let value: Int
+}
+
+// MARK: - Generators
+
 nonisolated func generateSimpleCSV(rows: Int) -> String {
     var csv = "name,age,score\n"
     for i in 0..<rows {
@@ -45,131 +53,6 @@ nonisolated func generateQuotedCSV(rows: Int) -> String {
     return csv
 }
 
-// MARK: - Benchmarks
-
-// Small dataset (100 rows)
-let small100 = generateSimpleCSV(rows: 100)
-let small100Data = small100.data(using: .utf8)!
-
-// Medium dataset (1,000 rows)
-let medium1K = generateSimpleCSV(rows: 1_000)
-let medium1KData = medium1K.data(using: .utf8)!
-
-// Large dataset (10,000 rows)
-let large10K = generateSimpleCSV(rows: 10_000)
-let large10KData = large10K.data(using: .utf8)!
-
-// Very large dataset (100,000 rows)
-let huge100K = generateSimpleCSV(rows: 100_000)
-let huge100KData = huge100K.data(using: .utf8)!
-
-// Complex dataset (1,000 rows)
-let complex1K = generateComplexCSV(rows: 1_000)
-let complex1KData = complex1K.data(using: .utf8)!
-
-// Quoted dataset (1,000 rows)
-let quoted1K = generateQuotedCSV(rows: 1_000)
-
-benchmark("Decode 100 rows (simple)") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([SimpleRecord].self, from: small100)
-}
-
-benchmark("Decode 1K rows (simple)") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([SimpleRecord].self, from: medium1K)
-}
-
-benchmark("Decode 10K rows (simple)") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([SimpleRecord].self, from: large10K)
-}
-
-benchmark("Decode 100K rows (simple)") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([SimpleRecord].self, from: huge100K)
-}
-
-benchmark("Decode 1K rows (complex)") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([ComplexRecord].self, from: complex1K)
-}
-
-struct QuotedRecord: Codable {
-    let name: String
-    let description: String
-    let value: Int
-}
-
-benchmark("Decode 1K rows (quoted fields)") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([QuotedRecord].self, from: quoted1K)
-}
-
-benchmark("Encode 100 rows") {
-    let records = (0..<100).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-    let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
-}
-
-benchmark("Encode 1K rows") {
-    let records = (0..<1_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-    let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
-}
-
-benchmark("Encode 10K rows") {
-    let records = (0..<10_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-    let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
-}
-
-benchmark("Encode 100K rows") {
-    let records = (0..<100_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-    let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
-}
-
-// Key decoding strategy benchmarks
-let snakeCaseCSV = """
-first_name,last_name,email_address
-John,Doe,john@example.com
-Jane,Smith,jane@example.com
-"""
-
-struct CamelCaseRecord: Codable {
-    let firstName: String
-    let lastName: String
-    let emailAddress: String
-}
-
-benchmark("Decode with snake_case conversion") {
-    let config = CSVDecoder.Configuration(keyDecodingStrategy: .convertFromSnakeCase)
-    let decoder = CSVDecoder(configuration: config)
-    _ = try! decoder.decode([CamelCaseRecord].self, from: snakeCaseCSV)
-}
-
-benchmark("Decode with default keys") {
-    let decoder = CSVDecoder()
-    _ = try! decoder.decode([SimpleRecord].self, from: small100)
-}
-
-// MARK: - Zero-Copy / Byte-Based Benchmarks
-
-benchmark("Decode 100K rows from Data (zero-copy)") {
-    let decoder = CSVDecoder()
-    let result: [SimpleRecord] = try! decoder.decode(from: huge100KData)
-    precondition(result.count > 0)
-}
-
-benchmark("Decode 1K rows complex from Data (zero-copy)") {
-    let decoder = CSVDecoder()
-    let result: [ComplexRecord] = try! decoder.decode(from: complex1KData)
-    precondition(result.count > 0)
-}
-
-// MARK: - Wide Row Benchmarks (SIMD benefits)
-
 nonisolated func generateWideCSV(rows: Int, columns: Int) -> String {
     var csv = (0..<columns).map { "col\($0)" }.joined(separator: ",") + "\n"
     for i in 0..<rows {
@@ -177,26 +60,6 @@ nonisolated func generateWideCSV(rows: Int, columns: Int) -> String {
     }
     return csv
 }
-
-let wide50Col1K = generateWideCSV(rows: 1_000, columns: 50)
-let wide50Col1KData = wide50Col1K.data(using: .utf8)!
-
-struct WideRecord: Codable {
-    // We can't easily define 50 properties, so use subscript access for testing
-    let col0: String
-    let col1: String
-    let col2: String
-    let col3: String
-    let col4: String
-}
-
-benchmark("Decode 1K rows (50 columns wide)") {
-    let decoder = CSVDecoder()
-    let result: [WideRecord] = try! decoder.decode(from: wide50Col1KData)
-    precondition(result.count > 0)
-}
-
-// MARK: - Long Field Benchmarks (SIMD quote detection benefits)
 
 nonisolated func generateLongFieldCSV(rows: Int, fieldLength: Int) -> String {
     let longValue = String(repeating: "x", count: fieldLength)
@@ -207,28 +70,6 @@ nonisolated func generateLongFieldCSV(rows: Int, fieldLength: Int) -> String {
     return csv
 }
 
-let longField1K = generateLongFieldCSV(rows: 1_000, fieldLength: 200)
-let longField1KData = longField1K.data(using: .utf8)!
-
-struct LongFieldRecord: Codable {
-    let id: Int
-    let data: String
-}
-
-benchmark("Decode 1K rows (200-byte fields)") {
-    let decoder = CSVDecoder()
-    let result: [LongFieldRecord] = try! decoder.decode(from: longField1KData)
-    precondition(result.count > 0)
-}
-
-benchmark("Encode 1K rows (200-byte fields)") {
-    let records = (0..<1_000).map { LongFieldRecord(id: $0, data: String(repeating: "x", count: 200)) }
-    let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
-}
-
-// MARK: - Numeric Parsing Benchmarks
-
 nonisolated func generateNumericCSV(rows: Int) -> String {
     var csv = "intVal,doubleVal,floatVal\n"
     for i in 0..<rows {
@@ -237,83 +78,248 @@ nonisolated func generateNumericCSV(rows: Int) -> String {
     return csv
 }
 
-let numeric10K = generateNumericCSV(rows: 10_000)
-let numeric10KData = numeric10K.data(using: .utf8)!
+// MARK: - Pre-generated Datasets (scaled up 10-100x)
 
-struct NumericRecord: Codable {
+// Simple datasets
+let simple1K = generateSimpleCSV(rows: 1_000)
+let simple1KData = Data(simple1K.utf8)
+
+let simple10K = generateSimpleCSV(rows: 10_000)
+let simple10KData = Data(simple10K.utf8)
+
+let simple100K = generateSimpleCSV(rows: 100_000)
+let simple100KData = Data(simple100K.utf8)
+
+let simple1M = generateSimpleCSV(rows: 1_000_000)
+let simple1MData = Data(simple1M.utf8)
+
+// Complex dataset (10K rows, 8 fields each)
+let complex10K = generateComplexCSV(rows: 10_000)
+let complex10KData = Data(complex10K.utf8)
+
+// Quoted dataset (10K rows)
+let quoted10K = generateQuotedCSV(rows: 10_000)
+let quoted10KData = Data(quoted10K.utf8)
+
+// Wide dataset (10K rows, 50 columns)
+let wide50Col10K = generateWideCSV(rows: 10_000, columns: 50)
+let wide50Col10KData = Data(wide50Col10K.utf8)
+
+// Long field dataset (10K rows, 500-byte fields)
+let longField10K = generateLongFieldCSV(rows: 10_000, fieldLength: 500)
+let longField10KData = Data(longField10K.utf8)
+
+// Numeric dataset (100K rows)
+let numeric100K = generateNumericCSV(rows: 100_000)
+let numeric100KData = Data(numeric100K.utf8)
+
+// Pre-generated records for encoding benchmarks
+let simpleRecords1K = (0..<1_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+let simpleRecords10K = (0..<10_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+let simpleRecords100K = (0..<100_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+let simpleRecords1M = (0..<1_000_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+
+let quotedRecords10K = (0..<10_000).map { i in
+    QuotedRecord(name: "Item \(i)", description: "A \"description\" with, commas", value: i * 10)
+}
+
+struct LongFieldRecord: Codable, Sendable {
+    let id: Int
+    let data: String
+}
+
+let longFieldRecords10K = (0..<10_000).map { LongFieldRecord(id: $0, data: String(repeating: "x", count: 500)) }
+
+// MARK: - Decoding Benchmarks
+
+benchmark("Decode 1K rows (simple)") {
+    let decoder = CSVDecoder()
+    let result: [SimpleRecord] = try decoder.decode(from: simple1KData)
+    precondition(result.count == 1_000)
+}
+
+benchmark("Decode 10K rows (simple)") {
+    let decoder = CSVDecoder()
+    let result: [SimpleRecord] = try decoder.decode(from: simple10KData)
+    precondition(result.count == 10_000)
+}
+
+benchmark("Decode 100K rows (simple)") {
+    let decoder = CSVDecoder()
+    let result: [SimpleRecord] = try decoder.decode(from: simple100KData)
+    precondition(result.count == 100_000)
+}
+
+benchmark("Decode 1M rows (simple)") {
+    let decoder = CSVDecoder()
+    let result: [SimpleRecord] = try decoder.decode(from: simple1MData)
+    precondition(result.count == 1_000_000)
+}
+
+benchmark("Decode 10K rows (complex, 8 fields)") {
+    let decoder = CSVDecoder()
+    let result: [ComplexRecord] = try decoder.decode(from: complex10KData)
+    precondition(result.count == 10_000)
+}
+
+benchmark("Decode 10K rows (quoted fields)") {
+    let decoder = CSVDecoder()
+    let result: [QuotedRecord] = try decoder.decode(from: quoted10KData)
+    precondition(result.count == 10_000)
+}
+
+struct WideRecord: Codable, Sendable {
+    let col0: String
+    let col1: String
+    let col2: String
+    let col3: String
+    let col4: String
+}
+
+benchmark("Decode 10K rows (50 columns wide)") {
+    let decoder = CSVDecoder()
+    let result: [WideRecord] = try decoder.decode(from: wide50Col10KData)
+    precondition(result.count == 10_000)
+}
+
+benchmark("Decode 10K rows (500-byte fields)") {
+    let decoder = CSVDecoder()
+    let result: [LongFieldRecord] = try decoder.decode(from: longField10KData)
+    precondition(result.count == 10_000)
+}
+
+struct NumericRecord: Codable, Sendable {
     let intVal: Int
     let doubleVal: Double
     let floatVal: Float
 }
 
-benchmark("Decode 10K rows (numeric fields)") {
+benchmark("Decode 100K rows (numeric fields)") {
     let decoder = CSVDecoder()
-    let result: [NumericRecord] = try! decoder.decode(from: numeric10KData)
+    let result: [NumericRecord] = try decoder.decode(from: numeric100KData)
+    precondition(result.count == 100_000)
+}
+
+// MARK: - Encoding Benchmarks
+
+benchmark("Encode 1K rows") {
+    let encoder = CSVEncoder()
+    let result = try encoder.encode(simpleRecords1K)
     precondition(result.count > 0)
 }
 
-// MARK: - Encoding to Bytes vs String
-
-benchmark("Encode 10K rows to Data") {
-    let records = (0..<10_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+benchmark("Encode 10K rows") {
     let encoder = CSVEncoder()
-    _ = try! encoder.encode(records)
+    let result = try encoder.encode(simpleRecords10K)
+    precondition(result.count > 0)
 }
 
-benchmark("Encode 10K rows to String") {
-    let records = (0..<10_000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+benchmark("Encode 100K rows") {
     let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
+    let result = try encoder.encode(simpleRecords100K)
+    precondition(result.count > 0)
 }
 
-// MARK: - Quoted Field Encoding
+benchmark("Encode 1M rows") {
+    let encoder = CSVEncoder()
+    let result = try encoder.encode(simpleRecords1M)
+    precondition(result.count > 0)
+}
 
-benchmark("Encode 1K rows (quoted fields)") {
-    let records = (0..<1_000).map { i in
-        QuotedRecord(name: "Item \(i)", description: "A \"description\" with, commas", value: i * 10)
+benchmark("Encode 10K rows (quoted fields)") {
+    let encoder = CSVEncoder()
+    let result = try encoder.encode(quotedRecords10K)
+    precondition(result.count > 0)
+}
+
+benchmark("Encode 10K rows (500-byte fields)") {
+    let encoder = CSVEncoder()
+    let result = try encoder.encode(longFieldRecords10K)
+    precondition(result.count > 0)
+}
+
+// MARK: - Key Strategy Benchmarks
+
+let snakeCaseCSV1K: String = {
+    var csv = "first_name,last_name,email_address\n"
+    for i in 0..<1_000 {
+        csv += "John\(i),Doe\(i),john\(i)@example.com\n"
     }
-    let encoder = CSVEncoder()
-    _ = try! encoder.encodeToString(records)
+    return csv
+}()
+let snakeCaseCSV1KData = Data(snakeCaseCSV1K.utf8)
+
+struct CamelCaseRecord: Codable, Sendable {
+    let firstName: String
+    let lastName: String
+    let emailAddress: String
+}
+
+benchmark("Decode 1K rows with snake_case conversion") {
+    let config = CSVDecoder.Configuration(keyDecodingStrategy: .convertFromSnakeCase)
+    let decoder = CSVDecoder(configuration: config)
+    let result: [CamelCaseRecord] = try decoder.decode(from: snakeCaseCSV1KData)
+    precondition(result.count == 1_000)
 }
 
 // MARK: - Flexible Decoding Strategies
 
-let flexibleDateCSV = """
-id,date
-1,2024-01-15
-2,15/01/2024
-3,01-15-2024
-4,2024-01-15T10:30:00Z
-"""
+let flexibleDateCSV1K: String = {
+    var csv = "id,date\n"
+    let formats = ["2024-01-15", "15/01/2024", "01-15-2024", "2024-01-15T10:30:00Z"]
+    for i in 0..<1_000 {
+        csv += "\(i),\(formats[i % formats.count])\n"
+    }
+    return csv
+}()
+let flexibleDateCSV1KData = Data(flexibleDateCSV1K.utf8)
 
-struct DateRecord: Codable {
+struct DateRecord: Codable, Sendable {
     let id: Int
     let date: Date
 }
 
-benchmark("Decode with flexible date parsing") {
+benchmark("Decode 1K rows with flexible date parsing") {
     let config = CSVDecoder.Configuration(dateDecodingStrategy: .flexible)
     let decoder = CSVDecoder(configuration: config)
-    _ = try! decoder.decode([DateRecord].self, from: flexibleDateCSV)
+    let result: [DateRecord] = try decoder.decode(from: flexibleDateCSV1KData)
+    precondition(result.count == 1_000)
 }
 
-let flexibleNumberCSV = """
-id,value
-1,"1,234.56"
-2,"1.234,56"
-3,"$1,234.56"
-4,"€1.234,56"
-"""
+let flexibleNumberCSV1K: String = {
+    var csv = "id,value\n"
+    let formats = ["1,234.56", "1.234,56", "$1,234.56", "€1.234,56"]
+    for i in 0..<1_000 {
+        csv += "\(i),\"\(formats[i % formats.count])\"\n"
+    }
+    return csv
+}()
+let flexibleNumberCSV1KData = Data(flexibleNumberCSV1K.utf8)
 
-struct FlexibleNumberRecord: Codable {
+struct FlexibleNumberRecord: Codable, Sendable {
     let id: Int
     let value: Double
 }
 
-benchmark("Decode with flexible number parsing") {
+benchmark("Decode 1K rows with flexible number parsing") {
     let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
     let decoder = CSVDecoder(configuration: config)
-    _ = try! decoder.decode([FlexibleNumberRecord].self, from: flexibleNumberCSV)
+    let result: [FlexibleNumberRecord] = try decoder.decode(from: flexibleNumberCSV1KData)
+    precondition(result.count == 1_000)
+}
+
+// MARK: - Encoding Output Format Comparison
+
+benchmark("Encode 100K rows to Data") {
+    let encoder = CSVEncoder()
+    let result = try encoder.encode(simpleRecords100K)
+    precondition(result.count > 0)
+}
+
+benchmark("Encode 100K rows to String") {
+    let encoder = CSVEncoder()
+    let result = try encoder.encodeToString(simpleRecords100K)
+    precondition(result.count > 0)
 }
 
 Benchmark.main()
