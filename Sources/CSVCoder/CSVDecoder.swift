@@ -55,6 +55,9 @@ public final class CSVDecoder: Sendable {
         /// Set to nil to skip field count validation.
         public var expectedFieldCount: Int?
 
+        /// Strategy for decoding nested Codable types.
+        public var nestedTypeDecodingStrategy: NestedTypeDecodingStrategy
+
         /// Creates a new configuration with default values.
         public init(
             delimiter: Character = ",",
@@ -69,7 +72,8 @@ public final class CSVDecoder: Sendable {
             columnMapping: [String: String] = [:],
             indexMapping: [Int: String] = [:],
             parsingMode: ParsingMode = .lenient,
-            expectedFieldCount: Int? = nil
+            expectedFieldCount: Int? = nil,
+            nestedTypeDecodingStrategy: NestedTypeDecodingStrategy = .error
         ) {
             self.delimiter = delimiter
             self.hasHeaders = hasHeaders
@@ -84,7 +88,20 @@ public final class CSVDecoder: Sendable {
             self.indexMapping = indexMapping
             self.parsingMode = parsingMode
             self.expectedFieldCount = expectedFieldCount
+            self.nestedTypeDecodingStrategy = nestedTypeDecodingStrategy
         }
+    }
+
+    /// Strategies for decoding nested Codable types.
+    public enum NestedTypeDecodingStrategy: Sendable {
+        /// Throw an error when encountering nested types (default).
+        case error
+        /// Flatten nested types using a separator (e.g., "address_street").
+        case flatten(separator: String)
+        /// Decode the field value as JSON.
+        case json
+        /// Convert field to Data and decode using the type's Decodable conformance.
+        case codable
     }
 
     /// Strategies for decoding dates.

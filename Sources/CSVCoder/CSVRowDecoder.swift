@@ -53,7 +53,16 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
     let rowIndex: Int?
-    
+    let keyPrefix: String?
+
+    init(source: CSVRowDecoder.RowSource, configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int?, keyPrefix: String? = nil) {
+        self.source = source
+        self.configuration = configuration
+        self.codingPath = codingPath
+        self.rowIndex = rowIndex
+        self.keyPrefix = keyPrefix
+    }
+
     var allKeys: [Key] {
         switch source {
         case .dictionary(let row):
@@ -98,7 +107,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                 )
             }
             return value
-            
+
         case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue], index < view.count else {
                 throw CSVDecodingError.keyNotFound(
@@ -114,6 +123,17 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                 )
             }
             return value
+        }
+    }
+
+    /// Returns the string value for a key, or nil if not present.
+    private func stringValue(forKey key: Key) -> String? {
+        switch source {
+        case .dictionary(let row):
+            return row[key.stringValue]
+        case .view(let view, let headerMap):
+            guard let index = headerMap[key.stringValue], index < view.count else { return nil }
+            return view.string(at: index)
         }
     }
 
@@ -409,6 +429,59 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
+        // Check if key exists - if not, check for nested type strategies
+        let keyExists: Bool
+        switch source {
+        case .dictionary(let row):
+            keyExists = row[key.stringValue] != nil
+        case .view(let view, let headerMap):
+            if let index = headerMap[key.stringValue] {
+                keyExists = index < view.count
+            } else {
+                keyExists = false
+            }
+        }
+
+        // Handle nested types based on strategy
+        switch configuration.nestedTypeDecodingStrategy {
+        case .flatten(let separator):
+            // Check if this is a nested type by looking for prefixed keys
+            let prefix = key.stringValue + separator
+            let hasPrefixedKeys: Bool
+            switch source {
+            case .dictionary(let row):
+                hasPrefixedKeys = row.keys.contains { $0.hasPrefix(prefix) }
+            case .view(_, let headerMap):
+                hasPrefixedKeys = headerMap.keys.contains { $0.hasPrefix(prefix) }
+            }
+
+            if hasPrefixedKeys && !keyExists {
+                // Decode as nested type with prefixed keys
+                let nestedSource = createPrefixedSource(prefix: prefix)
+                let decoder = CSVNestedRowDecoder(
+                    source: nestedSource,
+                    configuration: configuration,
+                    codingPath: codingPath + [key],
+                    rowIndex: rowIndex
+                )
+                return try T(from: decoder)
+            }
+
+        case .json, .codable:
+            // For JSON/codable, the value should exist and be a JSON string
+            if keyExists {
+                let value = try getValue(for: key)
+                guard let data = value.data(using: .utf8) else {
+                    throw CSVDecodingError.typeMismatch(expected: "valid UTF-8 JSON", actual: value, location: makeLocation(for: key))
+                }
+                return try JSONDecoder().decode(T.self, from: data)
+            }
+
+        case .error:
+            break
+        }
+
+        // Get value for standard decoding
         let value = try getValue(for: key)
         let location = makeLocation(for: key)
 
@@ -597,11 +670,74 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> {
-        throw CSVDecodingError.unsupportedType("Nested containers are not supported in CSV")
+        switch configuration.nestedTypeDecodingStrategy {
+        case .error:
+            throw CSVDecodingError.unsupportedType("Nested containers are not supported in CSV. Configure nestedTypeDecodingStrategy to enable.")
+
+        case .flatten(let separator):
+            // Create a container that reads keys with prefix "key<separator>"
+            let prefix = key.stringValue + separator
+            let nestedSource = createPrefixedSource(prefix: prefix)
+            let nestedContainer = CSVKeyedDecodingContainer<NestedKey>(
+                source: nestedSource,
+                configuration: configuration,
+                codingPath: codingPath + [key],
+                rowIndex: rowIndex,
+                keyPrefix: prefix
+            )
+            return KeyedDecodingContainer(nestedContainer)
+
+        case .json:
+            // Get the field value and decode as JSON
+            guard let jsonString = stringValue(forKey: key) else {
+                throw CSVDecodingError.keyNotFound(key.stringValue, location: makeLocation(for: key, includeAvailableKeys: true))
+            }
+            guard let jsonData = jsonString.data(using: .utf8) else {
+                throw CSVDecodingError.typeMismatch(expected: "valid UTF-8 JSON string", actual: jsonString, location: makeLocation(for: key))
+            }
+            let jsonDecoder = JSONDecoder()
+            // Create a wrapper that returns a keyed container from JSON
+            let jsonContainer = try jsonDecoder.decode(NestedJSONContainer<NestedKey>.self, from: jsonData)
+            return KeyedDecodingContainer(jsonContainer.container)
+
+        case .codable:
+            // Get the field value as Data and use it directly
+            guard let fieldValue = stringValue(forKey: key) else {
+                throw CSVDecodingError.keyNotFound(key.stringValue, location: makeLocation(for: key, includeAvailableKeys: true))
+            }
+            guard let data = fieldValue.data(using: .utf8) else {
+                throw CSVDecodingError.typeMismatch(expected: "valid UTF-8 data", actual: fieldValue, location: makeLocation(for: key))
+            }
+            // Try JSON first as the most common Codable format
+            let jsonDecoder = JSONDecoder()
+            let jsonContainer = try jsonDecoder.decode(NestedJSONContainer<NestedKey>.self, from: data)
+            return KeyedDecodingContainer(jsonContainer.container)
+        }
+    }
+
+    /// Creates a source filtered to keys with the given prefix, stripping the prefix.
+    private func createPrefixedSource(prefix: String) -> CSVRowDecoder.RowSource {
+        switch source {
+        case .dictionary(let row):
+            var filtered: [String: String] = [:]
+            for (key, value) in row where key.hasPrefix(prefix) {
+                let strippedKey = String(key.dropFirst(prefix.count))
+                filtered[strippedKey] = value
+            }
+            return .dictionary(filtered)
+
+        case .view(let view, let headerMap):
+            var filtered: [String: Int] = [:]
+            for (key, index) in headerMap where key.hasPrefix(prefix) {
+                let strippedKey = String(key.dropFirst(prefix.count))
+                filtered[strippedKey] = index
+            }
+            return .view(view, headerMap: filtered)
+        }
     }
 
     func nestedUnkeyedContainer(forKey key: Key) throws -> UnkeyedDecodingContainer {
-        throw CSVDecodingError.unsupportedType("Nested unkeyed containers are not supported in CSV")
+        throw CSVDecodingError.unsupportedType("Nested unkeyed containers (arrays) are not supported in CSV")
     }
 
     func superDecoder() throws -> Decoder {
@@ -620,4 +756,85 @@ private protocol OptionalDecodable {
 
 extension Optional: OptionalDecodable {
     static var nilValue: Any { Self.none as Any }
+}
+
+// MARK: - Nested JSON Decoding Support
+
+/// A wrapper to extract keyed container from JSON data.
+private struct NestedJSONContainer<Key: CodingKey>: Decodable {
+    let container: JSONKeyedDecodingContainer<Key>
+
+    init(from decoder: Decoder) throws {
+        let keyedContainer = try decoder.container(keyedBy: Key.self)
+        self.container = JSONKeyedDecodingContainer(wrapped: keyedContainer)
+    }
+}
+
+/// A keyed decoding container backed by a JSON decoder's container.
+private struct JSONKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
+    private let wrapped: KeyedDecodingContainer<Key>
+
+    init(wrapped: KeyedDecodingContainer<Key>) {
+        self.wrapped = wrapped
+    }
+
+    var codingPath: [CodingKey] { wrapped.codingPath }
+    var allKeys: [Key] { wrapped.allKeys }
+
+    func contains(_ key: Key) -> Bool { wrapped.contains(key) }
+    func decodeNil(forKey key: Key) throws -> Bool { try wrapped.decodeNil(forKey: key) }
+    func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: String.Type, forKey key: Key) throws -> String { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Double.Type, forKey key: Key) throws -> Double { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Float.Type, forKey key: Key) throws -> Float { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Int.Type, forKey key: Key) throws -> Int { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 { try wrapped.decode(type, forKey: key) }
+    func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 { try wrapped.decode(type, forKey: key) }
+    func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T { try wrapped.decode(type, forKey: key) }
+
+    func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> {
+        try wrapped.nestedContainer(keyedBy: type, forKey: key)
+    }
+
+    func nestedUnkeyedContainer(forKey key: Key) throws -> UnkeyedDecodingContainer {
+        try wrapped.nestedUnkeyedContainer(forKey: key)
+    }
+
+    func superDecoder() throws -> Decoder { try wrapped.superDecoder() }
+    func superDecoder(forKey key: Key) throws -> Decoder { try wrapped.superDecoder(forKey: key) }
+}
+
+// MARK: - Nested Row Decoder for Flatten Strategy
+
+/// A decoder for nested types that reads from a filtered/prefixed source.
+struct CSVNestedRowDecoder: Decoder {
+    let source: CSVRowDecoder.RowSource
+    let configuration: CSVDecoder.Configuration
+    let codingPath: [CodingKey]
+    let rowIndex: Int?
+    var userInfo: [CodingUserInfoKey: Any] { [:] }
+
+    func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
+        KeyedDecodingContainer(CSVKeyedDecodingContainer(
+            source: source,
+            configuration: configuration,
+            codingPath: codingPath,
+            rowIndex: rowIndex
+        ))
+    }
+
+    func unkeyedContainer() throws -> UnkeyedDecodingContainer {
+        throw CSVDecodingError.unsupportedType("Unkeyed containers are not supported in CSV decoding")
+    }
+
+    func singleValueContainer() throws -> SingleValueDecodingContainer {
+        throw CSVDecodingError.unsupportedType("Single value containers are not supported for nested types")
+    }
 }

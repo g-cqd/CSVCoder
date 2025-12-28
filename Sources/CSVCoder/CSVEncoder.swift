@@ -41,6 +41,9 @@ public nonisolated final class CSVEncoder: Sendable {
         /// The line ending to use. Default is LF (\n).
         public var lineEnding: LineEnding
 
+        /// Strategy for encoding nested Codable types.
+        public var nestedTypeEncodingStrategy: NestedTypeEncodingStrategy
+
         /// Creates a new configuration with default values.
         public init(
             delimiter: Character = ",",
@@ -51,7 +54,8 @@ public nonisolated final class CSVEncoder: Sendable {
             keyEncodingStrategy: KeyEncodingStrategy = .useDefaultKeys,
             boolEncodingStrategy: BoolEncodingStrategy = .numeric,
             numberEncodingStrategy: NumberEncodingStrategy = .standard,
-            lineEnding: LineEnding = .lf
+            lineEnding: LineEnding = .lf,
+            nestedTypeEncodingStrategy: NestedTypeEncodingStrategy = .error
         ) {
             self.delimiter = delimiter
             self.hasHeaders = hasHeaders
@@ -62,7 +66,20 @@ public nonisolated final class CSVEncoder: Sendable {
             self.boolEncodingStrategy = boolEncodingStrategy
             self.numberEncodingStrategy = numberEncodingStrategy
             self.lineEnding = lineEnding
+            self.nestedTypeEncodingStrategy = nestedTypeEncodingStrategy
         }
+    }
+
+    /// Strategies for encoding nested Codable types.
+    public enum NestedTypeEncodingStrategy: Sendable {
+        /// Throw an error when encountering nested types (default).
+        case error
+        /// Flatten nested types using a separator (e.g., "address_street").
+        case flatten(separator: String)
+        /// Encode nested types as JSON strings.
+        case json
+        /// Encode nested types to Data using standard Encodable.
+        case codable
     }
 
     /// Strategies for encoding dates.
