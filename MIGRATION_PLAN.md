@@ -1,6 +1,6 @@
 # CSV Parsing Locale-Aware Migration Plan
 
-## Status: Phase 1 Complete, Phase 2 In Progress
+## Status: Phase 1 Complete, Phase 2 Complete, Phase 3 Planned
 
 ## Overview
 
@@ -43,24 +43,57 @@ Migrate from hardcoded parsing logic to Foundation's locale-aware FormatStyle/Pa
 
 ## Phase 3: CSVCoder File Organization
 
-### 3.1 Source File Splitting
-Split large files into focused, single-responsibility modules:
+### 3.1 Current File Analysis
 
-| Current File | Split Into |
-|--------------|------------|
-| `CSVDecoder.swift` (500+ lines) | `CSVDecoder.swift` (core), `CSVDecoderConfiguration.swift`, `CSVDecodingStrategies.swift` |
-| `CSVSingleValueDecoder.swift` (450+ lines) | `CSVSingleValueDecoder.swift`, `NumberParsing.swift`, `DateParsing.swift` |
-| `CSVRowDecoder.swift` (700+ lines) | `CSVRowDecoder.swift`, `CSVKeyedDecodingContainer.swift` |
+| File | Lines | Bytes | Notes |
+|------|-------|-------|-------|
+| `CSVRowDecoder.swift` | 875 | 35KB | Largest source file |
+| `CSVDecoder+Parallel.swift` | 559 | 20KB | Well-scoped extension |
+| `CSVDecoder.swift` | 504 | 20KB | Config + strategies + decoder |
+| `CSVSingleValueDecoder.swift` | 464 | 17KB | Moderate complexity |
+| `CSVDecoderTests.swift` | 2079 | 67KB | **Priority: split tests** |
+| `CSVEncoderTests.swift` | 957 | 32KB | Lower priority |
 
-### 3.2 Test File Splitting
-| Current File | Split Into |
-|--------------|------------|
-| `CSVDecoderTests.swift` (2000+ lines) | `CSVDecoderBasicTests.swift`, `CSVDecoderStrategyTests.swift`, `CSVDecoderEdgeCaseTests.swift`, `CSVDecoderStreamingTests.swift` |
-| `CSVEncoderTests.swift` | Similar split by functionality |
+### 3.2 Source File Strategy
 
-### 3.3 Naming Conventions
-- Source: `CSV<Component>.swift` or `<Component>+CSV.swift` for extensions
-- Tests: `<Component>Tests.swift` matching source file names
+**Recommended: Minimal restructuring**
+
+After analysis, the existing source structure is already well-organized:
+- Extensions (`+Parallel`, `+Streaming`, `+Backpressure`) are properly split
+- `LocaleUtilities.swift` was added in Phase 1 for parsing utilities
+- `CSVRowDecoder.swift` has tightly coupled parsing logic (not worth splitting)
+
+**Optional future refinements:**
+- [ ] Extract `CSVDecoderConfiguration.swift` (lines 14-93 of CSVDecoder.swift) - ~80 lines
+- [ ] Extract `CSVDecodingStrategies.swift` (strategy enums) - ~115 lines
+- [ ] Consider making `LocaleUtilities` public for external consumption
+
+### 3.3 Test File Splitting (Recommended)
+
+Split `CSVDecoderTests.swift` (2079 lines, 100+ tests) into focused suites:
+
+| New File | Test Groups | Lines |
+|----------|-------------|-------|
+| `CSVDecoderBasicTests.swift` | Simple decode, delimiters, types (UUID, URL, Decimal) | ~200 |
+| `CSVDecoderStrategyTests.swift` | Date/number/boolean strategies | ~230 |
+| `CSVDecoderRFC4180Tests.swift` | Quoted fields, line endings, strict/lenient mode | ~350 |
+| `CSVDecoderStreamingTests.swift` | Stream decode, async collect | ~160 |
+| `CSVDecoderParallelTests.swift` | SIMD scanner, parallel decode, batched | ~250 |
+| `CSVDecoderKeyMappingTests.swift` | Key strategies, column mapping, index mapping | ~200 |
+| `CSVDecoderErrorTests.swift` | Error locations, suggestions, diagnostics | ~150 |
+| `CSVDecoderNestedTests.swift` | Nested decoding strategies | ~100 |
+| `LocaleAwareDecodingTests.swift` | Already separate (Phase 1) | 295 |
+
+**Benefits:**
+- Faster test runs when working on specific features
+- Clearer ownership and maintenance
+- Easier CI parallelization
+
+### 3.4 Implementation Priority
+
+1. **High**: Test file splitting (CSVDecoderTests.swift → 8 files)
+2. **Medium**: Extract configuration/strategies from CSVDecoder.swift
+3. **Low**: Make LocaleUtilities public API
 
 ---
 
@@ -81,7 +114,33 @@ Split large files into focused, single-responsibility modules:
 - ✅ Updated `CSVSingleValueDecoder.swift` and `CSVRowDecoder.swift` to use new strategies
 - ✅ Added 13 new tests in `LocaleAwareDecodingTests.swift`
 - ✅ All 181 tests passing
-- Phase 1 complete, starting Phase 2
+- Phase 1 complete
+
+### Entry 3: 2024-12-28
+- ✅ Phase 2 complete: LotoFuel assessment done
+  - CSVDataNormalizer kept for pre-decode validation
+  - FuelioCSVReader kept with current strategies (fixed Fuelio format)
+  - LotoFuel updated to CSVCoder revision 9fc5ff7
+  - All 24 LotoFuelServices tests passing
+- ✅ Phase 3 planning complete:
+  - Analyzed all source files (6.9K lines total)
+  - Analyzed test files (3.3K lines, CSVDecoderTests.swift = 2K lines)
+  - Recommended test file splitting over source splitting
+  - Source structure already well-organized with +Parallel, +Streaming extensions
+
+### Entry 4: 2024-12-28
+- ✅ Phase 3 test file splitting implemented:
+  - Split CSVDecoderTests.swift (2079 lines) into 8 focused test files:
+    - CSVDecoderBasicTests.swift (~200 lines) - Simple decoding, types
+    - CSVDecoderStrategyTests.swift (~200 lines) - Date/number/boolean strategies
+    - CSVDecoderRFC4180Tests.swift (~320 lines) - Quoted fields, strict/lenient mode
+    - CSVDecoderStreamingTests.swift (~230 lines) - Async/stream decoding
+    - CSVDecoderParallelTests.swift (~340 lines) - SIMD, parallel decode
+    - CSVDecoderKeyMappingTests.swift (~330 lines) - Key strategies, index mapping
+    - CSVDecoderErrorTests.swift (~170 lines) - Error diagnostics
+    - CSVDecoderNestedTests.swift (~160 lines) - Nested decoding strategies
+  - All 181 tests pass
+  - Total test files: 10 (8 decoder + 1 encoder + 1 locale-aware)
 
 ---
 
