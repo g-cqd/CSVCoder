@@ -108,19 +108,27 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             formatter.locale = locale
             formatter.numberStyle = .decimal
             return formatter.number(from: value)?.doubleValue
+
+        case .parseStrategy(let locale):
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+                return LocaleUtilities.parseDouble(value, locale: locale)
+            } else {
+                return parseFlexibleDouble(value)
+            }
+
+        case .currency(_, let locale):
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+                return LocaleUtilities.parseDecimal(value, locale: locale).flatMap { Double(truncating: $0 as NSDecimalNumber) }
+            } else {
+                return parseFlexibleDouble(value)
+            }
         }
     }
 
     private func parseFlexibleDouble(_ value: String) -> Double? {
-        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Use LocaleUtilities to strip currency symbols and units
+        var cleaned = LocaleUtilities.stripCurrencyAndUnits(value)
         guard !cleaned.isEmpty else { return nil }
-
-        let removePatterns = ["$", "€", "£", "¥", "kr", "zł", "₹", "R$", "CHF", "CAD", "USD", "EUR", "GBP",
-                              "km", "mi", "l", "L", "gal", "liters", "litres", "gallons", "miles", "kilometers"]
-        for pattern in removePatterns {
-            cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .caseInsensitive)
-        }
-        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
 
         let hasComma = cleaned.contains(",")
         let hasDot = cleaned.contains(".")
@@ -162,19 +170,29 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             formatter.locale = locale
             formatter.numberStyle = .decimal
             return formatter.number(from: value)?.decimalValue
+
+        case .parseStrategy(let locale):
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+                return LocaleUtilities.parseDecimal(value, locale: locale)
+            } else {
+                guard let cleaned = normalizeNumberString(value) else { return nil }
+                return Decimal(string: cleaned)
+            }
+
+        case .currency(let code, let locale):
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+                return LocaleUtilities.parseCurrency(value, code: code, locale: locale)
+            } else {
+                guard let cleaned = normalizeNumberString(value) else { return nil }
+                return Decimal(string: cleaned)
+            }
         }
     }
 
     private func normalizeNumberString(_ value: String) -> String? {
-        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Use LocaleUtilities to strip currency symbols and units
+        var cleaned = LocaleUtilities.stripCurrencyAndUnits(value)
         guard !cleaned.isEmpty else { return nil }
-
-        let removePatterns = ["$", "€", "£", "¥", "kr", "zł", "₹", "R$", "CHF", "CAD", "USD", "EUR", "GBP",
-                              "km", "mi", "l", "L", "gal", "liters", "litres", "gallons", "miles", "kilometers"]
-        for pattern in removePatterns {
-            cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .caseInsensitive)
-        }
-        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
 
         let hasComma = cleaned.contains(",")
         let hasDot = cleaned.contains(".")
@@ -354,6 +372,24 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
                 throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
             }
             return date
+
+        case .localeAware(let locale, let style):
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+                if let date = LocaleUtilities.parseDate(value, locale: locale, style: style) {
+                    return date
+                }
+                // Fall back to flexible parsing if locale-aware fails
+                if let date = parseFlexibleDate(value, hint: nil) {
+                    return date
+                }
+                throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: value, location: location)
+            } else {
+                // Pre-iOS 15: use flexible parsing
+                guard let date = parseFlexibleDate(value, hint: nil) else {
+                    throw CSVDecodingError.typeMismatch(expected: "Date", actual: value, location: location)
+                }
+                return date
+            }
         }
     }
 

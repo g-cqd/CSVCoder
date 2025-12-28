@@ -122,6 +122,16 @@ public final class CSVDecoder: Sendable {
         case flexible
         /// Try a preferred format first, then fall back to auto-detection.
         case flexibleWithHint(preferred: String)
+        /// Use Foundation's Date.ParseStrategy for locale-aware parsing.
+        /// Automatically handles date order preferences (DD/MM vs MM/DD) per region.
+        case localeAware(locale: Locale = .autoupdatingCurrent, style: DateStyle = .numeric)
+
+        /// Date styles for localeAware parsing.
+        public enum DateStyle: Sendable {
+            case numeric    // 12/31/2024 or 31/12/2024 depending on locale
+            case abbreviated // Dec 31, 2024 or 31 Dec 2024
+            case long       // December 31, 2024
+        }
     }
 
     /// Strategies for decoding numeric values (Double, Float, Decimal).
@@ -132,6 +142,15 @@ public final class CSVDecoder: Sendable {
         case flexible
         /// Use a specific locale for number formatting.
         case locale(Locale)
+        /// Use Foundation's FormatStyle.ParseStrategy for locale-aware parsing.
+        /// Handles all 300+ locales automatically including grouping separators and decimal marks.
+        case parseStrategy(locale: Locale = .autoupdatingCurrent)
+        /// Currency-aware parsing that strips currency symbols/codes before parsing.
+        /// Uses system locale data to recognize all known currency symbols.
+        /// - Parameters:
+        ///   - code: Expected currency code (e.g., "USD"). If nil, accepts any currency.
+        ///   - locale: Locale for number format interpretation.
+        case currency(code: String? = nil, locale: Locale = .autoupdatingCurrent)
     }
 
     /// Strategies for decoding boolean values.
