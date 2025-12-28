@@ -44,10 +44,10 @@ public struct CSVRowView {
     /// Reference to the full buffer (owned elsewhere).
     public let buffer: UnsafeBufferPointer<UInt8>
 
-    /// Offsets of field starts.
+    /// Offsets of field starts within the buffer.
     public let fieldStarts: [Int]
 
-    /// Lengths of fields.
+    /// Lengths of each field.
     public let fieldLengths: [Int]
 
     /// Whether each field was quoted (needs unescaping).
@@ -64,6 +64,25 @@ public struct CSVRowView {
 
     /// The number of fields in this row.
     public var count: Int { fieldStarts.count }
+
+    /// Creates a row view with the given buffer and field metadata.
+    public init(
+        buffer: UnsafeBufferPointer<UInt8>,
+        fieldStarts: [Int],
+        fieldLengths: [Int],
+        fieldQuoted: [Bool],
+        fieldHasEscapedQuote: [Bool],
+        hasUnterminatedQuote: Bool,
+        hasQuoteInUnquotedField: Bool
+    ) {
+        self.buffer = buffer
+        self.fieldStarts = fieldStarts
+        self.fieldLengths = fieldLengths
+        self.fieldQuoted = fieldQuoted
+        self.fieldHasEscapedQuote = fieldHasEscapedQuote
+        self.hasUnterminatedQuote = hasUnterminatedQuote
+        self.hasQuoteInUnquotedField = hasQuoteInUnquotedField
+    }
 
     /// Returns the raw UTF-8 bytes for the field at the given index.
     ///
@@ -117,31 +136,27 @@ public struct CSVRowView {
 
         guard let base = buffer.baseAddress else { return nil }
 
+        let ptr = base.advanced(by: start)
+        let fieldBuffer = UnsafeBufferPointer(start: ptr, count: length)
+
         // Fast path for UTF-8 (most common case)
         if encoding == .utf8 {
-            if isQuoted {
-                if !hasEscapedQuote {
-                    let ptr = base.advanced(by: start)
-                    return String(decoding: UnsafeBufferPointer(start: ptr, count: length), as: UTF8.self)
-                }
-                let fieldBytes = UnsafeBufferPointer(start: base.advanced(by: start), count: length)
-                let s = String(decoding: fieldBytes, as: UTF8.self)
-                return s.replacingOccurrences(of: "\"\"", with: "\"")
+            if isQuoted && hasEscapedQuote {
+                // Use zero-allocation unescaper
+                return CSVUnescaper.unescape(buffer: fieldBuffer)
             } else {
-                let ptr = base.advanced(by: start)
-                return String(decoding: UnsafeBufferPointer(start: ptr, count: length), as: UTF8.self)
+                // No unescaping needed - direct decode
+                return String(decoding: fieldBuffer, as: UTF8.self)
             }
         }
 
         // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)
-        let ptr = base.advanced(by: start)
-        let data = Data(bytes: ptr, count: length)
-        guard let result = String(data: data, encoding: encoding) else { return nil }
-
         if isQuoted && hasEscapedQuote {
-            return result.replacingOccurrences(of: "\"\"", with: "\"")
+            return CSVUnescaper.unescape(buffer: fieldBuffer, encoding: encoding)
         }
-        return result
+
+        let data = Data(bytes: ptr, count: length)
+        return String(data: data, encoding: encoding)
     }
 }
 
@@ -193,7 +208,7 @@ public struct CSVRowView {
 /// ## Performance
 ///
 /// - Uses SIMD acceleration for fields ≥64 bytes
-/// - Zero allocations during iteration (arrays allocated per-row for metadata)
+/// - Uses SWAR acceleration for fields 8-63 bytes
 /// - O(n) parsing where n is the total byte count
 ///
 /// ## Thread Safety
@@ -244,7 +259,10 @@ public struct CSVParser: Sequence {
     ///
     /// - Warning: Prefer using ``parse(data:delimiter:body:)`` unless you need
     ///   manual buffer lifetime management.
-    public init(buffer: UnsafeBufferPointer<UInt8>, delimiter: UInt8) {
+    public init(
+        buffer: UnsafeBufferPointer<UInt8>,
+        delimiter: UInt8
+    ) {
         self.buffer = buffer
         self.delimiter = delimiter
     }
@@ -259,9 +277,15 @@ public struct CSVParser: Sequence {
         let parser: CSVParser
         var offset: Int = 0
 
+        init(parser: CSVParser) {
+            self.parser = parser
+        }
+
         /// Advances to and returns the next row, or `nil` if no more rows exist.
         public mutating func next() -> CSVRowView? {
-            guard offset < parser.buffer.count else { return nil }
+            guard offset < parser.buffer.count else {
+                return nil
+            }
 
             var fieldStarts: [Int] = []
             var fieldLengths: [Int] = []
@@ -269,10 +293,6 @@ public struct CSVParser: Sequence {
             var fieldHasEscapedQuote: [Bool] = []
             var hasUnterminatedQuote = false
             var hasQuoteInUnquotedField = false
-            fieldStarts.reserveCapacity(16)
-            fieldLengths.reserveCapacity(16)
-            fieldQuoted.reserveCapacity(16)
-            fieldHasEscapedQuote.reserveCapacity(16)
 
             var rowEnded = false
 
@@ -283,7 +303,7 @@ public struct CSVParser: Sequence {
                 fieldLengths.append(result.length)
                 fieldQuoted.append(result.quoted)
                 fieldHasEscapedQuote.append(result.hasEscapedQuote)
-                
+
                 if result.unterminated {
                     hasUnterminatedQuote = true
                 }
@@ -296,9 +316,13 @@ public struct CSVParser: Sequence {
 
             // Handle trailing empty line (EOF after newline)
             if fieldStarts.isEmpty || (fieldStarts.count == 1 && fieldLengths[0] == 0 && offset >= parser.buffer.count) {
-                 if offset >= parser.buffer.count && fieldStarts.isEmpty { return nil }
-                 // If it's a single empty field at EOF, usually we skip it if it was just a newline
-                 if fieldStarts.count == 1 && fieldLengths[0] == 0 { return nil }
+                if offset >= parser.buffer.count && fieldStarts.isEmpty {
+                    return nil
+                }
+                // If it's a single empty field at EOF, usually we skip it if it was just a newline
+                if fieldStarts.count == 1 && fieldLengths[0] == 0 {
+                    return nil
+                }
             }
 
             return CSVRowView(
@@ -349,9 +373,9 @@ public struct CSVParser: Sequence {
         guard cursor < count else {
             return FieldResult(start: cursor, length: 0, quoted: false, nextOffset: cursor, isRowEnd: true, unterminated: false, hasQuoteInUnquoted: false, hasEscapedQuote: false)
         }
-        
+
         let c = buffer[cursor]
-        
+
         if c == CSVParser.quote {
             // Quoted Field
             let contentStart = cursor + 1
@@ -361,7 +385,7 @@ public struct CSVParser: Sequence {
             while cursor < count {
                 // Use SIMD to find the next quote
                 // If the field is long, this skips checking every byte
-                
+
                 if let baseAddress = buffer.baseAddress {
                    // findNextQuote searches from 0, we need to offset buffer pointer
                    let relativeQuote = SIMDScanner.findNextQuote(

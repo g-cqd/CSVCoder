@@ -34,6 +34,16 @@ let csv = try encoder.encodeToString(people)
 - **SIMD-accelerated** parsing for maximum throughput
 - **Swift 6.2 concurrency** compatible with `nonisolated` types
 
+## Performance
+
+CSVCoder uses **SIMD-accelerated parsing** with 64-byte vector operations and **SWAR (SIMD Within A Register)** 8-byte fallback for efficient field scanning. This optimization is particularly effective for:
+
+- **Quoted fields** with long spans of non-structural bytes (~15% faster)
+- **Large fields** (500+ bytes) where vectorized scanning excels
+- **Unicode-heavy content** processed efficiently in bulk
+
+For maximum throughput on large datasets, use ``CSVParser`` directly with the zero-copy API to bypass `Codable` overhead (~2x faster).
+
 ## Topics
 
 ### Essentials

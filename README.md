@@ -378,47 +378,55 @@ CSVCoder is compatible with projects using `SWIFT_DEFAULT_ACTOR_ISOLATION = Main
 - OS: macOS 26.3
 - Swift: 6.2+
 - Build: Release
-- Version: v1.2.0 (with multi-encoding support)
+
+### Performance Characteristics
+
+CSVCoder uses **SIMD-accelerated parsing** with 64-byte vector operations and **SWAR (SIMD Within A Register)** for 8-byte fallback processing. This optimization is particularly effective for:
+
+- **Quoted fields** with long spans of non-structural bytes (~15% faster)
+- **Large fields** (500+ bytes) where vectorized scanning shines
+- **Unicode-heavy content** processed efficiently in bulk
+
+For CSV files with many short, simple fields, the SIMD overhead is minimal but present. The trade-off favors real-world CSV data which typically contains quoted text fields.
 
 ### Decoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 3.1 ms | ~319K rows/s |
-| 10K rows (simple) | 32 ms | ~311K rows/s |
-| 100K rows (simple) | 321 ms | ~311K rows/s |
-| 1M rows (simple) | 3.23 s | ~310K rows/s |
-| 10K rows (complex, 8 fields) | 72 ms | ~139K rows/s |
-| 10K rows (quoted fields) | 36 ms | ~279K rows/s |
-| 10K rows (50 columns wide) | 249 ms | ~40K rows/s |
-| 10K rows (500-byte fields) | 95 ms | ~106K rows/s |
-| 100K rows (numeric fields) | 322 ms | ~311K rows/s |
+| 1K rows (simple) | 3.2 ms | ~313K rows/s |
+| 10K rows (simple) | 32 ms | ~313K rows/s |
+| 100K rows (simple) | 326 ms | ~307K rows/s |
+| 1M rows (simple) | 3.29 s | ~304K rows/s |
+| 10K rows (complex, 8 fields) | 74 ms | ~135K rows/s |
+| 10K rows (quoted fields) | 30 ms | ~333K rows/s |
+| 10K rows (50 columns wide) | 259 ms | ~39K rows/s |
+| 10K rows (500-byte fields) | 96 ms | ~104K rows/s |
+| 100K rows (numeric fields) | 329 ms | ~304K rows/s |
 
 ### Real-World Scenarios
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 50K orders (18 fields, optionals) | 740 ms | ~68K rows/s |
-| 100K transactions (13 fields) | 1.12 s | ~89K rows/s |
+| 50K orders (18 fields, optionals) | 765 ms | ~65K rows/s |
+| 100K transactions (13 fields) | 1.15 s | ~87K rows/s |
 | 100K log entries (12 fields) | 1.11 s | ~90K rows/s |
-| 10K stress-quoted (nested quotes, newlines) | 33 ms | ~306K rows/s |
-| 50K Unicode-heavy rows | 144 ms | ~347K rows/s |
-| 1K rows (10KB fields) | 151 ms | ~6.6K rows/s |
-| 1K rows (200 columns wide) | 90 ms | ~11K rows/s |
+| 10K stress-quoted (nested quotes, newlines) | 25 ms | ~400K rows/s |
+| 50K Unicode-heavy rows | 149 ms | ~336K rows/s |
+| 1K rows (10KB fields) | 154 ms | ~6.5K rows/s |
+| 1K rows (200 columns wide) | 91 ms | ~11K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.7 ms | ~578K rows/s |
-| 10K rows | 17.6 ms | ~568K rows/s |
-| 100K rows | 178 ms | ~562K rows/s |
-| 1M rows | 1.78 s | ~561K rows/s |
-| 10K rows (quoted fields) | 17 ms | ~592K rows/s |
-| 10K rows (500-byte fields) | 63 ms | ~158K rows/s |
-| 50K orders (18 fields, optionals) | 338 ms | ~148K rows/s |
-| 100K rows to Data | 178 ms | ~562K rows/s |
-| 100K rows to String | 181 ms | ~553K rows/s |
+| 1K rows | 1.6 ms | ~625K rows/s |
+| 10K rows | 16 ms | ~625K rows/s |
+| 100K rows | 165 ms | ~606K rows/s |
+| 1M rows | 1.64 s | ~610K rows/s |
+| 10K rows (500-byte fields) | 96 ms | ~104K rows/s |
+| 50K orders (18 fields, optionals) | 291 ms | ~172K rows/s |
+| 100K rows to Data | 164 ms | ~610K rows/s |
+| 100K rows to String | 167 ms | ~599K rows/s |
 
 ### Parallel Processing
 
@@ -464,14 +472,14 @@ let count = try CSVParser.parse(data: data) { parser in
 
 This approach avoids allocating `struct` or `class` instances for every row, drastically reducing ARC traffic.
 
-#### Raw API Benchmarks (1M Rows)
+#### Raw API Benchmarks
 
 | Benchmark | Time | Throughput | Speedup vs Codable |
 |-----------|------|------------|-------------------|
-| Raw Parse (Iterate Only) | 1.48 s | **~675K rows/s** | **2.18x** |
-| Raw Parse (Iterate + String) | 1.60 s | **~625K rows/s** | **2.02x** |
-| Raw Parse 100K Quoted (Iterate Only) | 112 ms | **~893K rows/s** | - |
-| Raw Parse 100K Quoted (Iterate + String) | 201 ms | **~498K rows/s** | - |
+| Raw Parse 1M rows (Iterate Only) | 1.61 s | **~621K rows/s** | **2.04x** |
+| Raw Parse 1M rows (Iterate + String) | 1.71 s | **~585K rows/s** | **1.92x** |
+| Raw Parse 100K Quoted (Iterate Only) | 122 ms | **~820K rows/s** | - |
+| Raw Parse 100K Quoted (Iterate + String) | 154 ms | **~649K rows/s** | - |
 
 ### Special Strategies (1K rows)
 

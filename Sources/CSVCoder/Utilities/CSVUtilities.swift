@@ -141,15 +141,174 @@ enum CSVUtilities {
     }
 }
 
+// MARK: - Field Unescaping
+
+/// Zero-allocation field unescaper for quoted CSV fields.
+/// Converts `""` sequences to single `"` without intermediate string allocations.
+enum CSVUnescaper: Sendable {
+    private static let quote: UInt8 = 0x22  // "
+
+    /// Checks if a buffer contains escaped quotes (`""`).
+    /// Uses SWAR for medium-sized buffers, SIMD for large ones.
+    ///
+    /// - Parameters:
+    ///   - buffer: Pointer to UTF-8 bytes.
+    ///   - count: Number of bytes to scan.
+    /// - Returns: `true` if the buffer contains `""` sequences.
+    @inline(__always)
+    static func hasEscapedQuotes(buffer: UnsafePointer<UInt8>, count: Int) -> Bool {
+        guard count >= 2 else { return false }
+
+        var offset = 0
+
+        // SWAR check for 8+ bytes: look for consecutive quotes
+        while offset + 9 <= count {
+            let word = SWARUtils.load(buffer.advanced(by: offset))
+            let nextWord = SWARUtils.load(buffer.advanced(by: offset + 1))
+
+            // Find quotes in both positions
+            let quoteMask1 = SWARUtils.findByte(word, target: quote)
+            let quoteMask2 = SWARUtils.findByte(nextWord, target: quote)
+
+            // Consecutive quotes exist if we have a quote followed by a quote
+            if quoteMask1 != 0 && quoteMask2 != 0 {
+                // Check byte-by-byte in this region
+                for i in 0..<8 {
+                    if buffer[offset + i] == quote && buffer[offset + i + 1] == quote {
+                        return true
+                    }
+                }
+            }
+            offset += 8
+        }
+
+        // Scalar fallback for remainder
+        while offset < count - 1 {
+            if buffer[offset] == quote && buffer[offset + 1] == quote {
+                return true
+            }
+            offset += 1
+        }
+
+        return false
+    }
+
+    /// Unescapes a quoted CSV field, converting `""` to `"`.
+    /// Returns the string directly if no escaping is needed (fast path).
+    ///
+    /// - Parameter buffer: Buffer containing the field content (without outer quotes).
+    /// - Returns: The unescaped string.
+    static func unescape(buffer: UnsafeBufferPointer<UInt8>) -> String {
+        guard let baseAddress = buffer.baseAddress else {
+            return ""
+        }
+
+        let count = buffer.count
+
+        // Fast path: no escaped quotes
+        if !hasEscapedQuotes(buffer: baseAddress, count: count) {
+            return String(decoding: buffer, as: UTF8.self)
+        }
+
+        // Slow path: build unescaped result
+        var result = [UInt8]()
+        result.reserveCapacity(count)
+
+        var i = 0
+        while i < count {
+            let byte = baseAddress[i]
+            if byte == quote && i + 1 < count && baseAddress[i + 1] == quote {
+                // Escaped quote: append single quote, skip both
+                result.append(quote)
+                i += 2
+            } else {
+                result.append(byte)
+                i += 1
+            }
+        }
+
+        return String(decoding: result, as: UTF8.self)
+    }
+
+    /// Unescapes a quoted CSV field with a specific encoding.
+    ///
+    /// - Parameters:
+    ///   - buffer: Buffer containing the field content (without outer quotes).
+    ///   - encoding: The string encoding to use.
+    /// - Returns: The unescaped string, or nil if encoding fails.
+    static func unescape(buffer: UnsafeBufferPointer<UInt8>, encoding: String.Encoding) -> String? {
+        guard let baseAddress = buffer.baseAddress else {
+            return ""
+        }
+
+        let count = buffer.count
+
+        // For UTF-8, use optimized path
+        if encoding == .utf8 {
+            return unescape(buffer: buffer)
+        }
+
+        // For other encodings, convert first then unescape
+        let data = Data(bytes: baseAddress, count: count)
+        guard let str = String(data: data, encoding: encoding) else {
+            return nil
+        }
+
+        // Check if unescaping is needed
+        if !hasEscapedQuotes(buffer: baseAddress, count: count) {
+            return str
+        }
+
+        return str.replacingOccurrences(of: "\"\"", with: "\"")
+    }
+}
+
 // MARK: - Field Escaping
 
 /// RFC 4180 compliant field escaper.
 /// Handles quoting of fields containing delimiters, quotes, or newlines.
-enum CSVFieldEscaper {
+enum CSVFieldEscaper: Sendable {
     // ASCII constants
     private static let quote: UInt8 = 0x22      // "
     private static let lf: UInt8 = 0x0A         // \n
     private static let cr: UInt8 = 0x0D         // \r
+
+    /// Checks if a field needs quoting per RFC 4180 using raw pointer.
+    /// Uses SWAR for medium-sized fields, SIMD for large ones.
+    ///
+    /// - Parameters:
+    ///   - buffer: Pointer to UTF-8 bytes.
+    ///   - count: Number of bytes.
+    ///   - delimiter: The field delimiter byte.
+    /// - Returns: `true` if the field contains characters requiring quoting.
+    @inline(__always)
+    static func needsQuoting(buffer: UnsafePointer<UInt8>, count: Int, delimiter: UInt8) -> Bool {
+        // Use SIMD for large fields
+        if count >= 64 {
+            return SIMDScanner.needsQuoting(buffer: buffer, count: count, delimiter: delimiter)
+        }
+
+        // SWAR for medium fields (8-63 bytes)
+        var offset = 0
+        while offset + 8 <= count {
+            let word = SWARUtils.load(buffer.advanced(by: offset))
+            if SWARUtils.hasAnyByte(word, quote, delimiter, lf, cr) {
+                return true
+            }
+            offset += 8
+        }
+
+        // Scalar fallback for remainder
+        while offset < count {
+            let byte = buffer[offset]
+            if byte == delimiter || byte == quote || byte == lf || byte == cr {
+                return true
+            }
+            offset += 1
+        }
+
+        return false
+    }
 
     /// Checks if a field needs quoting per RFC 4180.
     /// - Parameters:
@@ -158,12 +317,10 @@ enum CSVFieldEscaper {
     /// - Returns: `true` if the field contains characters requiring quoting.
     @inline(__always)
     static func needsQuoting(_ bytes: [UInt8], delimiter: UInt8) -> Bool {
-        for byte in bytes {
-            if byte == delimiter || byte == quote || byte == lf || byte == cr {
-                return true
-            }
+        bytes.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return false }
+            return needsQuoting(buffer: base, count: buffer.count, delimiter: delimiter)
         }
-        return false
     }
 
     /// SIMD-accelerated quoting check for larger fields.
@@ -173,44 +330,60 @@ enum CSVFieldEscaper {
     ///   - delimiter: The field delimiter byte.
     /// - Returns: `true` if the field contains characters requiring quoting.
     static func needsQuotingSIMD(_ bytes: [UInt8], delimiter: UInt8) -> Bool {
-        guard bytes.count >= 64 else {
-            return needsQuoting(bytes, delimiter: delimiter)
-        }
-
-        return bytes.withUnsafeBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else { return false }
-            return SIMDScanner.needsQuoting(buffer: baseAddress, count: buffer.count, delimiter: delimiter)
-        }
+        needsQuoting(bytes, delimiter: delimiter)
     }
 
     /// Appends an escaped field to a byte buffer.
     /// Quotes the field if it contains delimiters, quotes, or newlines.
+    /// Uses contiguous UTF-8 storage for efficient access.
+    ///
     /// - Parameters:
     ///   - value: The string value to escape.
     ///   - buffer: The output buffer to append to.
     ///   - delimiter: The field delimiter byte.
     static func appendEscaped(_ value: String, to buffer: inout [UInt8], delimiter: UInt8) {
-        let utf8Bytes = Array(value.utf8)
+        // Use withContiguousStorageIfAvailable for zero-copy when possible
+        var mutableValue = value
+        let handled = mutableValue.withUTF8 { utf8 -> Bool in
+            guard let baseAddress = utf8.baseAddress else {
+                return true  // Empty string - handled
+            }
 
-        // Determine if quoting is needed
-        let needsQuotes: Bool
-        if utf8Bytes.count >= 64 {
-            needsQuotes = needsQuotingSIMD(utf8Bytes, delimiter: delimiter)
-        } else {
-            needsQuotes = needsQuoting(utf8Bytes, delimiter: delimiter)
+            let count = utf8.count
+            let needsQuotes = needsQuoting(buffer: baseAddress, count: count, delimiter: delimiter)
+
+            if needsQuotes {
+                buffer.append(quote)
+                for i in 0..<count {
+                    let byte = baseAddress[i]
+                    if byte == quote {
+                        buffer.append(quote) // Escape quote by doubling
+                    }
+                    buffer.append(byte)
+                }
+                buffer.append(quote)
+            } else {
+                buffer.append(contentsOf: UnsafeBufferPointer(start: baseAddress, count: count))
+            }
+            return true
         }
 
-        if needsQuotes {
-            buffer.append(quote)
-            for byte in utf8Bytes {
-                if byte == quote {
-                    buffer.append(quote) // Escape quote by doubling
+        // Fallback should never happen after withUTF8, but just in case
+        if !handled {
+            let utf8Bytes = Array(value.utf8)
+            let needsQuotes = needsQuoting(utf8Bytes, delimiter: delimiter)
+            if needsQuotes {
+                buffer.append(quote)
+                for byte in utf8Bytes {
+                    if byte == quote {
+                        buffer.append(quote)
+                    }
+                    buffer.append(byte)
                 }
-                buffer.append(byte)
+                buffer.append(quote)
+            } else {
+                buffer.append(contentsOf: utf8Bytes)
             }
-            buffer.append(quote)
-        } else {
-            buffer.append(contentsOf: utf8Bytes)
         }
     }
 

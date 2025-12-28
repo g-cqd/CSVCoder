@@ -2,10 +2,12 @@
 //  FieldBufferPool.swift
 //  CSVCoder
 //
-//  Thread-safe reusable buffer pool for zero-copy decoding.
+//  Thread-safe reusable buffer pool for byte arrays.
 //
 
 import Foundation
+
+// MARK: - Field Buffer Pool
 
 /// Thread-safe pool of reusable byte buffers for field decoding.
 final class FieldBufferPool: @unchecked Sendable {

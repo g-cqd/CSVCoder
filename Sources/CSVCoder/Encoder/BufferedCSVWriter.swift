@@ -27,13 +27,46 @@ struct BufferedCSVWriter: ~Copyable {
     }
 
     /// Writes bytes to the buffer, flushing if necessary.
-    mutating func write(_ bytes: some Sequence<UInt8>) throws {
+    /// Optimized for contiguous collections using batch append.
+    mutating func write<S: Sequence>(_ bytes: S) throws where S.Element == UInt8 {
+        // Fast path for contiguous collections
+        if let contiguous = bytes as? [UInt8] {
+            try write(contentsOf: contiguous)
+            return
+        }
+        if let contiguous = bytes as? ContiguousArray<UInt8> {
+            try writeContiguous(contiguous)
+            return
+        }
+
+        // Fallback for non-contiguous sequences
         for byte in bytes {
             buffer.append(byte)
             if buffer.count >= bufferCapacity {
                 try flush()
             }
         }
+    }
+
+    /// Writes a contiguous collection efficiently.
+    @inline(__always)
+    private mutating func writeContiguous<C: RandomAccessCollection>(_ bytes: C) throws where C.Element == UInt8 {
+        let count = bytes.count
+        guard count > 0 else { return }
+
+        // If incoming data is larger than buffer, write directly
+        if count >= bufferCapacity {
+            try flush()
+            try handle.write(contentsOf: Data(bytes))
+            return
+        }
+
+        // If adding would overflow, flush first
+        if buffer.count + count > bufferCapacity {
+            try flush()
+        }
+
+        buffer.append(contentsOf: bytes)
     }
 
     /// Writes a string as UTF-8 bytes.
@@ -84,57 +117,55 @@ struct BufferedCSVWriter: ~Copyable {
 
 extension SIMDScanner {
     /// Checks if a field needs quoting using SIMD acceleration.
+    /// Uses bitmask extraction for O(1) detection instead of O(64) loop.
     @inline(__always)
     static func needsQuoting(
         buffer: UnsafePointer<UInt8>,
         count: Int,
         delimiter: UInt8
     ) -> Bool {
+        let quote: UInt8 = 0x22
+        let lf: UInt8 = 0x0A
+        let cr: UInt8 = 0x0D
+
         var offset = 0
 
-        // Process 64 bytes at a time
+        // Process 64 bytes at a time using SIMD
         while offset + 64 <= count {
-            let chunk = SIMD64<UInt8>(
-                buffer[offset], buffer[offset+1], buffer[offset+2], buffer[offset+3],
-                buffer[offset+4], buffer[offset+5], buffer[offset+6], buffer[offset+7],
-                buffer[offset+8], buffer[offset+9], buffer[offset+10], buffer[offset+11],
-                buffer[offset+12], buffer[offset+13], buffer[offset+14], buffer[offset+15],
-                buffer[offset+16], buffer[offset+17], buffer[offset+18], buffer[offset+19],
-                buffer[offset+20], buffer[offset+21], buffer[offset+22], buffer[offset+23],
-                buffer[offset+24], buffer[offset+25], buffer[offset+26], buffer[offset+27],
-                buffer[offset+28], buffer[offset+29], buffer[offset+30], buffer[offset+31],
-                buffer[offset+32], buffer[offset+33], buffer[offset+34], buffer[offset+35],
-                buffer[offset+36], buffer[offset+37], buffer[offset+38], buffer[offset+39],
-                buffer[offset+40], buffer[offset+41], buffer[offset+42], buffer[offset+43],
-                buffer[offset+44], buffer[offset+45], buffer[offset+46], buffer[offset+47],
-                buffer[offset+48], buffer[offset+49], buffer[offset+50], buffer[offset+51],
-                buffer[offset+52], buffer[offset+53], buffer[offset+54], buffer[offset+55],
-                buffer[offset+56], buffer[offset+57], buffer[offset+58], buffer[offset+59],
-                buffer[offset+60], buffer[offset+61], buffer[offset+62], buffer[offset+63]
-            )
+            let chunk = loadSIMD64(from: buffer.advanced(by: offset))
 
-            let quoteVec = SIMD64<UInt8>(repeating: 0x22)
+            let quoteVec = SIMD64<UInt8>(repeating: quote)
             let delimVec = SIMD64<UInt8>(repeating: delimiter)
-            let lfVec = SIMD64<UInt8>(repeating: 0x0A)
-            let crVec = SIMD64<UInt8>(repeating: 0x0D)
+            let lfVec = SIMD64<UInt8>(repeating: lf)
+            let crVec = SIMD64<UInt8>(repeating: cr)
 
             let quoteMask = chunk .== quoteVec
             let delimMask = chunk .== delimVec
             let lfMask = chunk .== lfVec
             let crMask = chunk .== crVec
 
-            // Check if any structural character found
-            for i in 0..<64 where quoteMask[i] || delimMask[i] || lfMask[i] || crMask[i] {
+            // Combine masks and check if any match found
+            let combinedMask = quoteMask .| delimMask .| lfMask .| crMask
+            for i in 0..<64 where combinedMask[i] {
                 return true
             }
 
             offset += 64
         }
 
-        // Scalar fallback for remainder
+        // SWAR fallback for 8-63 remaining bytes
+        while offset + 8 <= count {
+            let word = SWARUtils.load(buffer.advanced(by: offset))
+            if SWARUtils.hasAnyByte(word, quote, delimiter, lf, cr) {
+                return true
+            }
+            offset += 8
+        }
+
+        // Scalar fallback for remaining 0-7 bytes
         while offset < count {
             let byte = buffer[offset]
-            if byte == 0x22 || byte == delimiter || byte == 0x0A || byte == 0x0D {
+            if byte == quote || byte == delimiter || byte == lf || byte == cr {
                 return true
             }
             offset += 1
