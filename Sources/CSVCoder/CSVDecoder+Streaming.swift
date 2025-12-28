@@ -89,43 +89,86 @@ extension CSVDecoder {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let parser = try StreamingCSVParser(url: url, configuration: configuration)
-                    var iterator = parser.makeAsyncIterator()
-                    var headers: [String]?
-
-                    while let row = try await iterator.next() {
-                        if headers == nil {
-                            headers = self.resolveHeaders(
-                                firstRow: row,
-                                columnOrder: columnOrder
-                            )
-                            if configuration.hasHeaders { continue }
-                        }
-
-                        guard let headerRow = headers else { continue }
-
-                        var dictionary: [String: String] = [:]
-                        dictionary.reserveCapacity(headerRow.count)
-                        for (index, header) in headerRow.enumerated() {
-                            if index < row.count {
-                                dictionary[header] = row[index]
-                            }
-                        }
-
-                        let decoder = CSVRowDecoder(
-                            row: dictionary,
-                            configuration: configuration,
-                            codingPath: []
-                        )
-                        let value = try T(from: decoder)
-                        continuation.yield(value)
-                    }
-
-                    continuation.finish()
+                    let reader = try MemoryMappedReader(url: url)
+                    try self.decodeFromReader(reader, columnOrder: columnOrder, continuation: continuation)
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
+        }
+    }
+    
+    private func decodeFromReader<T: Decodable & Sendable>(
+        _ reader: MemoryMappedReader,
+        columnOrder: [String]?,
+        continuation: AsyncThrowingStream<T, Error>.Continuation
+    ) throws {
+        try reader.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { 
+                continuation.finish()
+                return 
+            }
+            let bytes = UnsafeBufferPointer(start: baseAddress.assumingMemoryBound(to: UInt8.self), count: buffer.count)
+            let delimiter = configuration.delimiter.asciiValue ?? 0x2C
+            
+            let parser = ByteCSVParser(buffer: bytes, delimiter: delimiter)
+            var iterator = parser.makeIterator()
+            var headers: [String]?
+            var headerMap: [String: Int]?
+            var rowIndex = 0
+
+            while let rowView = iterator.next() {
+                if headers == nil {
+                    // Extract potential headers
+                    var firstRowStrings: [String] = []
+                    firstRowStrings.reserveCapacity(rowView.count)
+                    for i in 0..<rowView.count {
+                        if let s = rowView.string(at: i) {
+                            firstRowStrings.append(s)
+                        } else {
+                            firstRowStrings.append("column\(i)")
+                        }
+                    }
+                    
+                    headers = self.resolveHeaders(
+                        firstRow: firstRowStrings,
+                        columnOrder: columnOrder
+                    )
+                    
+                    // Build map
+                    var map: [String: Int] = [:]
+                    for (index, header) in headers!.enumerated() {
+                        map[header] = index
+                    }
+                    headerMap = map
+                    
+                    if configuration.hasHeaders { 
+                        rowIndex += 1
+                        continue 
+                    }
+                }
+                
+                guard let map = headerMap else { continue }
+                
+                let decoder = CSVRowDecoder(
+                    view: rowView,
+                    headerMap: map,
+                    configuration: configuration,
+                    codingPath: [],
+                    rowIndex: rowIndex + 1
+                )
+                
+                do {
+                    let value = try T(from: decoder)
+                    continuation.yield(value)
+                } catch {
+                    continuation.finish(throwing: error)
+                    return
+                }
+                
+                rowIndex += 1
+            }
+            continuation.finish()
         }
     }
 
@@ -137,39 +180,8 @@ extension CSVDecoder {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let parser = StreamingCSVParser(data: data, configuration: configuration)
-                    var iterator = parser.makeAsyncIterator()
-                    var headers: [String]?
-
-                    while let row = try await iterator.next() {
-                        if headers == nil {
-                            headers = self.resolveHeaders(
-                                firstRow: row,
-                                columnOrder: columnOrder
-                            )
-                            if configuration.hasHeaders { continue }
-                        }
-
-                        guard let headerRow = headers else { continue }
-
-                        var dictionary: [String: String] = [:]
-                        dictionary.reserveCapacity(headerRow.count)
-                        for (index, header) in headerRow.enumerated() {
-                            if index < row.count {
-                                dictionary[header] = row[index]
-                            }
-                        }
-
-                        let decoder = CSVRowDecoder(
-                            row: dictionary,
-                            configuration: configuration,
-                            codingPath: []
-                        )
-                        let value = try T(from: decoder)
-                        continuation.yield(value)
-                    }
-
-                    continuation.finish()
+                    let reader = MemoryMappedReader(data: data)
+                    try self.decodeFromReader(reader, columnOrder: columnOrder, continuation: continuation)
                 } catch {
                     continuation.finish(throwing: error)
                 }

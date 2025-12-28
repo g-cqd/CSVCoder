@@ -228,6 +228,12 @@ extension CSVDecoder {
     ) async throws -> [T] {
         // Extract headers first
         let headers = try extractHeaders(from: reader)
+        
+        // Build header map
+        var headerMap: [String: Int] = [:]
+        for (index, header) in headers.enumerated() {
+            headerMap[header] = index
+        }
 
         // Find chunks
         let chunks = ChunkBoundaryFinder.findChunks(
@@ -246,6 +252,7 @@ extension CSVDecoder {
                 chunks: chunks,
                 reader: reader,
                 headers: headers,
+                headerMap: headerMap,
                 config: config,
                 parallelism: parallelConfig.parallelism
             )
@@ -254,6 +261,7 @@ extension CSVDecoder {
                 chunks: chunks,
                 reader: reader,
                 headers: headers,
+                headerMap: headerMap,
                 config: config,
                 parallelism: parallelConfig.parallelism
             )
@@ -307,6 +315,7 @@ extension CSVDecoder {
         chunks: [CSVChunk],
         reader: MemoryMappedReader,
         headers: [String],
+        headerMap: [String: Int],
         config: Configuration,
         parallelism: Int
     ) async throws -> [T] {
@@ -328,6 +337,7 @@ extension CSVDecoder {
                         chunk: chunk,
                         reader: reader,
                         headers: headers,
+                        headerMap: headerMap,
                         config: config
                     )
                     return (chunk.index, values)
@@ -344,6 +354,7 @@ extension CSVDecoder {
                             chunk: nextChunk,
                             reader: reader,
                             headers: headers,
+                            headerMap: headerMap,
                             config: config
                         )
                         return (nextChunk.index, values)
@@ -362,6 +373,7 @@ extension CSVDecoder {
         chunks: [CSVChunk],
         reader: MemoryMappedReader,
         headers: [String],
+        headerMap: [String: Int],
         config: Configuration,
         parallelism: Int
     ) async throws -> [T] {
@@ -378,6 +390,7 @@ extension CSVDecoder {
                         chunk: chunk,
                         reader: reader,
                         headers: headers,
+                        headerMap: headerMap,
                         config: config
                     )
                 }
@@ -392,6 +405,7 @@ extension CSVDecoder {
                             chunk: nextChunk,
                             reader: reader,
                             headers: headers,
+                            headerMap: headerMap,
                             config: config
                         )
                     }
@@ -406,35 +420,38 @@ extension CSVDecoder {
         chunk: CSVChunk,
         reader: MemoryMappedReader,
         headers: [String],
+        headerMap: [String: Int],
         config: Configuration
     ) throws -> [T] {
-        // Extract chunk data
-        let chunkData = reader.withUnsafeBytes { buffer -> Data in
-            let start = chunk.startOffset
-            let length = chunk.endOffset - chunk.startOffset
-            return Data(bytes: buffer.baseAddress!.advanced(by: start), count: length)
-        }
-
-        // Parse chunk
-        let chunkString = String(decoding: chunkData, as: UTF8.self)
-        let parser = CSVParser(string: chunkString, configuration: config)
-        let rows = try parser.parse()
-
-        // Decode rows
-        return try rows.compactMap { row in
-            var dictionary: [String: String] = [:]
-            dictionary.reserveCapacity(headers.count)
-            for (index, header) in headers.enumerated() {
-                if index < row.count {
-                    dictionary[header] = row[index]
-                }
-            }
-            let decoder = CSVRowDecoder(
-                row: dictionary,
-                configuration: config,
-                codingPath: []
+        return try reader.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return [] }
+            let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
+            
+            // Create a view into the chunk
+            let chunkBytes = UnsafeBufferPointer(
+                start: bytes.advanced(by: chunk.startOffset),
+                count: chunk.endOffset - chunk.startOffset
             )
-            return try T(from: decoder)
+            
+            let delimiter = config.delimiter.asciiValue ?? 0x2C
+            let parser = ByteCSVParser(buffer: chunkBytes, delimiter: delimiter)
+            let rows = parser.parse()
+            
+            // Decode rows
+            var results: [T] = []
+            results.reserveCapacity(rows.count)
+            
+            for (index, rowView) in rows.enumerated() {
+                let decoder = CSVRowDecoder(
+                    view: rowView,
+                    headerMap: headerMap,
+                    configuration: config,
+                    codingPath: [],
+                    rowIndex: chunk.index * 1000 + index // Approximate row index
+                )
+                results.append(try T(from: decoder))
+            }
+            return results
         }
     }
 }
@@ -460,6 +477,10 @@ extension CSVDecoder {
                 do {
                     let reader = try MemoryMappedReader(url: url)
                     let headers = try self.extractHeaders(from: reader)
+                    
+                    let headerMap = headers.enumerated().reduce(into: [String: Int]()) { result, element in
+                        result[element.element] = element.offset
+                    }
 
                     let chunks = ChunkBoundaryFinder.findChunks(
                         in: reader,
@@ -484,6 +505,7 @@ extension CSVDecoder {
                                     chunk: chunk,
                                     reader: reader,
                                     headers: headers,
+                                    headerMap: headerMap,
                                     config: config
                                 )
                                 return (chunk.index, values)
@@ -510,6 +532,7 @@ extension CSVDecoder {
                                         chunk: nextChunk,
                                         reader: reader,
                                         headers: headers,
+                                        headerMap: headerMap,
                                         config: config
                                     )
                                     return (nextChunk.index, values)

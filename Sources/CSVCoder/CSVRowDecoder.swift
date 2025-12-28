@@ -9,21 +9,33 @@ import Foundation
 
 /// A decoder for a single CSV row.
 struct CSVRowDecoder: Decoder {
-    let row: [String: String]
+    enum RowSource {
+        case dictionary([String: String])
+        case view(CSVRowView, headerMap: [String: Int])
+    }
+    
+    let source: RowSource
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
     let rowIndex: Int?
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     init(row: [String: String], configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int? = nil) {
-        self.row = row
+        self.source = .dictionary(row)
+        self.configuration = configuration
+        self.codingPath = codingPath
+        self.rowIndex = rowIndex
+    }
+    
+    init(view: CSVRowView, headerMap: [String: Int], configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int? = nil) {
+        self.source = .view(view, headerMap: headerMap)
         self.configuration = configuration
         self.codingPath = codingPath
         self.rowIndex = rowIndex
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        KeyedDecodingContainer(CSVKeyedDecodingContainer(row: row, configuration: configuration, codingPath: codingPath, rowIndex: rowIndex))
+        KeyedDecodingContainer(CSVKeyedDecodingContainer(source: source, configuration: configuration, codingPath: codingPath, rowIndex: rowIndex))
     }
 
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
@@ -37,38 +49,88 @@ struct CSVRowDecoder: Decoder {
 
 /// A keyed decoding container for CSV data.
 struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
-    let row: [String: String]
+    let source: CSVRowDecoder.RowSource
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
     let rowIndex: Int?
-    var allKeys: [Key] { row.keys.compactMap { Key(stringValue: $0) } }
+    
+    var allKeys: [Key] {
+        switch source {
+        case .dictionary(let row):
+            return row.keys.compactMap { Key(stringValue: $0) }
+        case .view(_, let headerMap):
+            return headerMap.keys.compactMap { Key(stringValue: $0) }
+        }
+    }
 
     func contains(_ key: Key) -> Bool {
-        row[key.stringValue] != nil
+        switch source {
+        case .dictionary(let row):
+            return row[key.stringValue] != nil
+        case .view(let view, let headerMap):
+            guard let index = headerMap[key.stringValue] else { return false }
+            return index < view.count
+        }
     }
 
     private func makeLocation(for key: Key, includeAvailableKeys: Bool = false) -> CSVLocation {
-        CSVLocation(
+        let keys: [String]?
+        switch source {
+        case .dictionary(let row): keys = includeAvailableKeys ? Array(row.keys) : nil
+        case .view(_, let headerMap): keys = includeAvailableKeys ? Array(headerMap.keys) : nil
+        }
+        
+        return CSVLocation(
             row: rowIndex,
             column: key.stringValue,
             codingPath: codingPath + [key],
-            availableKeys: includeAvailableKeys ? Array(row.keys) : nil
+            availableKeys: keys
         )
     }
 
     private func getValue(for key: Key) throws -> String {
-        guard let value = row[key.stringValue] else {
-            throw CSVDecodingError.keyNotFound(
-                key.stringValue,
-                location: makeLocation(for: key, includeAvailableKeys: true)
-            )
+        switch source {
+        case .dictionary(let row):
+            guard let value = row[key.stringValue] else {
+                throw CSVDecodingError.keyNotFound(
+                    key.stringValue,
+                    location: makeLocation(for: key, includeAvailableKeys: true)
+                )
+            }
+            return value
+            
+        case .view(let view, let headerMap):
+            guard let index = headerMap[key.stringValue], index < view.count else {
+                throw CSVDecodingError.keyNotFound(
+                    key.stringValue,
+                    location: makeLocation(for: key, includeAvailableKeys: true)
+                )
+            }
+            // Decode string on demand
+            guard let value = view.string(at: index) else {
+                throw CSVDecodingError.keyNotFound(
+                    key.stringValue,
+                    location: makeLocation(for: key, includeAvailableKeys: true)
+                )
+            }
+            return value
         }
-        return value
     }
 
     func decodeNil(forKey key: Key) throws -> Bool {
-        guard let value = row[key.stringValue] else { return true }
-        return value.isEmpty
+        switch source {
+        case .dictionary(let row):
+            guard let value = row[key.stringValue] else { return true }
+            return value.isEmpty
+            
+        case .view(let view, let headerMap):
+            guard let index = headerMap[key.stringValue] else { return true }
+            if index >= view.count { return true }
+            // Check for empty string without allocating full string if possible
+            // But for now, let's just get the string to be safe with escaping
+             guard let value = view.string(at: index) else { return true }
+            return value.isEmpty
+        }
     }
 
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {

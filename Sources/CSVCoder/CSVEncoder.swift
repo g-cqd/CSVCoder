@@ -95,58 +95,146 @@ public nonisolated final class CSVEncoder: Sendable {
     /// - Parameter values: The values to encode.
     /// - Returns: The encoded CSV data.
     public func encode<T: Encodable>(_ values: [T]) throws -> Data {
-        let string = try encodeToString(values)
-        guard let data = string.data(using: configuration.encoding) else {
-            throw CSVEncodingError.invalidOutput("Could not convert string to data using \(configuration.encoding)")
-        }
-        return data
+        var buffer: [UInt8] = []
+        try encodeToBuffer(values, into: &buffer)
+        return Data(buffer)
     }
 
     /// Encodes an array of values to a CSV string.
     /// - Parameter values: The values to encode.
     /// - Returns: The encoded CSV string.
     public func encodeToString<T: Encodable>(_ values: [T]) throws -> String {
-        guard !values.isEmpty else { return "" }
+        var buffer: [UInt8] = []
+        try encodeToBuffer(values, into: &buffer)
+        return String(decoding: buffer, as: UTF8.self)
+    }
+    
+    /// Encodes an array of values directly to a file URL.
+    /// Uses buffered writing to support large datasets with constant memory usage.
+    /// - Parameters:
+    ///   - values: The values to encode.
+    ///   - url: The destination file URL.
+    public func encode<T: Encodable>(_ values: [T], to url: URL) throws {
+        // Create file
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        var writer = BufferedCSVWriter(handle: handle)
+        
+        try encodeToWriter(values, writer: &writer)
+        try writer.close()
+    }
 
-        var rows: [[String: String]] = []
-        var allKeys: [String] = []
-
-        // Encode each value
-        for value in values {
+    // MARK: - Internal Streaming Helpers
+    
+    private func encodeToBuffer<T: Encodable>(_ values: [T], into buffer: inout [UInt8]) throws {
+        guard !values.isEmpty else { return }
+        
+        var headers: [String]?
+        let delimiterByte = configuration.delimiter.asciiValue ?? 0x2C
+        let lineEndingBytes = Array(configuration.lineEnding.rawValue.utf8)
+        
+        for (index, value) in values.enumerated() {
             let storage = CSVEncodingStorage()
             let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
             try value.encode(to: encoder)
-
-            let encodedRow = storage.allValues()
-            rows.append(encodedRow)
-
-            // Track key order from first row
-            if allKeys.isEmpty {
-                allKeys = storage.allKeys()
+            
+            // Handle Header on first row
+            if headers == nil {
+                headers = storage.allKeys()
+                if configuration.includeHeaders {
+                    let headerKeys = headers!
+                    for (i, key) in headerKeys.enumerated() {
+                        if i > 0 { buffer.append(delimiterByte) }
+                        appendEscaped(key, to: &buffer, delimiter: delimiterByte)
+                    }
+                    buffer.append(contentsOf: lineEndingBytes)
+                }
+            }
+            
+            guard let keys = headers else { continue }
+            let rowData = storage.allValues()
+            
+            // Write Row
+            for (i, key) in keys.enumerated() {
+                if i > 0 { buffer.append(delimiterByte) }
+                let val = rowData[key] ?? ""
+                appendEscaped(val, to: &buffer, delimiter: delimiterByte)
+            }
+            
+            // Add newline for all rows except the last one (to match previous behavior if needed, 
+            // but standard CSV usually has trailing newline. The previous implementation using joined(separator:) 
+            // meant NO trailing newline. I will stick to that for compatibility).
+            if index < values.count - 1 {
+                buffer.append(contentsOf: lineEndingBytes)
             }
         }
-
-        // Build CSV output
-        var lines: [String] = []
+    }
+    
+    private func encodeToWriter<T: Encodable>(_ values: [T], writer: inout BufferedCSVWriter) throws {
+        guard !values.isEmpty else { return }
+        
+        var headers: [String]?
         let delimiter = String(configuration.delimiter)
         let lineEnding = configuration.lineEnding.rawValue
-
-        // Add header row
-        if configuration.includeHeaders {
-            let headerRow = allKeys.map { escapeField($0) }.joined(separator: delimiter)
-            lines.append(headerRow)
-        }
-
-        // Add data rows
-        for row in rows {
-            let values = allKeys.map { key -> String in
-                let value = row[key] ?? ""
-                return escapeField(value)
+        
+        for (index, value) in values.enumerated() {
+            let storage = CSVEncodingStorage()
+            let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
+            try value.encode(to: encoder)
+            
+            if headers == nil {
+                headers = storage.allKeys()
+                if configuration.includeHeaders {
+                    let headerKeys = headers!
+                    for (i, key) in headerKeys.enumerated() {
+                        if i > 0 { try writer.write(delimiter) }
+                        try writer.write(escapeField(key))
+                    }
+                    try writer.write(lineEnding)
+                }
             }
-            lines.append(values.joined(separator: delimiter))
+            
+            guard let keys = headers else { continue }
+            let rowData = storage.allValues()
+            
+            for (i, key) in keys.enumerated() {
+                if i > 0 { try writer.write(delimiter) }
+                let val = rowData[key] ?? ""
+                try writer.write(escapeField(val))
+            }
+            
+            if index < values.count - 1 {
+                try writer.write(lineEnding)
+            }
         }
+    }
 
-        return lines.joined(separator: lineEnding)
+    /// Appends an escaped field directly to the byte buffer.
+    private func appendEscaped(_ value: String, to buffer: inout [UInt8], delimiter: UInt8) {
+        // Fast path for simple values
+        var needsQuotes = false
+        for scalar in value.unicodeScalars {
+            let v = scalar.value
+            if v == UInt32(delimiter) || v == 0x22 || v == 0x0A || v == 0x0D {
+                needsQuotes = true
+                break
+            }
+        }
+        
+        if needsQuotes {
+            buffer.append(0x22) // "
+            for scalar in value.unicodeScalars {
+                if scalar.value == 0x22 {
+                    buffer.append(0x22) // "
+                    buffer.append(0x22) // "
+                } else {
+                    buffer.append(contentsOf: String(scalar).utf8)
+                }
+            }
+            buffer.append(0x22) // "
+        } else {
+            buffer.append(contentsOf: value.utf8)
+        }
     }
 
     /// Encodes a single value to a CSV row string (without headers).

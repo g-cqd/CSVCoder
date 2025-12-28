@@ -149,10 +149,11 @@ public final class CSVDecoder: Sendable {
     ///   - data: The CSV data to decode.
     /// - Returns: An array of decoded values.
     public func decode<T: Decodable>(_ type: [T].Type, from data: Data) throws -> [T] {
-        guard let string = String(data: data, encoding: configuration.encoding) else {
-            throw CSVDecodingError.invalidEncoding
-        }
-        return try decode(type, from: string)
+        // Runtime detection of CSVIndexedDecodable conformance
+        let columnOrder = (T.self as? _CSVIndexedDecodableMarker.Type)?._csvColumnOrder
+        
+        // Fast path: Zero-copy decoding for UTF-8 data
+        return try decodeRowsFromBytes(type, from: data, columnOrder: columnOrder)
     }
 
     /// Decodes an array of values from the given CSV string.
@@ -220,6 +221,81 @@ public final class CSVDecoder: Sendable {
                 rowIndex: rowIndex + (configuration.hasHeaders ? 2 : 1) // 1-based, account for header
             )
             return try T(from: decoder)
+        }
+    }
+
+    /// Optimized zero-copy decoding from Data.
+    private func decodeRowsFromBytes<T: Decodable>(
+        _ type: [T].Type,
+        from data: Data,
+        columnOrder: [String]?
+    ) throws -> [T] {
+        return try data.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return [] }
+            let bytes = UnsafeBufferPointer(start: baseAddress.assumingMemoryBound(to: UInt8.self), count: buffer.count)
+            let delimiter = configuration.delimiter.asciiValue ?? 0x2C
+            
+            let parser = ByteCSVParser(buffer: bytes, delimiter: delimiter)
+            let rows = parser.parse()
+            
+            guard !rows.isEmpty else { return [] }
+            
+            var startIndex = 0
+            let rawHeaders: [String]
+            
+            if configuration.hasHeaders {
+                let headerRow = rows[0]
+                // Parse headers immediately
+                var extracted: [String] = []
+                extracted.reserveCapacity(headerRow.count)
+                for i in 0..<headerRow.count {
+                    if let s = headerRow.string(at: i) {
+                        extracted.append(s)
+                    } else {
+                        extracted.append("column\(i)")
+                    }
+                }
+                rawHeaders = extracted
+                startIndex = 1
+            } else {
+                rawHeaders = (0..<rows[0].count).map { "column\($0)" }
+                startIndex = 0
+            }
+            
+            // Determine headers based on: indexMapping > columnOrder > rawHeaders
+            let headers: [String]
+            if !configuration.indexMapping.isEmpty {
+                let maxIndex = configuration.indexMapping.keys.max() ?? 0
+                headers = (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
+            } else if let columnOrder = columnOrder, !configuration.hasHeaders {
+                headers = columnOrder
+            } else {
+                headers = rawHeaders.map { transformKey($0) }
+            }
+            
+            // Build header map (Header -> Column Index)
+            var headerMap: [String: Int] = [:]
+            for (index, header) in headers.enumerated() {
+                headerMap[header] = index
+            }
+            
+            // Decode rows
+            var results: [T] = []
+            results.reserveCapacity(rows.count - startIndex)
+            
+            for i in startIndex..<rows.count {
+                let rowView = rows[i]
+                let decoder = CSVRowDecoder(
+                    view: rowView,
+                    headerMap: headerMap,
+                    configuration: configuration,
+                    codingPath: [],
+                    rowIndex: i + 1
+                )
+                results.append(try T(from: decoder))
+            }
+            
+            return results
         }
     }
 
