@@ -33,6 +33,10 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
 
+    private var location: CSVLocation {
+        CSVLocation(codingPath: codingPath)
+    }
+
     func decodeNil() -> Bool {
         value.isEmpty
     }
@@ -45,19 +49,19 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             switch lower {
             case "true", "yes", "1": return true
             case "false", "no", "0": return false
-            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
             }
 
         case .flexible:
             if flexibleTrueValues.contains(lower) { return true }
             if flexibleFalseValues.contains(lower) { return false }
             if let num = Int(lower) { return num != 0 }
-            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
 
         case .custom(let trueValues, let falseValues):
             if trueValues.contains(lower) { return true }
             if falseValues.contains(lower) { return false }
-            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
         }
     }
 
@@ -77,14 +81,14 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
 
     func decode(_ type: Double.Type) throws -> Double {
         guard let result = parseDouble(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Double", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Double", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: Float.Type) throws -> Float {
         guard let result = parseDouble(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Float", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Float", actual: value, location: location)
         }
         return Float(result)
     }
@@ -200,70 +204,70 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
 
     func decode(_ type: Int.Type) throws -> Int {
         guard let result = Int(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: Int8.Type) throws -> Int8 {
         guard let result = Int8(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: Int16.Type) throws -> Int16 {
         guard let result = Int16(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: Int32.Type) throws -> Int32 {
         guard let result = Int32(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: Int64.Type) throws -> Int64 {
         guard let result = Int64(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt.Type) throws -> UInt {
         guard let result = UInt(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt8.Type) throws -> UInt8 {
         guard let result = UInt8(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt16.Type) throws -> UInt16 {
         guard let result = UInt16(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt32.Type) throws -> UInt32 {
         guard let result = UInt32(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt64.Type) throws -> UInt64 {
         guard let result = UInt64(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value, location: location)
         }
         return result
     }
@@ -277,7 +281,7 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
         // Handle Decimal specially
         if type == Decimal.self {
             guard let decimal = parseDecimal(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value, location: location)
             }
             return decimal as! T
         }
@@ -285,7 +289,7 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
         // Handle UUID specially
         if type == UUID.self {
             guard let uuid = UUID(uuidString: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value, location: location)
             }
             return uuid as! T
         }
@@ -293,7 +297,7 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
         // Handle URL specially
         if type == URL.self {
             guard let url = URL(string: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value, location: location)
             }
             return url as! T
         }
@@ -305,24 +309,24 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     private func decodeDate() throws -> Date {
         switch configuration.dateDecodingStrategy {
         case .deferredToDate:
-            throw CSVDecodingError.typeMismatch(expected: "Date (use a date strategy)", actual: value)
+            throw CSVDecodingError.typeMismatch(expected: "Date (use a date strategy)", actual: value, location: location)
 
         case .secondsSince1970:
             guard let seconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value, location: location)
             }
             return Date(timeIntervalSince1970: seconds)
 
         case .millisecondsSince1970:
             guard let milliseconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value, location: location)
             }
             return Date(timeIntervalSince1970: milliseconds / 1000)
 
         case .iso8601:
             let formatter = ISO8601DateFormatter()
             guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value, location: location)
             }
             return date
 
@@ -332,7 +336,7 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             formatter.locale = Locale.autoupdatingCurrent
             formatter.timeZone = TimeZone.autoupdatingCurrent
             guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date with format \(format)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Date with format \(format)", actual: value, location: location)
             }
             return date
 
@@ -341,13 +345,13 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
 
         case .flexible:
             guard let date = parseFlexibleDate(value, hint: nil) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
             }
             return date
 
         case .flexibleWithHint(let preferred):
             guard let date = parseFlexibleDate(value, hint: preferred) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value)
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
             }
             return date
         }

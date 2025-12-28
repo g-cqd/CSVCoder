@@ -78,7 +78,7 @@ extension CSVEncoder {
         let (_, orderedKeys) = try encodeValue(values[0])
 
         // Write header row
-        if configuration.includeHeaders {
+        if configuration.hasHeaders {
             var headerBuffer: [UInt8] = []
             rowBuilder.buildHeader(orderedKeys, into: &headerBuffer)
             try writer.write(contentsOf: headerBuffer)
@@ -131,7 +131,7 @@ extension CSVEncoder {
         output.reserveCapacity(values.count * estimatedRowSize + estimatedRowSize)
 
         // Write header
-        if configuration.includeHeaders {
+        if configuration.hasHeaders {
             rowBuilder.buildHeader(orderedKeys, into: &output)
         }
 
@@ -188,7 +188,7 @@ extension CSVEncoder {
                     let delimiter = String(configuration.delimiter)
 
                     // Yield header
-                    if configuration.includeHeaders {
+                    if configuration.hasHeaders {
                         let header = orderedKeys.map { escapeField($0) }.joined(separator: delimiter)
                         continuation.yield([header])
                     }

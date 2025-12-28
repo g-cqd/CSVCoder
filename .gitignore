@@ -1,5 +1,33 @@
+# Build artifacts
 .build/
 .swiftpm/
 Package.resolved
+DerivedData/
+
+# Xcode
 *.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Benchmark outputs
+benchmark*.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Coverage
+*.profdata
+.coverage/
+
+# Secrets
+.env
+.env.*

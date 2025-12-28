@@ -227,4 +227,124 @@ struct SIMDScanner: Sendable {
 
         return total
     }
+
+    // MARK: - Fast Field Boundary Detection
+
+    /// Finds the next delimiter, newline, or quote in a buffer using SIMD.
+    /// Used for fast unquoted field parsing.
+    ///
+    /// - Parameters:
+    ///   - buffer: Pointer to start of search.
+    ///   - count: Number of bytes to search.
+    ///   - delimiter: The field delimiter byte.
+    /// - Returns: Offset of first structural character, or count if none found.
+    @inline(__always)
+    static func findNextStructural(
+        buffer: UnsafePointer<UInt8>,
+        count: Int,
+        delimiter: UInt8
+    ) -> Int {
+        var offset = 0
+
+        // Process 64 bytes at a time using SIMD
+        while offset + 64 <= count {
+            let chunk = SIMD64<UInt8>(
+                buffer[offset], buffer[offset+1], buffer[offset+2], buffer[offset+3],
+                buffer[offset+4], buffer[offset+5], buffer[offset+6], buffer[offset+7],
+                buffer[offset+8], buffer[offset+9], buffer[offset+10], buffer[offset+11],
+                buffer[offset+12], buffer[offset+13], buffer[offset+14], buffer[offset+15],
+                buffer[offset+16], buffer[offset+17], buffer[offset+18], buffer[offset+19],
+                buffer[offset+20], buffer[offset+21], buffer[offset+22], buffer[offset+23],
+                buffer[offset+24], buffer[offset+25], buffer[offset+26], buffer[offset+27],
+                buffer[offset+28], buffer[offset+29], buffer[offset+30], buffer[offset+31],
+                buffer[offset+32], buffer[offset+33], buffer[offset+34], buffer[offset+35],
+                buffer[offset+36], buffer[offset+37], buffer[offset+38], buffer[offset+39],
+                buffer[offset+40], buffer[offset+41], buffer[offset+42], buffer[offset+43],
+                buffer[offset+44], buffer[offset+45], buffer[offset+46], buffer[offset+47],
+                buffer[offset+48], buffer[offset+49], buffer[offset+50], buffer[offset+51],
+                buffer[offset+52], buffer[offset+53], buffer[offset+54], buffer[offset+55],
+                buffer[offset+56], buffer[offset+57], buffer[offset+58], buffer[offset+59],
+                buffer[offset+60], buffer[offset+61], buffer[offset+62], buffer[offset+63]
+            )
+
+            let delimVec = SIMD64<UInt8>(repeating: delimiter)
+            let crVec = SIMD64<UInt8>(repeating: cr)
+            let lfVec = SIMD64<UInt8>(repeating: lf)
+
+            let delimMask = chunk .== delimVec
+            let crMask = chunk .== crVec
+            let lfMask = chunk .== lfVec
+
+            let structuralMask = delimMask .| crMask .| lfMask
+
+            // Find first set bit
+            for i in 0..<64 where structuralMask[i] {
+                return offset + i
+            }
+
+            offset += 64
+        }
+
+        // Scalar fallback for remainder
+        while offset < count {
+            let byte = buffer[offset]
+            if byte == delimiter || byte == cr || byte == lf {
+                return offset
+            }
+            offset += 1
+        }
+
+        return count
+    }
+
+    /// Finds the position of the first quote character using SIMD.
+    /// Returns count if no quote is found.
+    @inline(__always)
+    static func findNextQuote(
+        buffer: UnsafePointer<UInt8>,
+        count: Int
+    ) -> Int {
+        var offset = 0
+
+        // Process 64 bytes at a time
+        while offset + 64 <= count {
+            let chunk = SIMD64<UInt8>(
+                buffer[offset], buffer[offset+1], buffer[offset+2], buffer[offset+3],
+                buffer[offset+4], buffer[offset+5], buffer[offset+6], buffer[offset+7],
+                buffer[offset+8], buffer[offset+9], buffer[offset+10], buffer[offset+11],
+                buffer[offset+12], buffer[offset+13], buffer[offset+14], buffer[offset+15],
+                buffer[offset+16], buffer[offset+17], buffer[offset+18], buffer[offset+19],
+                buffer[offset+20], buffer[offset+21], buffer[offset+22], buffer[offset+23],
+                buffer[offset+24], buffer[offset+25], buffer[offset+26], buffer[offset+27],
+                buffer[offset+28], buffer[offset+29], buffer[offset+30], buffer[offset+31],
+                buffer[offset+32], buffer[offset+33], buffer[offset+34], buffer[offset+35],
+                buffer[offset+36], buffer[offset+37], buffer[offset+38], buffer[offset+39],
+                buffer[offset+40], buffer[offset+41], buffer[offset+42], buffer[offset+43],
+                buffer[offset+44], buffer[offset+45], buffer[offset+46], buffer[offset+47],
+                buffer[offset+48], buffer[offset+49], buffer[offset+50], buffer[offset+51],
+                buffer[offset+52], buffer[offset+53], buffer[offset+54], buffer[offset+55],
+                buffer[offset+56], buffer[offset+57], buffer[offset+58], buffer[offset+59],
+                buffer[offset+60], buffer[offset+61], buffer[offset+62], buffer[offset+63]
+            )
+
+            let quoteVec = SIMD64<UInt8>(repeating: quote)
+            let quoteMask = chunk .== quoteVec
+
+            for i in 0..<64 where quoteMask[i] {
+                return offset + i
+            }
+
+            offset += 64
+        }
+
+        // Scalar fallback
+        while offset < count {
+            if buffer[offset] == quote {
+                return offset
+            }
+            offset += 1
+        }
+
+        return count
+    }
 }

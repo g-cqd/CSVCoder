@@ -17,7 +17,8 @@ public nonisolated final class CSVEncoder: Sendable {
         public var delimiter: Character
 
         /// Whether to include a header row. Default is true.
-        public var includeHeaders: Bool
+        /// Renamed from `includeHeaders` for symmetry with `CSVDecoder.Configuration.hasHeaders`.
+        public var hasHeaders: Bool
 
         /// The encoding to use when writing data. Default is UTF-8.
         public var encoding: String.Encoding
@@ -28,23 +29,38 @@ public nonisolated final class CSVEncoder: Sendable {
         /// How to encode nil values. Default is empty string.
         public var nilEncodingStrategy: NilEncodingStrategy
 
+        /// The key encoding strategy for transforming property names to header names.
+        public var keyEncodingStrategy: KeyEncodingStrategy
+
+        /// The boolean encoding strategy.
+        public var boolEncodingStrategy: BoolEncodingStrategy
+
+        /// The number encoding strategy.
+        public var numberEncodingStrategy: NumberEncodingStrategy
+
         /// The line ending to use. Default is LF (\n).
         public var lineEnding: LineEnding
 
         /// Creates a new configuration with default values.
         public init(
             delimiter: Character = ",",
-            includeHeaders: Bool = true,
+            hasHeaders: Bool = true,
             encoding: String.Encoding = .utf8,
             dateEncodingStrategy: DateEncodingStrategy = .iso8601,
             nilEncodingStrategy: NilEncodingStrategy = .emptyString,
+            keyEncodingStrategy: KeyEncodingStrategy = .useDefaultKeys,
+            boolEncodingStrategy: BoolEncodingStrategy = .numeric,
+            numberEncodingStrategy: NumberEncodingStrategy = .standard,
             lineEnding: LineEnding = .lf
         ) {
             self.delimiter = delimiter
-            self.includeHeaders = includeHeaders
+            self.hasHeaders = hasHeaders
             self.encoding = encoding
             self.dateEncodingStrategy = dateEncodingStrategy
             self.nilEncodingStrategy = nilEncodingStrategy
+            self.keyEncodingStrategy = keyEncodingStrategy
+            self.boolEncodingStrategy = boolEncodingStrategy
+            self.numberEncodingStrategy = numberEncodingStrategy
             self.lineEnding = lineEnding
         }
     }
@@ -81,6 +97,45 @@ public nonisolated final class CSVEncoder: Sendable {
         case lf = "\n"
         /// Windows-style carriage return + line feed (\r\n)
         case crlf = "\r\n"
+    }
+
+    /// Strategies for encoding property names to CSV header names.
+    public enum KeyEncodingStrategy: Sendable {
+        /// Use property names as-is without transformation.
+        case useDefaultKeys
+        /// Convert camelCase properties to snake_case headers.
+        /// Example: "firstName" → "first_name"
+        case convertToSnakeCase
+        /// Convert camelCase properties to kebab-case headers.
+        /// Example: "firstName" → "first-name"
+        case convertToKebabCase
+        /// Convert camelCase properties to SCREAMING_SNAKE_CASE headers.
+        /// Example: "firstName" → "FIRST_NAME"
+        case convertToScreamingSnakeCase
+        /// Apply a custom transformation function.
+        @preconcurrency case custom(@Sendable (String) -> String)
+    }
+
+    /// Strategies for encoding boolean values.
+    public enum BoolEncodingStrategy: Sendable {
+        /// Encode as "true"/"false" (default).
+        case trueFalse
+        /// Encode as "1"/"0".
+        case numeric
+        /// Encode as "yes"/"no".
+        case yesNo
+        /// Encode using custom strings.
+        case custom(trueValue: String, falseValue: String)
+    }
+
+    /// Strategies for encoding numeric values (Double, Float, Decimal).
+    public enum NumberEncodingStrategy: Sendable {
+        /// Use Swift's standard number formatting.
+        case standard
+        /// Use a specific locale for number formatting.
+        case locale(Locale)
+        /// Use a custom closure for formatting.
+        @preconcurrency case custom(@Sendable (any Numeric) throws -> String)
     }
 
     /// The configuration used for encoding.
@@ -140,8 +195,8 @@ public nonisolated final class CSVEncoder: Sendable {
             
             // Handle Header on first row
             if headers == nil {
-                headers = storage.allKeys()
-                if configuration.includeHeaders {
+                headers = storage.allKeys().map { transformKey($0) }
+                if configuration.hasHeaders {
                     let headerKeys = headers!
                     for (i, key) in headerKeys.enumerated() {
                         if i > 0 { buffer.append(delimiterByte) }
@@ -183,8 +238,8 @@ public nonisolated final class CSVEncoder: Sendable {
             try value.encode(to: encoder)
             
             if headers == nil {
-                headers = storage.allKeys()
-                if configuration.includeHeaders {
+                headers = storage.allKeys().map { transformKey($0) }
+                if configuration.hasHeaders {
                     let headerKeys = headers!
                     for (i, key) in headerKeys.enumerated() {
                         if i > 0 { try writer.write(delimiter) }
@@ -210,31 +265,9 @@ public nonisolated final class CSVEncoder: Sendable {
     }
 
     /// Appends an escaped field directly to the byte buffer.
+    /// Uses SIMD acceleration for fields >= 64 bytes.
     private func appendEscaped(_ value: String, to buffer: inout [UInt8], delimiter: UInt8) {
-        // Fast path for simple values
-        var needsQuotes = false
-        for scalar in value.unicodeScalars {
-            let v = scalar.value
-            if v == UInt32(delimiter) || v == 0x22 || v == 0x0A || v == 0x0D {
-                needsQuotes = true
-                break
-            }
-        }
-        
-        if needsQuotes {
-            buffer.append(0x22) // "
-            for scalar in value.unicodeScalars {
-                if scalar.value == 0x22 {
-                    buffer.append(0x22) // "
-                    buffer.append(0x22) // "
-                } else {
-                    buffer.append(contentsOf: String(scalar).utf8)
-                }
-            }
-            buffer.append(0x22) // "
-        } else {
-            buffer.append(contentsOf: value.utf8)
-        }
+        CSVFieldEscaper.appendEscaped(value, to: &buffer, delimiter: delimiter)
     }
 
     /// Encodes a single value to a CSV row string (without headers).
@@ -277,25 +310,77 @@ public nonisolated final class CSVEncoder: Sendable {
         return storage.allKeys()
     }
 
+    // MARK: - Key Transformation
+
+    /// Transforms a property name using the configured strategy.
+    func transformKey(_ key: String) -> String {
+        switch configuration.keyEncodingStrategy {
+        case .useDefaultKeys:
+            return key
+        case .convertToSnakeCase:
+            return convertToSnakeCase(key)
+        case .convertToKebabCase:
+            return convertToKebabCase(key)
+        case .convertToScreamingSnakeCase:
+            return convertToScreamingSnakeCase(key)
+        case .custom(let transform):
+            return transform(key)
+        }
+    }
+
+    /// Converts camelCase to snake_case.
+    private func convertToSnakeCase(_ key: String) -> String {
+        var result = ""
+        for (index, char) in key.enumerated() {
+            if char.isUppercase {
+                if index > 0 {
+                    result += "_"
+                }
+                result += char.lowercased()
+            } else {
+                result += String(char)
+            }
+        }
+        return result
+    }
+
+    /// Converts camelCase to kebab-case.
+    private func convertToKebabCase(_ key: String) -> String {
+        var result = ""
+        for (index, char) in key.enumerated() {
+            if char.isUppercase {
+                if index > 0 {
+                    result += "-"
+                }
+                result += char.lowercased()
+            } else {
+                result += String(char)
+            }
+        }
+        return result
+    }
+
+    /// Converts camelCase to SCREAMING_SNAKE_CASE.
+    private func convertToScreamingSnakeCase(_ key: String) -> String {
+        var result = ""
+        for (index, char) in key.enumerated() {
+            if char.isUppercase {
+                if index > 0 {
+                    result += "_"
+                }
+                result += String(char)
+            } else {
+                result += char.uppercased()
+            }
+        }
+        return result
+    }
+
     // MARK: - Field Escaping
 
     /// Escapes a field value for CSV output per RFC 4180.
     /// Quotes fields containing delimiters, quotes, or newlines.
     func escapeField(_ value: String) -> String {
-        let delimiter = String(configuration.delimiter)
-
-        // Check if escaping is needed
-        let needsQuoting = value.contains(delimiter) ||
-                          value.contains("\"") ||
-                          value.contains("\n") ||
-                          value.contains("\r")
-
-        if needsQuoting {
-            // Escape quotes by doubling them and wrap in quotes
-            let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
-            return "\"\(escaped)\""
-        }
-
-        return value
+        CSVFieldEscaper.escapeField(value, delimiter: configuration.delimiter)
     }
 }

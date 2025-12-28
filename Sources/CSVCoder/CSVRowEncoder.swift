@@ -52,7 +52,18 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     mutating func encode(_ value: Bool, forKey key: Key) throws {
-        storage.setValue(value ? "1" : "0", forKey: key.stringValue)
+        let stringValue: String
+        switch configuration.boolEncodingStrategy {
+        case .trueFalse:
+            stringValue = value ? "true" : "false"
+        case .numeric:
+            stringValue = value ? "1" : "0"
+        case .yesNo:
+            stringValue = value ? "yes" : "no"
+        case .custom(let trueValue, let falseValue):
+            stringValue = value ? trueValue : falseValue
+        }
+        storage.setValue(stringValue, forKey: key.stringValue)
     }
 
     mutating func encode(_ value: String, forKey key: Key) throws {
@@ -63,14 +74,31 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         if value.isNaN || value.isInfinite {
             throw CSVEncodingError.invalidValue("Cannot encode \(value) for key '\(key.stringValue)'")
         }
-        storage.setValue(String(value), forKey: key.stringValue)
+        let stringValue = try formatNumber(value)
+        storage.setValue(stringValue, forKey: key.stringValue)
     }
 
     mutating func encode(_ value: Float, forKey key: Key) throws {
         if value.isNaN || value.isInfinite {
             throw CSVEncodingError.invalidValue("Cannot encode \(value) for key '\(key.stringValue)'")
         }
-        storage.setValue(String(value), forKey: key.stringValue)
+        let stringValue = try formatNumber(Double(value))
+        storage.setValue(stringValue, forKey: key.stringValue)
+    }
+
+    private func formatNumber(_ value: Double) throws -> String {
+        switch configuration.numberEncodingStrategy {
+        case .standard:
+            return String(value)
+        case .locale(let locale):
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            formatter.maximumFractionDigits = 15
+            return formatter.string(from: NSNumber(value: value)) ?? String(value)
+        case .custom(let transform):
+            return try transform(value)
+        }
     }
 
     mutating func encode(_ value: Int, forKey key: Key) throws {

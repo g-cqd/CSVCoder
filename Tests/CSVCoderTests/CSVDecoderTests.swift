@@ -1676,4 +1676,180 @@ struct CSVDecoderTests {
         #expect(loc1 == loc2)
         #expect(loc2 == loc3)
     }
+
+    // MARK: - Strict Mode Tests
+
+    @Test("Strict mode rejects quotes in unquoted fields")
+    func strictModeRejectsQuotesInUnquoted() throws {
+        let csv = """
+        name,value
+        Test,Hello"World
+        """
+
+        let config = CSVDecoder.Configuration(parsingMode: .strict)
+        let decoder = CSVDecoder(configuration: config)
+
+        #expect(throws: CSVDecodingError.self) {
+            _ = try decoder.decode([TextRecord].self, from: csv)
+        }
+    }
+
+    @Test("Strict mode validates field count")
+    func strictModeValidatesFieldCount() throws {
+        let csv = """
+        name,value
+        A,B
+        X,Y,Z
+        """
+
+        let config = CSVDecoder.Configuration(
+            parsingMode: .strict,
+            expectedFieldCount: 2
+        )
+        let decoder = CSVDecoder(configuration: config)
+
+        #expect(throws: CSVDecodingError.self) {
+            _ = try decoder.decode([TextRecord].self, from: csv)
+        }
+    }
+
+    @Test("Lenient mode allows quotes in unquoted fields")
+    func lenientModeAllowsQuotesInUnquoted() throws {
+        let csv = """
+        name,value
+        Test,Hello"World
+        """
+
+        let config = CSVDecoder.Configuration(parsingMode: .lenient)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([TextRecord].self, from: csv)
+
+        #expect(records.count == 1)
+        #expect(records[0].value == "Hello\"World")
+    }
+
+    // MARK: - NilDecodingStrategy Tests
+
+    @Test("Nil decoding with empty string strategy")
+    func nilDecodingEmptyString() throws {
+        struct OptionalRecord: Codable {
+            let name: String
+            let value: String?
+        }
+
+        let csv = """
+        name,value
+        A,present
+        B,
+        """
+
+        let config = CSVDecoder.Configuration(nilDecodingStrategy: .emptyString)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([OptionalRecord].self, from: csv)
+
+        #expect(records[0].value == "present")
+        #expect(records[1].value == nil)
+    }
+
+    @Test("Nil decoding with null literal strategy")
+    func nilDecodingNullLiteral() throws {
+        struct OptionalRecord: Codable {
+            let name: String
+            let value: String?
+        }
+
+        let csv = """
+        name,value
+        A,present
+        B,null
+        C,NULL
+        """
+
+        let config = CSVDecoder.Configuration(nilDecodingStrategy: .nullLiteral)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([OptionalRecord].self, from: csv)
+
+        #expect(records[0].value == "present")
+        #expect(records[1].value == nil)
+        #expect(records[2].value == nil)
+    }
+
+    @Test("Nil decoding with custom values")
+    func nilDecodingCustom() throws {
+        struct OptionalRecord: Codable {
+            let name: String
+            let value: String?
+        }
+
+        let csv = """
+        name,value
+        A,present
+        B,N/A
+        C,-
+        """
+
+        let config = CSVDecoder.Configuration(
+            nilDecodingStrategy: .custom(["N/A", "-", "n/a"])
+        )
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([OptionalRecord].self, from: csv)
+
+        #expect(records[0].value == "present")
+        #expect(records[1].value == nil)
+        #expect(records[2].value == nil)
+    }
+
+    // MARK: - Streaming Strict Mode Tests
+
+    @Test("Streaming strict mode rejects quotes in unquoted fields")
+    func streamingStrictModeRejectsQuotes() async throws {
+        let csv = """
+        name,value
+        Test,Hello"World
+        """
+        let data = Data(csv.utf8)
+
+        let config = CSVDecoder.Configuration(parsingMode: .strict)
+        let decoder = CSVDecoder(configuration: config)
+
+        var caughtError: Error?
+        do {
+            for try await _ in decoder.decode(TextRecord.self, from: data) {
+                // consume
+            }
+        } catch {
+            caughtError = error
+        }
+
+        #expect(caughtError != nil)
+        #expect(caughtError is CSVDecodingError)
+    }
+
+    @Test("Streaming strict mode validates field count")
+    func streamingStrictModeValidatesFieldCount() async throws {
+        let csv = """
+        name,value
+        A,B
+        X,Y,Z
+        """
+        let data = Data(csv.utf8)
+
+        let config = CSVDecoder.Configuration(
+            parsingMode: .strict,
+            expectedFieldCount: 2
+        )
+        let decoder = CSVDecoder(configuration: config)
+
+        var caughtError: Error?
+        do {
+            for try await _ in decoder.decode(TextRecord.self, from: data) {
+                // consume
+            }
+        } catch {
+            caughtError = error
+        }
+
+        #expect(caughtError != nil)
+        #expect(caughtError is CSVDecodingError)
+    }
 }

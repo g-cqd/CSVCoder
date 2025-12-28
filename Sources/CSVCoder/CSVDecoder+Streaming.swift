@@ -103,21 +103,52 @@ extension CSVDecoder {
         columnOrder: [String]?,
         continuation: AsyncThrowingStream<T, Error>.Continuation
     ) throws {
-        try reader.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else { 
+        reader.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else {
                 continuation.finish()
-                return 
+                return
             }
-            let bytes = UnsafeBufferPointer(start: baseAddress.assumingMemoryBound(to: UInt8.self), count: buffer.count)
+
+            // Handle UTF-8 BOM
+            let rawBytes = UnsafeBufferPointer(
+                start: baseAddress.assumingMemoryBound(to: UInt8.self),
+                count: buffer.count
+            )
+            let startOffset = CSVUtilities.bomOffset(in: rawBytes)
+
+            let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
+            let adjustedCount = buffer.count - startOffset
+            let bytes = UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
-            
-            let parser = ByteCSVParser(buffer: bytes, delimiter: delimiter)
+
+            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
             var iterator = parser.makeIterator()
             var headers: [String]?
             var headerMap: [String: Int]?
             var rowIndex = 0
 
+            let isStrict = configuration.parsingMode == .strict
+            let expectedFieldCount = configuration.expectedFieldCount
+
             while let rowView = iterator.next() {
+                // Check for unterminated quotes (always an error)
+                if rowView.hasUnterminatedQuote {
+                    continuation.finish(throwing: CSVDecodingError.parsingError("Unterminated quoted field", line: rowIndex + 1, column: nil))
+                    return
+                }
+
+                // Strict mode: reject quotes in unquoted fields
+                if isStrict && rowView.hasQuoteInUnquotedField {
+                    continuation.finish(throwing: CSVDecodingError.parsingError("Quote character in unquoted field (RFC 4180 violation)", line: rowIndex + 1, column: nil))
+                    return
+                }
+
+                // Strict mode: validate field count
+                if isStrict, let expected = expectedFieldCount, rowView.count != expected {
+                    continuation.finish(throwing: CSVDecodingError.parsingError("Expected \(expected) fields but found \(rowView.count)", line: rowIndex + 1, column: nil))
+                    return
+                }
+
                 if headers == nil {
                     // Extract potential headers
                     var firstRowStrings: [String] = []
@@ -131,8 +162,9 @@ extension CSVDecoder {
                     }
                     
                     headers = self.resolveHeaders(
-                        firstRow: firstRowStrings,
-                        columnOrder: columnOrder
+                        rawHeaders: firstRowStrings,
+                        columnOrder: columnOrder,
+                        columnCount: rowView.count
                     )
                     
                     // Build map
@@ -189,22 +221,4 @@ extension CSVDecoder {
         }
     }
 
-    /// Resolves headers based on configuration priority:
-    /// indexMapping > columnOrder (CSVIndexedDecodable) > hasHeaders > generated
-    private func resolveHeaders(firstRow: [String], columnOrder: [String]?) -> [String] {
-        if !configuration.indexMapping.isEmpty {
-            // Explicit index mapping takes precedence
-            let maxIndex = configuration.indexMapping.keys.max() ?? 0
-            return (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
-        } else if configuration.hasHeaders {
-            // Use first row as headers with key transformation
-            return firstRow.map { transformKey($0) }
-        } else if let columnOrder = columnOrder {
-            // Use CSVIndexedDecodable column order
-            return columnOrder
-        } else {
-            // Generate column names
-            return (0..<firstRow.count).map { "column\($0)" }
-        }
-    }
 }

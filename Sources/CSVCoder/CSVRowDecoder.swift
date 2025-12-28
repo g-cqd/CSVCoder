@@ -118,18 +118,30 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     func decodeNil(forKey key: Key) throws -> Bool {
+        let value: String?
         switch source {
         case .dictionary(let row):
-            guard let value = row[key.stringValue] else { return true }
-            return value.isEmpty
-            
+            guard let v = row[key.stringValue] else { return true }
+            value = v
+
         case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue] else { return true }
             if index >= view.count { return true }
-            // Check for empty string without allocating full string if possible
-            // But for now, let's just get the string to be safe with escaping
-             guard let value = view.string(at: index) else { return true }
+            guard let v = view.string(at: index) else { return true }
+            value = v
+        }
+
+        guard let value = value else { return true }
+
+        // Apply nil decoding strategy
+        switch configuration.nilDecodingStrategy {
+        case .emptyString:
             return value.isEmpty
+        case .nullLiteral:
+            let lowered = value.lowercased()
+            return value.isEmpty || lowered == "null"
+        case .custom(let nilValues):
+            return value.isEmpty || nilValues.contains(value)
         }
     }
 

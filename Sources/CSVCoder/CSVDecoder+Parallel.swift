@@ -269,45 +269,46 @@ extension CSVDecoder {
     }
 
     private func extractHeaders(from reader: MemoryMappedReader) throws -> [String] {
-        // Extract first row data
-        let firstRowData = reader.withUnsafeBytes { buffer -> Data in
-            guard let baseAddress = buffer.baseAddress else { return Data() }
-            let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
+        return reader.withUnsafeBytes { buffer -> [String] in
+            guard let baseAddress = buffer.baseAddress else { return [] }
+            let bytes = UnsafeBufferPointer(
+                start: baseAddress.assumingMemoryBound(to: UInt8.self),
+                count: reader.count
+            )
 
-            // Find first newline (accounting for quotes)
-            var end = 0
-            var inQuotes = false
-            while end < reader.count {
-                let byte = bytes[end]
-                if byte == 0x22 { // quote
-                    inQuotes.toggle()
-                } else if !inQuotes && (byte == 0x0A || byte == 0x0D) {
-                    break
-                }
-                end += 1
+            // Handle UTF-8 BOM
+            let startOffset = CSVUtilities.bomOffset(in: bytes)
+
+            let adjustedBytes = UnsafeBufferPointer(
+                start: bytes.baseAddress?.advanced(by: startOffset),
+                count: bytes.count - startOffset
+            )
+
+            let delimiter = configuration.delimiter.asciiValue ?? 0x2C
+            let parser = CSVParser(buffer: adjustedBytes, delimiter: delimiter)
+            var iterator = parser.makeIterator()
+
+            guard let firstRow = iterator.next() else {
+                return []
             }
 
-            return Data(bytes: bytes, count: end)
-        }
+            // Extract strings from CSVRowView
+            var rawHeaders: [String] = []
+            rawHeaders.reserveCapacity(firstRow.count)
+            for i in 0..<firstRow.count {
+                if let s = firstRow.string(at: i) {
+                    rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
+                } else {
+                    rawHeaders.append("column\(i)")
+                }
+            }
 
-        let firstRowString = String(decoding: firstRowData, as: UTF8.self)
-        let parser = CSVParser(string: firstRowString, configuration: configuration)
-        let rows = try parser.parse()
-
-        guard let firstRow = rows.first else {
-            return []
-        }
-
-        if configuration.hasHeaders {
-            // Apply key transformation to headers
-            return firstRow.map { transformKey($0) }
-        } else if !configuration.indexMapping.isEmpty {
-            // Use index mapping for headerless CSV
-            let maxIndex = configuration.indexMapping.keys.max() ?? 0
-            return (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
-        } else {
-            // Generate column names based on column count
-            return (0..<firstRow.count).map { "column\($0)" }
+            // Use shared header resolution
+            return resolveHeaders(
+                rawHeaders: rawHeaders,
+                columnOrder: nil,
+                columnCount: firstRow.count
+            )
         }
     }
 
@@ -434,7 +435,7 @@ extension CSVDecoder {
             )
             
             let delimiter = config.delimiter.asciiValue ?? 0x2C
-            let parser = ByteCSVParser(buffer: chunkBytes, delimiter: delimiter)
+            let parser = CSVParser(buffer: chunkBytes, delimiter: delimiter)
             let rows = parser.parse()
             
             // Decode rows

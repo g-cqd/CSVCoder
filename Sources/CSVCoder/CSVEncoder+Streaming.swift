@@ -67,9 +67,9 @@ extension CSVEncoder {
 
             // Write header on first row
             if keys == nil {
-                keys = orderedKeys
-                if configuration.includeHeaders {
-                    rowBuilder.buildHeader(orderedKeys, into: &rowBuffer)
+                keys = orderedKeys.map { transformKey($0) }
+                if configuration.hasHeaders {
+                    rowBuilder.buildHeader(keys!, into: &rowBuffer)
                     try writer.write(contentsOf: rowBuffer)
                     rowBuffer.removeAll(keepingCapacity: true)
                 }
@@ -130,8 +130,8 @@ extension CSVEncoder {
 
                         // Yield header on first row
                         if keys == nil {
-                            keys = orderedKeys
-                            if configuration.includeHeaders {
+                            keys = orderedKeys.map { self.transformKey($0) }
+                            if configuration.hasHeaders {
                                 let headerRow = orderedKeys.map { escapeField($0) }.joined(separator: delimiter)
                                 continuation.yield(headerRow + lineEnding)
                             }
@@ -163,5 +163,147 @@ extension CSVEncoder {
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try value.encode(to: encoder)
         return (storage.allValues(), storage.allKeys())
+    }
+
+    // MARK: - Actor-Isolated Async Encoding
+
+    /// Stream encodes values using actor-isolated async writer.
+    /// Provides better isolation and backpressure handling.
+    ///
+    /// - Parameters:
+    ///   - values: An async sequence of encodable values.
+    ///   - url: The file URL to write to.
+    ///   - bufferSize: The write buffer size in bytes. Default is 64KB.
+    /// - Throws: `CSVEncodingError` or `AsyncCSVWriterError` if encoding fails.
+    public func encodeAsync<S: AsyncSequence>(
+        _ values: S,
+        to url: URL,
+        bufferSize: Int = 65_536
+    ) async throws where S.Element: Encodable & Sendable {
+        let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
+        let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+
+        var keys: [String]?
+
+        for try await value in values {
+            let (row, orderedKeys) = try encodeValue(value)
+
+            // Write header on first row
+            if keys == nil {
+                keys = orderedKeys.map { transformKey($0) }
+                if configuration.hasHeaders {
+                    let headerBytes = rowBuilder.buildHeader(keys!)
+                    try await writer.writeRow(headerBytes)
+                }
+            }
+
+            // Build and write row
+            let fields = orderedKeys.map { row[$0] ?? "" }
+            let rowBytes = rowBuilder.buildRow(fields)
+            try await writer.writeRow(rowBytes)
+        }
+
+        try await writer.close()
+    }
+
+    /// Stream encodes values with progress reporting.
+    /// Calls the progress handler after each row is written.
+    ///
+    /// - Parameters:
+    ///   - values: An async sequence of encodable values.
+    ///   - url: The file URL to write to.
+    ///   - bufferSize: The write buffer size in bytes.
+    ///   - progress: Handler called with (rowsWritten, bytesWritten) after each row.
+    public func encodeAsync<S: AsyncSequence>(
+        _ values: S,
+        to url: URL,
+        bufferSize: Int = 65_536,
+        progress: @Sendable @escaping (Int, Int) async -> Void
+    ) async throws where S.Element: Encodable & Sendable {
+        let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
+        let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+
+        var keys: [String]?
+        var rowCount = 0
+
+        for try await value in values {
+            let (row, orderedKeys) = try encodeValue(value)
+
+            // Write header on first row
+            if keys == nil {
+                keys = orderedKeys.map { transformKey($0) }
+                if configuration.hasHeaders {
+                    let headerBytes = rowBuilder.buildHeader(keys!)
+                    try await writer.writeRow(headerBytes)
+                }
+            }
+
+            // Build and write row
+            let fields = orderedKeys.map { row[$0] ?? "" }
+            let rowBytes = rowBuilder.buildRow(fields)
+            try await writer.writeRow(rowBytes)
+
+            rowCount += 1
+            await progress(rowCount, await writer.totalBytesWritten)
+        }
+
+        try await writer.close()
+    }
+
+    // MARK: - Batched Async Encoding
+
+    /// Encodes values in batches for improved throughput.
+    /// Buffers multiple rows before writing to reduce I/O overhead.
+    ///
+    /// - Parameters:
+    ///   - values: An async sequence of encodable values.
+    ///   - url: The file URL to write to.
+    ///   - batchSize: Number of rows to buffer before writing. Default is 100.
+    ///   - bufferSize: The write buffer size in bytes. Default is 64KB.
+    public func encodeBatched<S: AsyncSequence>(
+        _ values: S,
+        to url: URL,
+        batchSize: Int = 100,
+        bufferSize: Int = 65_536
+    ) async throws where S.Element: Encodable & Sendable {
+        let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
+        let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+
+        var keys: [String]?
+        var batch: [[UInt8]] = []
+        batch.reserveCapacity(batchSize)
+
+        for try await value in values {
+            let (row, orderedKeys) = try encodeValue(value)
+
+            // Write header on first row
+            if keys == nil {
+                keys = orderedKeys.map { transformKey($0) }
+                if configuration.hasHeaders {
+                    let headerBytes = rowBuilder.buildHeader(keys!)
+                    try await writer.writeRow(headerBytes)
+                }
+            }
+
+            // Build row and add to batch
+            let fields = orderedKeys.map { row[$0] ?? "" }
+            let rowBytes = rowBuilder.buildRow(fields)
+            batch.append(rowBytes)
+
+            // Flush batch when full
+            if batch.count >= batchSize {
+                for row in batch {
+                    try await writer.writeRow(row)
+                }
+                batch.removeAll(keepingCapacity: true)
+            }
+        }
+
+        // Flush remaining rows
+        for row in batch {
+            try await writer.writeRow(row)
+        }
+
+        try await writer.close()
     }
 }

@@ -33,6 +33,9 @@ public final class CSVDecoder: Sendable {
         /// The boolean decoding strategy.
         public var boolDecodingStrategy: BoolDecodingStrategy
 
+        /// The nil decoding strategy for interpreting empty/special values as nil.
+        public var nilDecodingStrategy: NilDecodingStrategy
+
         /// The key decoding strategy for mapping CSV headers to property names.
         public var keyDecodingStrategy: KeyDecodingStrategy
 
@@ -45,6 +48,13 @@ public final class CSVDecoder: Sendable {
         /// Example: `[0: "name", 1: "age", 2: "score"]`
         public var indexMapping: [Int: String]
 
+        /// The parsing mode for RFC 4180 compliance.
+        public var parsingMode: ParsingMode
+
+        /// Expected field count per row for strict mode validation.
+        /// Set to nil to skip field count validation.
+        public var expectedFieldCount: Int?
+
         /// Creates a new configuration with default values.
         public init(
             delimiter: Character = ",",
@@ -54,9 +64,12 @@ public final class CSVDecoder: Sendable {
             dateDecodingStrategy: DateDecodingStrategy = .deferredToDate,
             numberDecodingStrategy: NumberDecodingStrategy = .standard,
             boolDecodingStrategy: BoolDecodingStrategy = .standard,
+            nilDecodingStrategy: NilDecodingStrategy = .emptyString,
             keyDecodingStrategy: KeyDecodingStrategy = .useDefaultKeys,
             columnMapping: [String: String] = [:],
-            indexMapping: [Int: String] = [:]
+            indexMapping: [Int: String] = [:],
+            parsingMode: ParsingMode = .lenient,
+            expectedFieldCount: Int? = nil
         ) {
             self.delimiter = delimiter
             self.hasHeaders = hasHeaders
@@ -65,9 +78,12 @@ public final class CSVDecoder: Sendable {
             self.dateDecodingStrategy = dateDecodingStrategy
             self.numberDecodingStrategy = numberDecodingStrategy
             self.boolDecodingStrategy = boolDecodingStrategy
+            self.nilDecodingStrategy = nilDecodingStrategy
             self.keyDecodingStrategy = keyDecodingStrategy
             self.columnMapping = columnMapping
             self.indexMapping = indexMapping
+            self.parsingMode = parsingMode
+            self.expectedFieldCount = expectedFieldCount
         }
     }
 
@@ -109,6 +125,29 @@ public final class CSVDecoder: Sendable {
         case flexible
         /// Custom true/false value sets.
         case custom(trueValues: Set<String>, falseValues: Set<String>)
+    }
+
+    /// Strategies for interpreting values as nil.
+    public enum NilDecodingStrategy: Sendable {
+        /// Treat empty strings as nil (default).
+        case emptyString
+        /// Treat the literal string "null" (case-insensitive) as nil.
+        case nullLiteral
+        /// Treat any of the specified strings as nil.
+        case custom(Set<String>)
+    }
+
+    /// Parsing modes for RFC 4180 compliance.
+    public enum ParsingMode: Sendable {
+        /// Lenient mode (default): tolerates minor RFC 4180 violations.
+        /// - Allows quotes in unquoted fields
+        /// - Allows variable field counts across rows
+        case lenient
+        /// Strict mode: enforces full RFC 4180 compliance.
+        /// - Rejects quotes in unquoted fields
+        /// - Validates consistent field counts across rows
+        /// - Reports precise error locations
+        case strict
     }
 
     /// Strategies for mapping CSV header names to property names.
@@ -172,56 +211,15 @@ public final class CSVDecoder: Sendable {
     }
 
     /// Internal method that handles both regular Decodable and CSVIndexedDecodable.
+    /// Uses CSVParser for consistent zero-copy performance.
     private func decodeRows<T: Decodable>(
         _ type: [T].Type,
         from string: String,
         columnOrder: [String]?
     ) throws -> [T] {
-        let parser = CSVParser(string: string, configuration: configuration)
-        let rows = try parser.parse()
-
-        guard !rows.isEmpty else { return [] }
-
-        let rawHeaders: [String]
-        let dataRows: [[String]]
-
-        if configuration.hasHeaders {
-            rawHeaders = rows[0]
-            dataRows = Array(rows.dropFirst())
-        } else {
-            rawHeaders = (0..<(rows.first?.count ?? 0)).map { "column\($0)" }
-            dataRows = rows
-        }
-
-        // Determine headers based on: indexMapping > columnOrder > rawHeaders
-        let headers: [String]
-        if !configuration.indexMapping.isEmpty {
-            // Explicit index mapping takes precedence
-            let maxIndex = configuration.indexMapping.keys.max() ?? 0
-            headers = (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
-        } else if let columnOrder = columnOrder, !configuration.hasHeaders {
-            // Use CSVIndexedDecodable column order for headerless CSV
-            headers = columnOrder
-        } else {
-            // Apply key transformation and column mapping
-            headers = rawHeaders.map { transformKey($0) }
-        }
-
-        return try dataRows.enumerated().compactMap { rowIndex, row in
-            var dictionary: [String: String] = [:]
-            for (index, header) in headers.enumerated() {
-                if index < row.count {
-                    dictionary[header] = row[index]
-                }
-            }
-            let decoder = CSVRowDecoder(
-                row: dictionary,
-                configuration: configuration,
-                codingPath: [],
-                rowIndex: rowIndex + (configuration.hasHeaders ? 2 : 1) // 1-based, account for header
-            )
-            return try T(from: decoder)
-        }
+        // Convert string to UTF-8 bytes and use CSVParser for consistency
+        let utf8Data = Data(string.utf8)
+        return try decodeRowsFromBytes(type, from: utf8Data, columnOrder: columnOrder)
     }
 
     /// Optimized zero-copy decoding from Data.
@@ -232,52 +230,72 @@ public final class CSVDecoder: Sendable {
     ) throws -> [T] {
         return try data.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return [] }
-            let bytes = UnsafeBufferPointer(start: baseAddress.assumingMemoryBound(to: UInt8.self), count: buffer.count)
+
+            // Handle UTF-8 BOM
+            let rawBytes = UnsafeBufferPointer(
+                start: baseAddress.assumingMemoryBound(to: UInt8.self),
+                count: buffer.count
+            )
+            let startOffset = CSVUtilities.bomOffset(in: rawBytes)
+
+            let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
+            let adjustedCount = buffer.count - startOffset
+            let bytes = UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
-            
-            let parser = ByteCSVParser(buffer: bytes, delimiter: delimiter)
+
+            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
             let rows = parser.parse()
-            
-            guard !rows.isEmpty else { return [] }
-            
-            var startIndex = 0
-            let rawHeaders: [String]
-            
-            if configuration.hasHeaders {
-                let headerRow = rows[0]
-                // Parse headers immediately
-                var extracted: [String] = []
-                extracted.reserveCapacity(headerRow.count)
-                for i in 0..<headerRow.count {
-                    if let s = headerRow.string(at: i) {
-                        extracted.append(s)
-                    } else {
-                        extracted.append("column\(i)")
-                    }
+
+            // Check for parsing errors
+            let isStrict = configuration.parsingMode == .strict
+            let expectedFieldCount = configuration.expectedFieldCount
+
+            for (index, row) in rows.enumerated() {
+                // Check for unterminated quotes (always an error)
+                if row.hasUnterminatedQuote {
+                    throw CSVDecodingError.parsingError("Unterminated quoted field", line: index + 1, column: nil)
                 }
-                rawHeaders = extracted
-                startIndex = 1
-            } else {
-                rawHeaders = (0..<rows[0].count).map { "column\($0)" }
-                startIndex = 0
+
+                // Strict mode: reject quotes in unquoted fields
+                if isStrict && row.hasQuoteInUnquotedField {
+                    throw CSVDecodingError.parsingError("Quote character in unquoted field (RFC 4180 violation)", line: index + 1, column: nil)
+                }
+
+                // Strict mode: validate field count
+                if isStrict, let expected = expectedFieldCount, row.count != expected {
+                    throw CSVDecodingError.parsingError("Expected \(expected) fields but found \(row.count)", line: index + 1, column: nil)
+                }
             }
-            
-            // Determine headers based on: indexMapping > columnOrder > rawHeaders
-            let headers: [String]
-            if !configuration.indexMapping.isEmpty {
-                let maxIndex = configuration.indexMapping.keys.max() ?? 0
-                headers = (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
-            } else if let columnOrder = columnOrder, !configuration.hasHeaders {
-                headers = columnOrder
-            } else {
-                headers = rawHeaders.map { transformKey($0) }
+
+            guard !rows.isEmpty else { return [] }
+
+            // Extract raw headers from first row
+            let firstRow = rows[0]
+            var rawHeaders: [String] = []
+            rawHeaders.reserveCapacity(firstRow.count)
+            for i in 0..<firstRow.count {
+                if let s = firstRow.string(at: i) {
+                    rawHeaders.append(s)
+                } else {
+                    rawHeaders.append("column\(i)")
+                }
             }
-            
+
+            // Resolve headers using unified method
+            let headers = resolveHeaders(
+                rawHeaders: rawHeaders,
+                columnOrder: columnOrder,
+                columnCount: firstRow.count
+            )
+
             // Build header map (Header -> Column Index)
             var headerMap: [String: Int] = [:]
             for (index, header) in headers.enumerated() {
                 headerMap[header] = index
             }
+
+            // Skip header row if present
+            let startIndex = configuration.hasHeaders ? 1 : 0
             
             // Decode rows
             var results: [T] = []
@@ -355,6 +373,42 @@ public final class CSVDecoder: Sendable {
     private func convertFromPascalCase(_ key: String) -> String {
         guard let first = key.first else { return key }
         return first.lowercased() + String(key.dropFirst())
+    }
+
+    // MARK: - Header Resolution
+
+    /// Resolves headers based on configuration priority.
+    /// Priority: indexMapping > hasHeaders (with key transform) > columnOrder > generated
+    ///
+    /// - Parameters:
+    ///   - rawHeaders: The raw header strings from the first row (or generated column names).
+    ///   - columnOrder: Optional column order from CSVIndexedDecodable conformance.
+    ///   - columnCount: Number of columns in the data (used for generation if needed).
+    /// - Returns: The resolved header names.
+    func resolveHeaders(
+        rawHeaders: [String],
+        columnOrder: [String]?,
+        columnCount: Int? = nil
+    ) -> [String] {
+        // 1. Explicit index mapping takes highest precedence
+        if !configuration.indexMapping.isEmpty {
+            let maxIndex = configuration.indexMapping.keys.max() ?? 0
+            return (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
+        }
+
+        // 2. If hasHeaders, use first row with key transformation
+        if configuration.hasHeaders {
+            return rawHeaders.map { transformKey($0) }
+        }
+
+        // 3. If CSVIndexedDecodable provides column order, use it
+        if let columnOrder = columnOrder {
+            return columnOrder
+        }
+
+        // 4. Generate column names based on count
+        let count = columnCount ?? rawHeaders.count
+        return (0..<count).map { "column\($0)" }
     }
 
     /// Decodes a single row from a dictionary representation.

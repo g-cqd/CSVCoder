@@ -69,19 +69,6 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
     /// A parsing error occurred.
     case parsingError(String, line: Int?, column: Int?)
 
-    // Legacy initializers for backward compatibility
-    public static func keyNotFound(_ key: String) -> CSVDecodingError {
-        .keyNotFound(key, location: CSVLocation())
-    }
-
-    public static func typeMismatch(expected: String, actual: String) -> CSVDecodingError {
-        .typeMismatch(expected: expected, actual: actual, location: CSVLocation())
-    }
-
-    public static func parsingError(_ message: String) -> CSVDecodingError {
-        .parsingError(message, line: nil, column: nil)
-    }
-
     /// The location where the error occurred, if available.
     public var location: CSVLocation? {
         switch self {

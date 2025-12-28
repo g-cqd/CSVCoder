@@ -17,17 +17,11 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
     private let reader: MemoryMappedReader
     private let configuration: CSVDecoder.Configuration
 
-    // UTF-8 byte constants (ASCII subset)
+    // UTF-8 byte constants (ASCII subset) - shared with CSVParser
     private static let quote: UInt8 = 0x22      // "
     private static let comma: UInt8 = 0x2C      // ,
-    private static let tab: UInt8 = 0x09        // \t
     private static let cr: UInt8 = 0x0D         // \r
     private static let lf: UInt8 = 0x0A         // \n
-
-    // UTF-8 BOM bytes
-    private static let bomByte1: UInt8 = 0xEF
-    private static let bomByte2: UInt8 = 0xBB
-    private static let bomByte3: UInt8 = 0xBF
 
     /// Initialize with a memory-mapped reader.
     init(reader: MemoryMappedReader, configuration: CSVDecoder.Configuration) {
@@ -86,24 +80,25 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
             guard reader.count >= 3 else { return }
             reader.withUnsafeBytes { buffer in
                 guard let baseAddress = buffer.baseAddress else { return }
-                let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
-                if bytes[0] == StreamingCSVParser.bomByte1 &&
-                   bytes[1] == StreamingCSVParser.bomByte2 &&
-                   bytes[2] == StreamingCSVParser.bomByte3 {
-                    offset = 3
-                }
+                let bytes = UnsafeBufferPointer(
+                    start: baseAddress.assumingMemoryBound(to: UInt8.self),
+                    count: reader.count
+                )
+                offset = CSVUtilities.bomOffset(in: bytes)
             }
         }
 
         private mutating func parseNextRow(bytes: UnsafePointer<UInt8>, count: Int) throws -> [String]? {
             guard offset < count else { return nil }
 
+            let rowStartLine = lineNumber
             var fields: [String] = []
             var fieldBytes: [UInt8] = []
             fieldBytes.reserveCapacity(256)
             var inQuotes = false
             var fieldStartLine = lineNumber
             var fieldStartColumn = columnNumber
+            let isStrict = configuration.parsingMode == .strict
 
             while offset < count {
                 let byte = bytes[offset]
@@ -153,7 +148,15 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                         columnNumber += 1
                         continue
                     } else {
-                        // Quote in middle of unquoted field - treat as literal (lenient)
+                        // Quote in middle of unquoted field - RFC 4180 violation
+                        if isStrict {
+                            throw CSVDecodingError.parsingError(
+                                "Quote character in unquoted field (RFC 4180 violation)",
+                                line: lineNumber,
+                                column: columnNumber
+                            )
+                        }
+                        // Lenient mode: treat as literal
                         fieldBytes.append(byte)
                         offset += 1
                         columnNumber += 1
@@ -178,6 +181,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                         offset += 2
                         lineNumber += 1
                         columnNumber = 1
+                        try validateRowIfStrict(fields, rowLine: rowStartLine)
                         return fields.isEmpty ? nil : fields
                     } else {
                         // Lone CR (old Mac style)
@@ -185,6 +189,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                         offset += 1
                         lineNumber += 1
                         columnNumber = 1
+                        try validateRowIfStrict(fields, rowLine: rowStartLine)
                         return fields.isEmpty ? nil : fields
                     }
                 }
@@ -195,6 +200,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                     offset += 1
                     lineNumber += 1
                     columnNumber = 1
+                    try validateRowIfStrict(fields, rowLine: rowStartLine)
                     return fields.isEmpty ? nil : fields
                 }
 
@@ -207,17 +213,31 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
             // Check for unterminated quoted field
             if inQuotes {
                 throw CSVDecodingError.parsingError(
-                    "Unterminated quoted field starting at line \(fieldStartLine), column \(fieldStartColumn)"
+                    "Unterminated quoted field",
+                    line: fieldStartLine,
+                    column: fieldStartColumn
                 )
             }
 
             // Handle last field (no trailing newline)
             if !fieldBytes.isEmpty || !fields.isEmpty {
                 fields.append(processField(fieldBytes))
+                try validateRowIfStrict(fields, rowLine: rowStartLine)
                 return fields.isEmpty ? nil : fields
             }
 
             return nil
+        }
+
+        private func validateRowIfStrict(_ fields: [String], rowLine: Int) throws {
+            guard configuration.parsingMode == .strict else { return }
+            if let expected = configuration.expectedFieldCount, fields.count != expected {
+                throw CSVDecodingError.parsingError(
+                    "Expected \(expected) fields but found \(fields.count)",
+                    line: rowLine,
+                    column: nil
+                )
+            }
         }
 
         private func processField(_ bytes: [UInt8]) -> String {
