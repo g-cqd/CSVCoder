@@ -93,35 +93,55 @@ public struct CSVRowView {
     /// - Returns: The decoded string value, or `nil` if the index is out of bounds.
     /// - Complexity: O(1) for unquoted fields; O(n) for quoted fields with escaped quotes.
     public func string(at index: Int) -> String? {
+        string(at: index, encoding: .utf8)
+    }
+
+    /// Decodes and returns the string value for the field at the given index using the specified encoding.
+    ///
+    /// Handles RFC 4180 quote unescaping automatically:
+    /// - Quoted fields have outer quotes stripped
+    /// - Escaped quotes (`""`) are converted to single quotes (`"`)
+    ///
+    /// - Parameters:
+    ///   - index: The zero-based field index.
+    ///   - encoding: The string encoding to use for conversion. For best performance, use `.utf8`.
+    /// - Returns: The decoded string value, or `nil` if the index is out of bounds or conversion fails.
+    /// - Complexity: O(1) for unquoted UTF-8 fields; O(n) for quoted fields with escaped quotes or non-UTF-8 encodings.
+    public func string(at index: Int, encoding: String.Encoding) -> String? {
         guard index < fieldStarts.count else { return nil }
-        
+
         let start = fieldStarts[index]
         let length = fieldLengths[index]
         let isQuoted = fieldQuoted[index]
         let hasEscapedQuote = fieldHasEscapedQuote[index]
-        
+
         guard let base = buffer.baseAddress else { return nil }
-        
-        if isQuoted {
-            // Must unescape: replace "" with "
-            
-            // Optimization: if no internal escaped quotes, just strip outer quotes
-            // Note: The parser logic returns contentStart and contentLength (excluding outer quotes)
-            // So we can just create the string directly if no internal escapes!
-            if !hasEscapedQuote {
+
+        // Fast path for UTF-8 (most common case)
+        if encoding == .utf8 {
+            if isQuoted {
+                if !hasEscapedQuote {
+                    let ptr = base.advanced(by: start)
+                    return String(decoding: UnsafeBufferPointer(start: ptr, count: length), as: UTF8.self)
+                }
+                let fieldBytes = UnsafeBufferPointer(start: base.advanced(by: start), count: length)
+                let s = String(decoding: fieldBytes, as: UTF8.self)
+                return s.replacingOccurrences(of: "\"\"", with: "\"")
+            } else {
                 let ptr = base.advanced(by: start)
                 return String(decoding: UnsafeBufferPointer(start: ptr, count: length), as: UTF8.self)
             }
-            
-            // Slow path: contains escaped quotes "" -> "
-            let fieldBytes = UnsafeBufferPointer(start: base.advanced(by: start), count: length)
-            let s = String(decoding: fieldBytes, as: UTF8.self)
-            return s.replacingOccurrences(of: "\"\"", with: "\"")
-        } else {
-            // Zero-copy string creation if possible (Swift 5.x strings are fast to create from UTF8)
-            let ptr = base.advanced(by: start)
-            return String(decoding: UnsafeBufferPointer(start: ptr, count: length), as: UTF8.self)
         }
+
+        // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)
+        let ptr = base.advanced(by: start)
+        let data = Data(bytes: ptr, count: length)
+        guard let result = String(data: data, encoding: encoding) else { return nil }
+
+        if isQuoted && hasEscapedQuote {
+            return result.replacingOccurrences(of: "\"\"", with: "\"")
+        }
+        return result
     }
 }
 

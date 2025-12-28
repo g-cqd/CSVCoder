@@ -13,11 +13,13 @@ struct CSVRowDecoder: Decoder {
         case dictionary([String: String])
         case view(CSVRowView, headerMap: [String: Int])
     }
-    
+
     let source: RowSource
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
     let rowIndex: Int?
+    /// The effective encoding to use for string conversion (may differ from configuration.encoding after transcoding).
+    let encoding: String.Encoding
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     init(row: [String: String], configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int? = nil) {
@@ -25,17 +27,19 @@ struct CSVRowDecoder: Decoder {
         self.configuration = configuration
         self.codingPath = codingPath
         self.rowIndex = rowIndex
+        self.encoding = .utf8  // Dictionary source uses pre-decoded strings
     }
-    
-    init(view: CSVRowView, headerMap: [String: Int], configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int? = nil) {
+
+    init(view: CSVRowView, headerMap: [String: Int], configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int? = nil, encoding: String.Encoding = .utf8) {
         self.source = .view(view, headerMap: headerMap)
         self.configuration = configuration
         self.codingPath = codingPath
         self.rowIndex = rowIndex
+        self.encoding = encoding
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        KeyedDecodingContainer(CSVKeyedDecodingContainer(source: source, configuration: configuration, codingPath: codingPath, rowIndex: rowIndex))
+        KeyedDecodingContainer(CSVKeyedDecodingContainer(source: source, configuration: configuration, codingPath: codingPath, rowIndex: rowIndex, encoding: encoding))
     }
 
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
@@ -54,13 +58,16 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     let codingPath: [CodingKey]
     let rowIndex: Int?
     let keyPrefix: String?
+    /// The effective encoding to use for string conversion from CSVRowView.
+    let encoding: String.Encoding
 
-    init(source: CSVRowDecoder.RowSource, configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int?, keyPrefix: String? = nil) {
+    init(source: CSVRowDecoder.RowSource, configuration: CSVDecoder.Configuration, codingPath: [CodingKey], rowIndex: Int?, keyPrefix: String? = nil, encoding: String.Encoding = .utf8) {
         self.source = source
         self.configuration = configuration
         self.codingPath = codingPath
         self.rowIndex = rowIndex
         self.keyPrefix = keyPrefix
+        self.encoding = encoding
     }
 
     var allKeys: [Key] {
@@ -116,8 +123,8 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true)
                 )
             }
-            // Decode string on demand
-            guard let value = view.string(at: index) else {
+            // Decode string on demand using the effective encoding
+            guard let value = view.string(at: index, encoding: encoding) else {
                 throw CSVDecodingError.keyNotFound(
                     key.stringValue,
                     location: makeLocation(for: key, includeAvailableKeys: true)

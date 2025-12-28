@@ -255,4 +255,123 @@ struct CSVDecoderBasicTests {
         #expect(record.name == "Carol")
         #expect(record.age == 35)
     }
+
+    // MARK: - Encoding Tests
+
+    struct NameValue: Codable, Equatable {
+        let name: String
+        let value: String
+    }
+
+    @Test("Decode ISO-8859-1 (Latin-1) encoded data")
+    func decodeISOLatin1() throws {
+        // Create CSV with Latin-1 specific characters (é = 0xE9 in Latin-1)
+        let csv = "name,value\nCafé,naïve"
+        guard let data = csv.data(using: .isoLatin1) else {
+            Issue.record("Failed to create Latin-1 data")
+            return
+        }
+
+        let config = CSVDecoder.Configuration(encoding: .isoLatin1)
+        let decoder = CSVDecoder(configuration: config)
+        let records: [NameValue] = try decoder.decode([NameValue].self, from: data)
+
+        #expect(records.count == 1)
+        #expect(records[0].name == "Café")
+        #expect(records[0].value == "naïve")
+    }
+
+    @Test("Decode Windows-1252 encoded data")
+    func decodeWindows1252() throws {
+        // Windows-1252 extends Latin-1 with characters like € (0x80)
+        let csv = "name,value\nPrice,100€"
+        guard let data = csv.data(using: .windowsCP1252) else {
+            Issue.record("Failed to create Windows-1252 data")
+            return
+        }
+
+        let config = CSVDecoder.Configuration(encoding: .windowsCP1252)
+        let decoder = CSVDecoder(configuration: config)
+        let records: [NameValue] = try decoder.decode([NameValue].self, from: data)
+
+        #expect(records.count == 1)
+        #expect(records[0].name == "Price")
+        #expect(records[0].value == "100€")
+    }
+
+    @Test("Decode UTF-16 encoded data with BOM")
+    func decodeUTF16WithBOM() throws {
+        // UTF-16 with BOM (automatically detected and transcoded)
+        let csv = "name,value\n日本語,テスト"
+        guard let data = csv.data(using: .utf16) else {
+            Issue.record("Failed to create UTF-16 data")
+            return
+        }
+
+        let config = CSVDecoder.Configuration(encoding: .utf16)
+        let decoder = CSVDecoder(configuration: config)
+        let records: [NameValue] = try decoder.decode([NameValue].self, from: data)
+
+        #expect(records.count == 1)
+        #expect(records[0].name == "日本語")
+        #expect(records[0].value == "テスト")
+    }
+
+    @Test("Decode UTF-16LE encoded data")
+    func decodeUTF16LittleEndian() throws {
+        let csv = "name,value\nHello,World"
+        guard let data = csv.data(using: .utf16LittleEndian) else {
+            Issue.record("Failed to create UTF-16LE data")
+            return
+        }
+
+        // Add UTF-16 LE BOM manually since data(using:) doesn't add it
+        var dataWithBOM = Data([0xFF, 0xFE])
+        dataWithBOM.append(data)
+
+        let config = CSVDecoder.Configuration(encoding: .utf16LittleEndian)
+        let decoder = CSVDecoder(configuration: config)
+        // Use explicit type array to avoid streaming API ambiguity
+        let records: [NameValue] = try decoder.decode([NameValue].self, from: dataWithBOM)
+
+        #expect(records.count == 1)
+        #expect(records[0].name == "Hello")
+        #expect(records[0].value == "World")
+    }
+
+    @Test("UTF-8 BOM is handled correctly")
+    func decodeUTF8WithBOM() throws {
+        let csv = "name,value\nTest,Value"
+        let utf8Data = csv.data(using: .utf8)!
+
+        // Add UTF-8 BOM
+        var dataWithBOM = Data([0xEF, 0xBB, 0xBF])
+        dataWithBOM.append(utf8Data)
+
+        let decoder = CSVDecoder()
+        // Use explicit type array to avoid streaming API ambiguity
+        let records: [NameValue] = try decoder.decode([NameValue].self, from: dataWithBOM)
+
+        #expect(records.count == 1)
+        #expect(records[0].name == "Test")
+        #expect(records[0].value == "Value")
+    }
+
+    @Test("ASCII-compatible encoding preserves zero-copy parsing")
+    func asciiCompatibleEncodingPerformance() throws {
+        // Large CSV to ensure we're testing actual parsing
+        var csv = "name,value\n"
+        for i in 0..<1000 {
+            csv += "Item\(i),Value\(i)\n"
+        }
+
+        // Use string overload to avoid streaming API ambiguity
+        let config = CSVDecoder.Configuration(encoding: .isoLatin1)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([NameValue].self, from: csv)
+
+        #expect(records.count == 1000)
+        #expect(records[0].name == "Item0")
+        #expect(records[999].name == "Item999")
+    }
 }

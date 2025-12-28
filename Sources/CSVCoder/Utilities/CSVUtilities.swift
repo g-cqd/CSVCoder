@@ -8,12 +8,24 @@
 
 import Foundation
 
-// MARK: - BOM Handling
+// MARK: - BOM Handling & Encoding Utilities
 
 /// Shared utilities for CSV operations.
 enum CSVUtilities {
     /// UTF-8 BOM bytes (EF BB BF).
     static let utf8BOM: (UInt8, UInt8, UInt8) = (0xEF, 0xBB, 0xBF)
+
+    /// UTF-16 LE BOM bytes (FF FE).
+    static let utf16LEBOM: (UInt8, UInt8) = (0xFF, 0xFE)
+
+    /// UTF-16 BE BOM bytes (FE FF).
+    static let utf16BEBOM: (UInt8, UInt8) = (0xFE, 0xFF)
+
+    /// UTF-32 LE BOM bytes (FF FE 00 00).
+    static let utf32LEBOM: (UInt8, UInt8, UInt8, UInt8) = (0xFF, 0xFE, 0x00, 0x00)
+
+    /// UTF-32 BE BOM bytes (00 00 FE FF).
+    static let utf32BEBOM: (UInt8, UInt8, UInt8, UInt8) = (0x00, 0x00, 0xFE, 0xFF)
 
     /// Returns the byte offset to skip UTF-8 BOM if present.
     /// - Parameter bytes: The buffer to check.
@@ -43,6 +55,89 @@ enum CSVUtilities {
             return 0
         }
         return 3
+    }
+
+    /// Detects encoding from BOM and returns the encoding and byte offset to skip.
+    /// - Parameter data: The data to check for BOM.
+    /// - Returns: A tuple of detected encoding (or nil if no BOM) and the byte offset to skip.
+    static func detectBOM(in data: Data) -> (encoding: String.Encoding?, offset: Int) {
+        guard data.count >= 2 else { return (nil, 0) }
+
+        // Check UTF-32 first (4-byte BOM, but first 2 bytes overlap with UTF-16 LE)
+        if data.count >= 4 {
+            if data[0] == utf32LEBOM.0 && data[1] == utf32LEBOM.1 &&
+               data[2] == utf32LEBOM.2 && data[3] == utf32LEBOM.3 {
+                return (.utf32LittleEndian, 4)
+            }
+            if data[0] == utf32BEBOM.0 && data[1] == utf32BEBOM.1 &&
+               data[2] == utf32BEBOM.2 && data[3] == utf32BEBOM.3 {
+                return (.utf32BigEndian, 4)
+            }
+        }
+
+        // Check UTF-8 (3-byte BOM)
+        if data.count >= 3 {
+            if data[0] == utf8BOM.0 && data[1] == utf8BOM.1 && data[2] == utf8BOM.2 {
+                return (.utf8, 3)
+            }
+        }
+
+        // Check UTF-16 (2-byte BOM)
+        if data[0] == utf16LEBOM.0 && data[1] == utf16LEBOM.1 {
+            return (.utf16LittleEndian, 2)
+        }
+        if data[0] == utf16BEBOM.0 && data[1] == utf16BEBOM.1 {
+            return (.utf16BigEndian, 2)
+        }
+
+        return (nil, 0)
+    }
+
+    /// Checks if an encoding uses ASCII-compatible byte values for structural characters.
+    ///
+    /// ASCII-compatible encodings use the same byte values (0x00-0x7F) for ASCII characters,
+    /// which means CSV structural characters (comma, quote, CR, LF) have identical byte representations.
+    /// This allows the parser to operate on raw bytes and only use encoding for string conversion.
+    ///
+    /// - Parameter encoding: The encoding to check.
+    /// - Returns: `true` if the encoding is ASCII-compatible.
+    @inline(__always)
+    static func isASCIICompatible(_ encoding: String.Encoding) -> Bool {
+        switch encoding {
+        case .utf8, .ascii, .isoLatin1, .isoLatin2,
+             .windowsCP1250, .windowsCP1251, .windowsCP1252,
+             .windowsCP1253, .windowsCP1254,
+             .macOSRoman, .nextstep:
+            return true
+        case .utf16, .utf16BigEndian, .utf16LittleEndian,
+             .utf32, .utf32BigEndian, .utf32LittleEndian,
+             .unicode:
+            return false
+        default:
+            // For unknown encodings, assume not ASCII-compatible for safety
+            return false
+        }
+    }
+
+    /// Transcodes data from a non-ASCII-compatible encoding to UTF-8.
+    ///
+    /// For encodings like UTF-16 and UTF-32, the byte structure differs from ASCII,
+    /// so we must convert to String first, then to UTF-8 bytes for parsing.
+    ///
+    /// - Parameters:
+    ///   - data: The source data.
+    ///   - encoding: The source encoding.
+    /// - Returns: UTF-8 encoded data, or nil if conversion fails.
+    static func transcodeToUTF8(_ data: Data, from encoding: String.Encoding) -> Data? {
+        // Try to detect and skip BOM
+        let (detectedEncoding, bomOffset) = detectBOM(in: data)
+        let effectiveEncoding = detectedEncoding ?? encoding
+        let dataWithoutBOM = bomOffset > 0 ? data.dropFirst(bomOffset) : data
+
+        guard let string = String(data: Data(dataWithoutBOM), encoding: effectiveEncoding) else {
+            return nil
+        }
+        return string.data(using: .utf8)
     }
 }
 

@@ -97,9 +97,19 @@ public final class CSVDecoder: Sendable {
 
         /// The encoding to use when reading data. Default is UTF-8.
         ///
-        /// - Note: The current implementation optimizes for UTF-8 with zero-copy parsing.
-        ///   Non-UTF-8 data should be converted to String using the appropriate encoding
-        ///   before passing to `decode(from:)`. This property is reserved for future use.
+        /// CSVCoder supports two categories of encodings:
+        ///
+        /// **ASCII-Compatible Encodings** (zero-copy parsing):
+        /// - UTF-8, ASCII, ISO-8859-1 (Latin-1), Windows-1252, macOS Roman
+        /// - These encodings use the same byte values for ASCII characters, allowing
+        ///   the parser to operate directly on raw bytes for maximum performance.
+        ///
+        /// **Non-ASCII Encodings** (automatic transcoding):
+        /// - UTF-16, UTF-16LE, UTF-16BE, UTF-32, UTF-32LE, UTF-32BE
+        /// - These encodings are automatically transcoded to UTF-8 before parsing.
+        ///   This adds overhead but ensures correct handling of all Unicode data.
+        ///
+        /// BOM (Byte Order Mark) detection is automatic for all supported encodings.
         public var encoding: String.Encoding
 
         /// Whether to trim whitespace from field values. Default is true.
@@ -345,10 +355,33 @@ public final class CSVDecoder: Sendable {
         from data: Data,
         columnOrder: [String]?
     ) throws -> [T] {
-        return try data.withUnsafeBytes { buffer in
+        // Check if encoding requires transcoding
+        let encoding = configuration.encoding
+        let isASCIICompatible = CSVUtilities.isASCIICompatible(encoding)
+
+        // For non-ASCII encodings (UTF-16, UTF-32), transcode to UTF-8 first
+        let effectiveData: Data
+        let effectiveEncoding: String.Encoding
+
+        if !isASCIICompatible {
+            guard let transcoded = CSVUtilities.transcodeToUTF8(data, from: encoding) else {
+                throw CSVDecodingError.parsingError(
+                    "Failed to transcode data from \(encoding) to UTF-8",
+                    line: nil,
+                    column: nil
+                )
+            }
+            effectiveData = transcoded
+            effectiveEncoding = .utf8  // After transcoding, we're working with UTF-8
+        } else {
+            effectiveData = data
+            effectiveEncoding = encoding
+        }
+
+        return try effectiveData.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return [] }
 
-            // Handle UTF-8 BOM
+            // Handle BOM (UTF-8 BOM for transcoded data, original BOM was handled during transcode)
             let rawBytes = UnsafeBufferPointer(
                 start: baseAddress.assumingMemoryBound(to: UInt8.self),
                 count: buffer.count
@@ -386,12 +419,12 @@ public final class CSVDecoder: Sendable {
 
             guard !rows.isEmpty else { return [] }
 
-            // Extract raw headers from first row
+            // Extract raw headers from first row using the effective encoding
             let firstRow = rows[0]
             var rawHeaders: [String] = []
             rawHeaders.reserveCapacity(firstRow.count)
             for i in 0..<firstRow.count {
-                if let s = firstRow.string(at: i) {
+                if let s = firstRow.string(at: i, encoding: effectiveEncoding) {
                     // Apply trimWhitespace to headers for consistency with parallel decoding
                     rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
                 } else {
@@ -426,7 +459,8 @@ public final class CSVDecoder: Sendable {
                     headerMap: headerMap,
                     configuration: configuration,
                     codingPath: [],
-                    rowIndex: i + 1
+                    rowIndex: i + 1,
+                    encoding: effectiveEncoding
                 )
                 results.append(try T(from: decoder))
             }

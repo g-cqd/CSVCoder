@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Multi-Encoding Support
+- Full support for ASCII-compatible encodings (ISO-8859-1, Windows-1252, macOS Roman)
+- Automatic transcoding for non-ASCII encodings (UTF-16, UTF-16LE/BE, UTF-32)
+- BOM (Byte Order Mark) detection for UTF-8, UTF-16, and UTF-32
+- Zero-copy parsing preserved for ASCII-compatible encodings
+- `CSVUtilities.isASCIICompatible(_:)` for encoding classification
+- `CSVUtilities.transcodeToUTF8(_:from:)` for encoding conversion
+- `CSVUtilities.detectBOM(in:)` for multi-format BOM detection
+
 #### Streaming & Memory Efficiency
 - `CSVDecoder.decode(_:from: URL)` - Stream decode from files with O(1) memory
 - `CSVDecoder.decode(_:from: Data)` - Stream decode from Data
