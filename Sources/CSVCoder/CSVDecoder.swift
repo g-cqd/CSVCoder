@@ -206,8 +206,8 @@ public final class CSVDecoder: Sendable {
     /// - Returns: An array of decoded values.
     public func decode<T: Decodable>(_ type: [T].Type, from data: Data) throws -> [T] {
         // Runtime detection of CSVIndexedDecodable conformance
-        let columnOrder = (T.self as? _CSVIndexedDecodableMarker.Type)?._csvColumnOrder
-        
+        let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
+
         // Fast path: Zero-copy decoding for UTF-8 data
         return try decodeRowsFromBytes(type, from: data, columnOrder: columnOrder)
     }
@@ -223,7 +223,7 @@ public final class CSVDecoder: Sendable {
     /// - Returns: An array of decoded values.
     public func decode<T: Decodable>(_ type: [T].Type, from string: String) throws -> [T] {
         // Runtime detection of CSVIndexedDecodable conformance
-        let columnOrder = (T.self as? _CSVIndexedDecodableMarker.Type)?._csvColumnOrder
+        let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
         return try decodeRows(type, from: string, columnOrder: columnOrder)
     }
 

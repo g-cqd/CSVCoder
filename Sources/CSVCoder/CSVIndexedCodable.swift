@@ -13,13 +13,31 @@ import Foundation
 /// Internal marker protocol for runtime conformance detection.
 /// Has no associated types, enabling `as?` casting at runtime.
 /// Public to allow protocol refinement but prefixed with underscore to signal internal use.
-public protocol _CSVIndexedDecodableMarker {
+public protocol _CSVIndexedMarker {
     static var _csvColumnOrder: [String] { get }
 }
 
-/// Internal marker for encodable types.
-public protocol _CSVIndexedEncodableMarker {
-    static var _csvColumnOrder: [String] { get }
+// MARK: - Base Protocol
+
+/// Base protocol providing the common requirements for CSV indexed types.
+/// Both CSVIndexedDecodable and CSVIndexedEncodable refine this protocol.
+public protocol CSVIndexedBase: _CSVIndexedMarker {
+    /// The CodingKeys type, which must be CaseIterable to define column order.
+    associatedtype CSVCodingKeys: CodingKey & CaseIterable
+
+    /// Returns the ordered column names derived from CodingKeys.
+    /// Default implementation uses `CSVCodingKeys.allCases`.
+    static var csvColumnOrder: [String] { get }
+}
+
+extension CSVIndexedBase {
+    /// Default implementation: extracts column names from CodingKeys.allCases in order.
+    public static var csvColumnOrder: [String] {
+        CSVCodingKeys.allCases.map { $0.stringValue }
+    }
+
+    /// Internal marker implementation for runtime detection.
+    public static var _csvColumnOrder: [String] { csvColumnOrder }
 }
 
 // MARK: - CSVIndexedDecodable Protocol
@@ -49,47 +67,14 @@ public protocol _CSVIndexedEncodableMarker {
 ///
 /// - Note: The decoder automatically detects conformance at runtime.
 ///   You can use the standard `decode([T].self, from:)` method.
-public protocol CSVIndexedDecodable: Decodable, _CSVIndexedDecodableMarker {
-    /// The CodingKeys type, which must be CaseIterable to define column order.
-    associatedtype CSVCodingKeys: CodingKey & CaseIterable
-
-    /// Returns the ordered column names derived from CodingKeys.
-    /// Default implementation uses `CSVCodingKeys.allCases`.
-    static var csvColumnOrder: [String] { get }
-}
-
-extension CSVIndexedDecodable {
-    /// Default implementation: extracts column names from CodingKeys.allCases in order.
-    public static var csvColumnOrder: [String] {
-        CSVCodingKeys.allCases.map { $0.stringValue }
-    }
-
-    /// Internal marker implementation for runtime detection.
-    static var _csvColumnOrder: [String] { csvColumnOrder }
-}
+public protocol CSVIndexedDecodable: Decodable, CSVIndexedBase {}
 
 // MARK: - CSVIndexedEncodable Protocol
 
 /// A type that can be encoded to CSV with columns in the order of its CodingKeys.
 ///
 /// The encoding order matches the order of cases in your `CodingKeys` enum.
-public protocol CSVIndexedEncodable: Encodable, _CSVIndexedEncodableMarker {
-    /// The CodingKeys type, which must be CaseIterable to define column order.
-    associatedtype CSVCodingKeys: CodingKey & CaseIterable
-
-    /// Returns the ordered column names derived from CodingKeys.
-    static var csvColumnOrder: [String] { get }
-}
-
-extension CSVIndexedEncodable {
-    /// Default implementation: extracts column names from CodingKeys.allCases in order.
-    public static var csvColumnOrder: [String] {
-        CSVCodingKeys.allCases.map { $0.stringValue }
-    }
-
-    /// Internal marker implementation for runtime detection.
-    static var _csvColumnOrder: [String] { csvColumnOrder }
-}
+public protocol CSVIndexedEncodable: Encodable, CSVIndexedBase {}
 
 // MARK: - Combined Protocol
 

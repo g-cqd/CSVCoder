@@ -32,7 +32,7 @@ extension CSVDecoder {
         from url: URL
     ) -> AsyncThrowingStream<T, Error> {
         // Runtime detection of CSVIndexedDecodable conformance
-        let columnOrder = (T.self as? _CSVIndexedDecodableMarker.Type)?._csvColumnOrder
+        let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
         return streamDecode(type, from: url, columnOrder: columnOrder)
     }
 
@@ -51,7 +51,7 @@ extension CSVDecoder {
         from data: Data
     ) -> AsyncThrowingStream<T, Error> {
         // Runtime detection of CSVIndexedDecodable conformance
-        let columnOrder = (T.self as? _CSVIndexedDecodableMarker.Type)?._csvColumnOrder
+        let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
         return streamDecode(type, from: data, columnOrder: columnOrder)
     }
 
