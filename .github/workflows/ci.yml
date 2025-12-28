@@ -74,6 +74,10 @@ jobs:
             --hosting-base-path CSVCoder
           mkdir -p docs
           cp -r .build/plugins/Swift-DocC/outputs/CSVCoder.doccarchive/* docs/
+          # Rename files with colons (macros like @CSVColumn(_:)) for NTFS compatibility
+          find docs -name '*:*' -print0 | while IFS= read -r -d '' file; do
+            mv "$file" "$(echo "$file" | tr ':' '_')"
+          done
 
       - name: Upload Documentation Artifact
         uses: actions/upload-artifact@v4
