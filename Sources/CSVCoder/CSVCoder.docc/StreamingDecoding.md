@@ -91,5 +91,4 @@ for try await person in decoder.decodeWithProgress(
 
 ### Related
 
-- <doc:ParallelDecoding>
 - ``CSVDecoder``

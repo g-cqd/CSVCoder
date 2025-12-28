@@ -90,5 +90,5 @@ The SIMD scanner is used automatically when:
 
 ### Related
 
-- <doc:StreamingDecoding>
 - ``CSVDecoder``
+- ``CSVDecoder/ParallelConfiguration``

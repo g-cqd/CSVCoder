@@ -75,5 +75,5 @@ Parallel encoding benefits increase with dataset size due to reduced per-chunk o
 
 ### Related
 
-- <doc:StreamingEncoding>
 - ``CSVEncoder``
+- ``CSVEncoder/ParallelEncodingConfiguration``

@@ -65,5 +65,4 @@ let row = try encoder.encodeRow(person)
 
 ### Related
 
-- <doc:ParallelEncoding>
 - ``CSVEncoder``
