@@ -370,49 +370,75 @@ CSVCoder is compatible with projects using `SWIFT_DEFAULT_ACTOR_ISOLATION = Main
 
 ## Performance
 
-Benchmark results on Apple Silicon (M-series):
+**Benchmark Environment:**
+- CPU: Apple M2 Pro
+- Cores: 10 (6 performance + 4 efficiency)
+- Memory: 16 GB
+- OS: macOS 26.3
+- Swift: 6.2+
+- Build: Release
 
 ### Decoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 2.3 ms | ~435K rows/s |
-| 10K rows (simple) | 23.7 ms | ~422K rows/s |
-| 100K rows (simple) | 239 ms | ~418K rows/s |
-| 1M rows (simple) | 2.41 s | ~415K rows/s |
-| 10K rows (complex, 8 fields) | 59 ms | ~169K rows/s |
-| 10K rows (quoted fields) | 26 ms | ~385K rows/s |
-| 10K rows (50 columns wide) | 236 ms | ~42K rows/s |
-| 10K rows (500-byte fields) | 88 ms | ~114K rows/s |
-| 100K rows (numeric fields) | 238 ms | ~420K rows/s |
+| 1K rows (simple) | 2.7 ms | ~370K rows/s |
+| 10K rows (simple) | 27 ms | ~370K rows/s |
+| 100K rows (simple) | 274 ms | ~365K rows/s |
+| 1M rows (simple) | 2.77 s | ~361K rows/s |
+| 10K rows (complex, 8 fields) | 61 ms | ~164K rows/s |
+| 10K rows (quoted fields) | 31 ms | ~323K rows/s |
+| 10K rows (50 columns wide) | 288 ms | ~35K rows/s |
+| 10K rows (500-byte fields) | 100 ms | ~100K rows/s |
+| 100K rows (numeric fields) | 299 ms | ~334K rows/s |
+
+### Real-World Scenarios
+
+| Benchmark | Time | Throughput |
+|-----------|------|------------|
+| 50K orders (18 fields, optionals) | 632 ms | ~79K rows/s |
+| 100K transactions (13 fields) | 962 ms | ~104K rows/s |
+| 100K log entries (12 fields) | 1.01 s | ~99K rows/s |
+| 10K stress-quoted (nested quotes, newlines) | 30 ms | ~333K rows/s |
+| 50K Unicode-heavy rows | 123 ms | ~407K rows/s |
+| 1K rows (10KB fields) | 154 ms | ~6.5K rows/s |
+| 1K rows (200 columns wide) | 90 ms | ~11K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.7 ms | ~588K rows/s |
-| 10K rows | 17.3 ms | ~578K rows/s |
-| 100K rows | 172 ms | ~581K rows/s |
-| 1M rows | 1.73 s | ~578K rows/s |
-| 10K rows (quoted fields) | 17.1 ms | ~585K rows/s |
-| 10K rows (500-byte fields) | 62 ms | ~161K rows/s |
-| 100K rows to Data | 171 ms | ~585K rows/s |
-| 100K rows to String | 174 ms | ~575K rows/s |
+| 1K rows | 1.9 ms | ~526K rows/s |
+| 10K rows | 18.6 ms | ~538K rows/s |
+| 100K rows | 186 ms | ~538K rows/s |
+| 1M rows | 1.93 s | ~518K rows/s |
+| 10K rows (quoted fields) | 18 ms | ~556K rows/s |
+| 10K rows (500-byte fields) | 63 ms | ~159K rows/s |
+| 50K orders (18 fields, optionals) | 349 ms | ~143K rows/s |
+| 100K rows to Data | 186 ms | ~538K rows/s |
+| 100K rows to String | 190 ms | ~526K rows/s |
 
-### Parallel Processing (100K rows)
+### Parallel Processing
 
 | Benchmark | Sequential | Parallel | Speedup |
 |-----------|------------|----------|---------|
-| Encode to Data | 170 ms | 83 ms | **2.05x** |
-| Encode to File | - | 88 ms | - |
-| Decode from Data | 668 ms | 859 ms | 0.78x* |
-| Decode from File | - | 911 ms | - |
+| Encode 100K rows | 176 ms | 78 ms | **2.26x** |
+| Encode 100K to file | - | 81 ms | - |
+| Encode 1M rows | - | 740 ms | - |
+| Decode 100K rows | 1,087 ms | 968 ms | 1.12x |
+| Decode 100K from file | - | 932 ms | - |
+| Decode 1M rows (parallel) | - | 17.9 s | - |
 
-*Parallel decoding has overhead for smaller files. Benefits appear with larger datasets (1M+ rows) or complex parsing.
+### Mixed Workloads (Real-World Simulation)
+
+| Benchmark | Time |
+|-----------|------|
+| Decode + Transform + Encode 10K | 46 ms |
+| Filter + Aggregate 100K orders | 628 ms |
 
 ### Raw High-Performance API (Codable Bypass)
 
-For performance-critical tasks (pre-processing, filtering, or massive datasets), you can bypass `Codable` overhead entirely using the zero-copy `CSVParser` API. This achieves **2.5x to 3x higher throughput** (~670K rows/s).
+For performance-critical tasks (pre-processing, filtering, or massive datasets), you can bypass `Codable` overhead entirely using the zero-copy `CSVParser` API. This achieves **~1.8x higher throughput**.
 
 **Safe Usage:**
 Use the `CSVParser.parse(data:)` wrapper to ensure memory safety.
@@ -440,17 +466,18 @@ This approach avoids allocating `struct` or `class` instances for every row, dra
 
 | Benchmark | Time | Throughput | Speedup vs Codable |
 |-----------|------|------------|-------------------|
-| Raw Parse (Iterate Only) | 1.49 s | **~670K rows/s** | **2.6x** |
-| Raw Parse (Iterate + String) | 1.54 s | **~650K rows/s** | **2.5x** |
-| Raw Parse (Quoted Fields) | - | **~885K rows/s** | **2.8x** |
+| Raw Parse (Iterate Only) | 1.50 s | **~665K rows/s** | **1.84x** |
+| Raw Parse (Iterate + String) | 1.55 s | **~645K rows/s** | **1.79x** |
+| Raw Parse 100K Quoted (Iterate Only) | 113 ms | **~885K rows/s** | - |
+| Raw Parse 100K Quoted (Iterate + String) | 196 ms | **~510K rows/s** | - |
 
 ### Special Strategies (1K rows)
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| snake_case key conversion | 2.4 ms | ~417K rows/s |
-| Flexible date parsing | 139 ms | ~7.2K rows/s |
-| Flexible number parsing | 16 ms | ~63K rows/s |
+| snake_case key conversion | 2.8 ms | ~357K rows/s |
+| Flexible date parsing | 143 ms | ~7.0K rows/s |
+| Flexible number parsing | 214 ms | ~4.7K rows/s |
 
 Run benchmarks locally:
 ```bash

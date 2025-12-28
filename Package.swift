@@ -61,10 +61,6 @@ let package = Package(
                 "CSVCoder",
                 .product(name: "Benchmark", package: "swift-benchmark")
             ]
-        ),
-        .executableTarget(
-            name: "LargeFileBenchmark",
-            dependencies: ["CSVCoder"]
         )
     ]
 )
