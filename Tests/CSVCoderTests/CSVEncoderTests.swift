@@ -530,6 +530,38 @@ struct CSVEncoderTests {
         #expect(decoded == records)
     }
 
+    @Test("Parallel encode is faster than sequential for large data")
+    func parallelEncodeFasterThanSequential() async throws {
+        // Generate large dataset (10K records)
+        let records = (0..<10_000).map { i in
+            SendableRecord(id: i, name: "Person\(i) with a longer name", value: Double(i) * 1.5)
+        }
+
+        let encoder = CSVEncoder()
+
+        // Measure sequential encode (parallelism: 1)
+        let sequentialStart = ContinuousClock.now
+        let sequentialConfig = CSVEncoder.ParallelEncodingConfiguration(parallelism: 1, chunkSize: 1000)
+        let sequentialResult = try await encoder.encodeParallel(records, parallelConfig: sequentialConfig)
+        let sequentialDuration = ContinuousClock.now - sequentialStart
+
+        // Measure parallel encode (all cores)
+        let parallelStart = ContinuousClock.now
+        let parallelConfig = CSVEncoder.ParallelEncodingConfiguration(chunkSize: 1000)
+        let parallelResult = try await encoder.encodeParallel(records, parallelConfig: parallelConfig)
+        let parallelDuration = ContinuousClock.now - parallelStart
+
+        // Verify correctness (same output)
+        #expect(sequentialResult == parallelResult)
+
+        // On multi-core machines, parallel should be faster
+        let coreCount = ProcessInfo.processInfo.activeProcessorCount
+        if coreCount > 1 {
+            let speedup = Double(sequentialDuration.components.attoseconds) / Double(parallelDuration.components.attoseconds)
+            #expect(speedup > 1.0, "Parallel (\(parallelDuration)) should be faster than sequential (\(sequentialDuration)), speedup: \(speedup)x")
+        }
+    }
+
     // MARK: - CSVRowBuilder Tests
 
     @Test("CSVRowBuilder escapes fields correctly")

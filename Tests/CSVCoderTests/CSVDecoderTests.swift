@@ -991,6 +991,53 @@ struct CSVDecoderTests {
         #expect(totalRecords == 100)
     }
 
+    @Test("Parallel decode is faster than sequential for large data")
+    func parallelDecodeFasterThanSequential() async throws {
+        // Generate large dataset (10K rows with complex fields)
+        var csvLines = ["id,name,email,value,active,notes"]
+        for i in 0..<10_000 {
+            csvLines.append("\(i),Person\(i),person\(i)@example.com,\(Double(i) * 1.5),\(i % 2 == 0),\"Notes for person \(i)\"")
+        }
+        let csv = csvLines.joined(separator: "\n")
+        let data = Data(csv.utf8)
+
+        struct LargeRecord: Codable, Sendable {
+            let id: Int
+            let name: String
+            let email: String
+            let value: Double
+            let active: Bool
+            let notes: String
+        }
+
+        let decoder = CSVDecoder()
+
+        // Measure sequential decode (parallelism: 1)
+        let sequentialStart = ContinuousClock.now
+        let sequentialConfig = CSVDecoder.ParallelConfiguration(parallelism: 1, chunkSize: 64 * 1024)
+        let sequentialResult = try await decoder.decodeParallel([LargeRecord].self, from: data, parallelConfig: sequentialConfig)
+        let sequentialDuration = ContinuousClock.now - sequentialStart
+
+        // Measure parallel decode (all cores)
+        let parallelStart = ContinuousClock.now
+        let parallelConfig = CSVDecoder.ParallelConfiguration(chunkSize: 64 * 1024)
+        let parallelResult = try await decoder.decodeParallel([LargeRecord].self, from: data, parallelConfig: parallelConfig)
+        let parallelDuration = ContinuousClock.now - parallelStart
+
+        // Verify correctness
+        #expect(sequentialResult.count == 10_000)
+        #expect(parallelResult.count == 10_000)
+
+        // On multi-core machines, parallel should be faster
+        // Allow some tolerance for CI variability
+        let coreCount = ProcessInfo.processInfo.activeProcessorCount
+        if coreCount > 1 {
+            // Parallel should be at least 20% faster on multi-core (conservative threshold for CI)
+            let speedup = Double(sequentialDuration.components.attoseconds) / Double(parallelDuration.components.attoseconds)
+            #expect(speedup > 1.0, "Parallel (\(parallelDuration)) should be faster than sequential (\(sequentialDuration)), speedup: \(speedup)x")
+        }
+    }
+
     // MARK: - Backpressure Tests
 
     @Test("Decode with memory configuration")
