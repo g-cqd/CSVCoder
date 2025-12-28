@@ -322,4 +322,103 @@ benchmark("Encode 100K rows to String") {
     precondition(result.count > 0)
 }
 
+// MARK: - Parallel vs Sequential Benchmarks
+
+// Thread-safe box for storing async results
+private final class ResultBox<T>: @unchecked Sendable {
+    var value: Result<T, Error>?
+}
+
+// Helper to run async code synchronously for benchmarks
+@inline(never)
+nonisolated func runAsync<T: Sendable>(_ operation: @Sendable @escaping () async throws -> T) throws -> T {
+    let box = ResultBox<T>()
+    let semaphore = DispatchSemaphore(value: 0)
+    Task {
+        do {
+            let result = try await operation()
+            box.value = .success(result)
+        } catch {
+            box.value = .failure(error)
+        }
+        semaphore.signal()
+    }
+    semaphore.wait()
+    return try box.value!.get()
+}
+
+// Pre-generate temp file for parallel benchmarks
+let parallelTempURL: URL = {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("parallel_benchmark.csv")
+    try? Data(simple100K.utf8).write(to: url)
+    return url
+}()
+
+// Sequential decode (parallelism: 1)
+benchmark("Decode 100K rows (sequential, p=1)") {
+    let count = try runAsync {
+        let decoder = CSVDecoder()
+        let config = CSVDecoder.ParallelConfiguration(parallelism: 1, chunkSize: 64 * 1024)
+        let result = try await decoder.decodeParallel([SimpleRecord].self, from: simple100KData, parallelConfig: config)
+        return result.count
+    }
+    precondition(count == 100_000)
+}
+
+// Parallel decode (all cores)
+benchmark("Decode 100K rows (parallel, p=all)") {
+    let count = try runAsync {
+        let decoder = CSVDecoder()
+        let config = CSVDecoder.ParallelConfiguration(chunkSize: 64 * 1024)
+        let result = try await decoder.decodeParallel([SimpleRecord].self, from: simple100KData, parallelConfig: config)
+        return result.count
+    }
+    precondition(count == 100_000)
+}
+
+// Sequential encode (parallelism: 1)
+benchmark("Encode 100K rows (sequential, p=1)") {
+    let count = try runAsync {
+        let encoder = CSVEncoder()
+        let config = CSVEncoder.ParallelEncodingConfiguration(parallelism: 1, chunkSize: 10_000)
+        let result = try await encoder.encodeParallel(simpleRecords100K, parallelConfig: config)
+        return result.count
+    }
+    precondition(count > 0)
+}
+
+// Parallel encode (all cores)
+benchmark("Encode 100K rows (parallel, p=all)") {
+    let count = try runAsync {
+        let encoder = CSVEncoder()
+        let config = CSVEncoder.ParallelEncodingConfiguration(chunkSize: 10_000)
+        let result = try await encoder.encodeParallel(simpleRecords100K, parallelConfig: config)
+        return result.count
+    }
+    precondition(count > 0)
+}
+
+// Parallel decode from file (memory-mapped)
+benchmark("Decode 100K from file (parallel)") {
+    let count = try runAsync {
+        let decoder = CSVDecoder()
+        let config = CSVDecoder.ParallelConfiguration(chunkSize: 64 * 1024)
+        let result = try await decoder.decodeParallel([SimpleRecord].self, from: parallelTempURL, parallelConfig: config)
+        return result.count
+    }
+    precondition(count == 100_000)
+}
+
+// Parallel encode to file
+benchmark("Encode 100K to file (parallel)") {
+    _ = try runAsync { () -> Bool in
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".csv")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let encoder = CSVEncoder()
+        let config = CSVEncoder.ParallelEncodingConfiguration(chunkSize: 10_000)
+        try await encoder.encodeParallel(simpleRecords100K, to: tempURL, parallelConfig: config)
+        return true
+    }
+}
+
 Benchmark.main()

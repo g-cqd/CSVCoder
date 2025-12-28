@@ -376,36 +376,47 @@ Benchmark results on Apple Silicon (M-series):
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 2.4 ms | ~417K rows/s |
-| 10K rows (simple) | 24.4 ms | ~410K rows/s |
-| 100K rows (simple) | 244 ms | ~410K rows/s |
-| 1M rows (simple) | 2.48 s | ~403K rows/s |
-| 10K rows (complex, 8 fields) | 61 ms | ~164K rows/s |
-| 10K rows (quoted fields) | 27 ms | ~370K rows/s |
-| 10K rows (50 columns wide) | 420 ms | ~24K rows/s |
-| 10K rows (500-byte fields) | 167 ms | ~60K rows/s |
-| 100K rows (numeric fields) | 432 ms | ~231K rows/s |
+| 1K rows (simple) | 2.3 ms | ~435K rows/s |
+| 10K rows (simple) | 23.7 ms | ~422K rows/s |
+| 100K rows (simple) | 239 ms | ~418K rows/s |
+| 1M rows (simple) | 2.41 s | ~415K rows/s |
+| 10K rows (complex, 8 fields) | 59 ms | ~169K rows/s |
+| 10K rows (quoted fields) | 26 ms | ~385K rows/s |
+| 10K rows (50 columns wide) | 236 ms | ~42K rows/s |
+| 10K rows (500-byte fields) | 88 ms | ~114K rows/s |
+| 100K rows (numeric fields) | 238 ms | ~420K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.9 ms | ~526K rows/s |
-| 10K rows | 17.9 ms | ~559K rows/s |
-| 100K rows | 177 ms | ~565K rows/s |
-| 1M rows | 1.77 s | ~565K rows/s |
-| 10K rows (quoted fields) | 17.6 ms | ~568K rows/s |
-| 10K rows (500-byte fields) | 135 ms | ~74K rows/s |
-| 100K rows to Data | 244 ms | ~410K rows/s |
-| 100K rows to String | 261 ms | ~383K rows/s |
+| 1K rows | 1.7 ms | ~588K rows/s |
+| 10K rows | 17.3 ms | ~578K rows/s |
+| 100K rows | 172 ms | ~581K rows/s |
+| 1M rows | 1.73 s | ~578K rows/s |
+| 10K rows (quoted fields) | 17.1 ms | ~585K rows/s |
+| 10K rows (500-byte fields) | 62 ms | ~161K rows/s |
+| 100K rows to Data | 171 ms | ~585K rows/s |
+| 100K rows to String | 174 ms | ~575K rows/s |
+
+### Parallel Processing (100K rows)
+
+| Benchmark | Sequential | Parallel | Speedup |
+|-----------|------------|----------|---------|
+| Encode to Data | 170 ms | 83 ms | **2.05x** |
+| Encode to File | - | 88 ms | - |
+| Decode from Data | 668 ms | 859 ms | 0.78x* |
+| Decode from File | - | 911 ms | - |
+
+*Parallel decoding has overhead for smaller files. Benefits appear with larger datasets (1M+ rows) or complex parsing.
 
 ### Special Strategies (1K rows)
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| snake_case key conversion | 4.3 ms | ~233K rows/s |
-| Flexible date parsing | 267 ms | ~3.7K rows/s |
-| Flexible number parsing | 25.7 ms | ~39K rows/s |
+| snake_case key conversion | 2.4 ms | ~417K rows/s |
+| Flexible date parsing | 139 ms | ~7.2K rows/s |
+| Flexible number parsing | 16 ms | ~63K rows/s |
 
 Run benchmarks locally:
 ```bash

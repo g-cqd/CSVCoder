@@ -301,7 +301,9 @@ public nonisolated final class CSVEncoder: Sendable {
     }
 
     /// Returns the header row for a given type.
-    /// - Parameter type: The type to get headers for.
+    /// - Parameters:
+    ///   - type: The type to get headers for.
+    ///   - sample: A sample instance to encode for extracting property names.
     /// - Returns: An array of header names.
     public func headers<T: Encodable>(for type: T.Type, sample: T) throws -> [String] {
         let storage = CSVEncodingStorage()
