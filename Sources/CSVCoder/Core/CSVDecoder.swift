@@ -96,6 +96,10 @@ public final class CSVDecoder: Sendable {
         public var hasHeaders: Bool
 
         /// The encoding to use when reading data. Default is UTF-8.
+        ///
+        /// - Note: The current implementation optimizes for UTF-8 with zero-copy parsing.
+        ///   Non-UTF-8 data should be converted to String using the appropriate encoding
+        ///   before passing to `decode(from:)`. This property is reserved for future use.
         public var encoding: String.Encoding
 
         /// Whether to trim whitespace from field values. Default is true.
@@ -388,7 +392,8 @@ public final class CSVDecoder: Sendable {
             rawHeaders.reserveCapacity(firstRow.count)
             for i in 0..<firstRow.count {
                 if let s = firstRow.string(at: i) {
-                    rawHeaders.append(s)
+                    // Apply trimWhitespace to headers for consistency with parallel decoding
+                    rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
                 } else {
                     rawHeaders.append("column\(i)")
                 }

@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unterminated quote detection with line/column information
 - Quoted fields containing CRLF now parse correctly
 - Empty quoted fields handled properly
+- `trimWhitespace` configuration now consistently applied to all field types
+  - Previously, numeric fields (Int, Double, etc.) would fail parsing with whitespace
+  - Boolean decoding now respects configuration instead of always trimming
+  - Header extraction now applies trimWhitespace consistently across all decode paths
 
 ## [1.1.0] - 2025-12-27
 

@@ -192,6 +192,52 @@ struct CSVDecoderRFC4180Tests {
         #expect(records[0].value == "  spaces  ")
     }
 
+    @Test("TrimWhitespace applies to all field types including numeric")
+    func trimWhitespaceAppliesToNumericFields() throws {
+        struct Vehicle: Decodable, Equatable {
+            let make: String
+            let year: Int
+            let price: Double
+        }
+
+        // CSV with whitespace around string and numeric fields
+        let csv = """
+        make,year,price
+         Toyota , 2024 , 45000.50
+        """
+
+        // Default: trimWhitespace = true should trim all fields
+        let decoder = CSVDecoder()
+        let vehicles = try decoder.decode([Vehicle].self, from: csv)
+
+        #expect(vehicles.count == 1)
+        #expect(vehicles[0].make == "Toyota")
+        #expect(vehicles[0].year == 2024)
+        #expect(vehicles[0].price == 45000.50)
+    }
+
+    @Test("TrimWhitespace false preserves whitespace in all fields")
+    func trimWhitespaceFalsePreservesAllWhitespace() throws {
+        struct Record: Decodable, Equatable {
+            let name: String
+            let value: String
+        }
+
+        // Use explicit quotes to preserve trailing whitespace
+        let csv = """
+        name,value
+        " padded "," text "
+        """
+
+        let config = CSVDecoder.Configuration(trimWhitespace: false)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([Record].self, from: csv)
+
+        #expect(records.count == 1)
+        #expect(records[0].name == " padded ")
+        #expect(records[0].value == " text ")
+    }
+
     @Test("Handle complex quoted field with all special characters")
     func handleComplexQuotedField() throws {
         let csv = """

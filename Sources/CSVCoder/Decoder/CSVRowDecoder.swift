@@ -98,6 +98,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     private func getValue(for key: Key) throws -> String {
+        let rawValue: String
         switch source {
         case .dictionary(let row):
             guard let value = row[key.stringValue] else {
@@ -106,7 +107,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true)
                 )
             }
-            return value
+            rawValue = value
 
         case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue], index < view.count else {
@@ -122,8 +123,11 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true)
                 )
             }
-            return value
+            rawValue = value
         }
+
+        // Apply trimWhitespace configuration
+        return configuration.trimWhitespace ? rawValue.trimmingCharacters(in: .whitespaces) : rawValue
     }
 
     /// Returns the string value for a key, or nil if not present.
@@ -166,7 +170,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        let value = try getValue(for: key).lowercased().trimmingCharacters(in: .whitespaces)
+        let value = try getValue(for: key).lowercased()
         let location = makeLocation(for: key)
 
         switch configuration.boolDecodingStrategy {

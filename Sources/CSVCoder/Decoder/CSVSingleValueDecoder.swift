@@ -33,6 +33,11 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     let configuration: CSVDecoder.Configuration
     let codingPath: [CodingKey]
 
+    /// The value with trimWhitespace applied based on configuration.
+    private var trimmedValue: String {
+        configuration.trimWhitespace ? value.trimmingCharacters(in: .whitespaces) : value
+    }
+
     private var location: CSVLocation {
         CSVLocation(codingPath: codingPath)
     }
@@ -42,7 +47,7 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     func decode(_ type: Bool.Type) throws -> Bool {
-        let lower = value.lowercased().trimmingCharacters(in: .whitespaces)
+        let lower = trimmedValue.lowercased()
 
         switch configuration.boolDecodingStrategy {
         case .standard:
@@ -76,19 +81,19 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     func decode(_ type: String.Type) throws -> String {
-        value
+        trimmedValue
     }
 
     func decode(_ type: Double.Type) throws -> Double {
-        guard let result = parseDouble(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Double", actual: value, location: location)
+        guard let result = parseDouble(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Double", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Float.Type) throws -> Float {
-        guard let result = parseDouble(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Float", actual: value, location: location)
+        guard let result = parseDouble(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Float", actual: trimmedValue, location: location)
         }
         return Float(result)
     }
@@ -221,71 +226,71 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     func decode(_ type: Int.Type) throws -> Int {
-        guard let result = Int(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int", actual: value, location: location)
+        guard let result = Int(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Int", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int8.Type) throws -> Int8 {
-        guard let result = Int8(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value, location: location)
+        guard let result = Int8(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int16.Type) throws -> Int16 {
-        guard let result = Int16(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value, location: location)
+        guard let result = Int16(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int32.Type) throws -> Int32 {
-        guard let result = Int32(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value, location: location)
+        guard let result = Int32(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int64.Type) throws -> Int64 {
-        guard let result = Int64(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value, location: location)
+        guard let result = Int64(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt.Type) throws -> UInt {
-        guard let result = UInt(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value, location: location)
+        guard let result = UInt(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt8.Type) throws -> UInt8 {
-        guard let result = UInt8(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value, location: location)
+        guard let result = UInt8(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt16.Type) throws -> UInt16 {
-        guard let result = UInt16(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value, location: location)
+        guard let result = UInt16(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt32.Type) throws -> UInt32 {
-        guard let result = UInt32(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value, location: location)
+        guard let result = UInt32(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt64.Type) throws -> UInt64 {
-        guard let result = UInt64(value) else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value, location: location)
+        guard let result = UInt64(trimmedValue) else {
+            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: trimmedValue, location: location)
         }
         return result
     }
@@ -298,24 +303,24 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
 
         // Handle Decimal specially
         if type == Decimal.self {
-            guard let decimal = parseDecimal(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value, location: location)
+            guard let decimal = parseDecimal(trimmedValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: trimmedValue, location: location)
             }
             return decimal as! T
         }
 
         // Handle UUID specially
         if type == UUID.self {
-            guard let uuid = UUID(uuidString: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value, location: location)
+            guard let uuid = UUID(uuidString: trimmedValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "UUID", actual: trimmedValue, location: location)
             }
             return uuid as! T
         }
 
         // Handle URL specially
         if type == URL.self {
-            guard let url = URL(string: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "URL", actual: value, location: location)
+            guard let url = URL(string: trimmedValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "URL", actual: trimmedValue, location: location)
             }
             return url as! T
         }
@@ -325,26 +330,27 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     private func decodeDate() throws -> Date {
+        let dateValue = trimmedValue
         switch configuration.dateDecodingStrategy {
         case .deferredToDate:
-            throw CSVDecodingError.typeMismatch(expected: "Date (use a date strategy)", actual: value, location: location)
+            throw CSVDecodingError.typeMismatch(expected: "Date (use a date strategy)", actual: dateValue, location: location)
 
         case .secondsSince1970:
-            guard let seconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value, location: location)
+            guard let seconds = Double(dateValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: dateValue, location: location)
             }
             return Date(timeIntervalSince1970: seconds)
 
         case .millisecondsSince1970:
-            guard let milliseconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value, location: location)
+            guard let milliseconds = Double(dateValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: dateValue, location: location)
             }
             return Date(timeIntervalSince1970: milliseconds / 1000)
 
         case .iso8601:
             let formatter = ISO8601DateFormatter()
-            guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value, location: location)
+            guard let date = formatter.date(from: dateValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: dateValue, location: location)
             }
             return date
 
@@ -353,40 +359,40 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             formatter.dateFormat = format
             formatter.locale = Locale.autoupdatingCurrent
             formatter.timeZone = TimeZone.autoupdatingCurrent
-            guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date with format \(format)", actual: value, location: location)
+            guard let date = formatter.date(from: dateValue) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date with format \(format)", actual: dateValue, location: location)
             }
             return date
 
         case .custom(let closure):
-            return try closure(value)
+            return try closure(dateValue)
 
         case .flexible:
-            guard let date = parseFlexibleDate(value, hint: nil) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
+            guard let date = parseFlexibleDate(dateValue, hint: nil) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: dateValue, location: location)
             }
             return date
 
         case .flexibleWithHint(let preferred):
-            guard let date = parseFlexibleDate(value, hint: preferred) else {
-                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: value, location: location)
+            guard let date = parseFlexibleDate(dateValue, hint: preferred) else {
+                throw CSVDecodingError.typeMismatch(expected: "Date (no matching format found)", actual: dateValue, location: location)
             }
             return date
 
         case .localeAware(let locale, let style):
             if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                if let date = LocaleUtilities.parseDate(value, locale: locale, style: style) {
+                if let date = LocaleUtilities.parseDate(dateValue, locale: locale, style: style) {
                     return date
                 }
                 // Fall back to flexible parsing if locale-aware fails
-                if let date = parseFlexibleDate(value, hint: nil) {
+                if let date = parseFlexibleDate(dateValue, hint: nil) {
                     return date
                 }
-                throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: value, location: location)
+                throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: dateValue, location: location)
             } else {
                 // Pre-iOS 15: use flexible parsing
-                guard let date = parseFlexibleDate(value, hint: nil) else {
-                    throw CSVDecodingError.typeMismatch(expected: "Date", actual: value, location: location)
+                guard let date = parseFlexibleDate(dateValue, hint: nil) else {
+                    throw CSVDecodingError.typeMismatch(expected: "Date", actual: dateValue, location: location)
                 }
                 return date
             }

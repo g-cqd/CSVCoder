@@ -97,6 +97,19 @@ let config = CSVDecoder.Configuration(
 )
 ```
 
+### Whitespace Handling
+
+By default, CSVCoder trims leading and trailing whitespace from all field values:
+
+```swift
+// CSV: " Toyota , 2024 " becomes "Toyota" and 2024
+let decoder = CSVDecoder()  // trimWhitespace defaults to true
+
+// Preserve whitespace if needed
+let config = CSVDecoder.Configuration(trimWhitespace: false)
+let decoder = CSVDecoder(configuration: config)
+```
+
 ## Topics
 
 ### Next Steps
