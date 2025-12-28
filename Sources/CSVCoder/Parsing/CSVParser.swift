@@ -7,8 +7,39 @@
 
 import Foundation
 
-/// A view into a single CSV row within the raw buffer.
-/// Does not hold copies of data, only offsets.
+// MARK: - CSVRowView
+
+/// A zero-copy view into a single CSV row within a raw UTF-8 buffer.
+///
+/// `CSVRowView` provides efficient access to field data without allocating copies.
+/// It stores byte offsets and lengths rather than string values, enabling
+/// high-performance parsing of large CSV files.
+///
+/// ## Thread Safety
+///
+/// `CSVRowView` is **not** `Sendable` because it references a borrowed buffer
+/// that must remain valid for the view's lifetime. Always use within the closure
+/// scope of ``CSVParser/parse(data:delimiter:body:)``.
+///
+/// ## Usage
+///
+/// ```swift
+/// CSVParser.parse(data: csvData) { parser in
+///     for row in parser {
+///         for i in 0..<row.count {
+///             if let value = row.string(at: i) {
+///                 print(value)
+///             }
+///         }
+///     }
+/// }
+/// ```
+///
+/// ## Performance Notes
+///
+/// - Field access via ``string(at:)`` is O(1) for unquoted fields
+/// - Quoted fields with escaped quotes (`""`) require O(n) unescaping
+/// - Use ``getBytes(at:)`` for maximum performance when UTF-8 bytes suffice
 public struct CSVRowView {
     /// Reference to the full buffer (owned elsewhere).
     public let buffer: UnsafeBufferPointer<UInt8>
@@ -33,16 +64,34 @@ public struct CSVRowView {
 
     /// The number of fields in this row.
     public var count: Int { fieldStarts.count }
-    
-    /// Access raw bytes for a field.
+
+    /// Returns the raw UTF-8 bytes for the field at the given index.
+    ///
+    /// This method provides zero-copy access to field data, useful when
+    /// you need to perform custom parsing or validation without allocating strings.
+    ///
+    /// - Parameter index: The zero-based field index.
+    /// - Returns: A buffer pointer to the field's UTF-8 bytes, or an empty buffer if out of bounds.
+    /// - Complexity: O(1)
+    ///
+    /// - Warning: The returned buffer is only valid while the parent `CSVParser`'s
+    ///   data remains in scope. Do not store the buffer beyond the parsing closure.
     public func getBytes(at index: Int) -> UnsafeBufferPointer<UInt8> {
         let start = fieldStarts[index]
         let length = fieldLengths[index]
         guard start + length <= buffer.count else { return UnsafeBufferPointer(start: nil, count: 0) }
         return UnsafeBufferPointer(start: buffer.baseAddress?.advanced(by: start), count: length)
     }
-    
-    /// decode a string from a field.
+
+    /// Decodes and returns the string value for the field at the given index.
+    ///
+    /// Handles RFC 4180 quote unescaping automatically:
+    /// - Quoted fields have outer quotes stripped
+    /// - Escaped quotes (`""`) are converted to single quotes (`"`)
+    ///
+    /// - Parameter index: The zero-based field index.
+    /// - Returns: The decoded string value, or `nil` if the index is out of bounds.
+    /// - Complexity: O(1) for unquoted fields; O(n) for quoted fields with escaped quotes.
     public func string(at index: Int) -> String? {
         guard index < fieldStarts.count else { return nil }
         
@@ -76,11 +125,67 @@ public struct CSVRowView {
     }
 }
 
-/// A zero-copy parser that iterates over rows.
+// MARK: - CSVParser
+
+/// A high-performance, zero-copy CSV parser operating directly on UTF-8 bytes.
+///
+/// `CSVParser` implements RFC 4180 compliant parsing with SIMD acceleration
+/// for large fields. It produces ``CSVRowView`` instances that reference the
+/// original buffer without copying data.
+///
+/// ## Safe Usage Pattern
+///
+/// Always use the static ``parse(data:delimiter:body:)`` method to ensure
+/// buffer lifetime safety:
+///
+/// ```swift
+/// let results = CSVParser.parse(data: csvData) { parser in
+///     parser.map { row in
+///         row.string(at: 0) ?? ""
+///     }
+/// }
+/// ```
+///
+/// ## Direct Initialization
+///
+/// For advanced use cases where you manage buffer lifetime manually:
+///
+/// ```swift
+/// data.withUnsafeBytes { buffer in
+///     let parser = CSVParser(
+///         buffer: buffer.bindMemory(to: UInt8.self),
+///         delimiter: 0x2C  // comma
+///     )
+///     for row in parser {
+///         // Process row
+///     }
+/// }
+/// ```
+///
+/// ## RFC 4180 Compliance
+///
+/// The parser handles:
+/// - Quoted fields with embedded delimiters, newlines, and quotes
+/// - Escaped quotes (`""` → `"`)
+/// - Both LF and CRLF line endings
+/// - UTF-8 encoded content
+///
+/// ## Performance
+///
+/// - Uses SIMD acceleration for fields ≥64 bytes
+/// - Zero allocations during iteration (arrays allocated per-row for metadata)
+/// - O(n) parsing where n is the total byte count
+///
+/// ## Thread Safety
+///
+/// `CSVParser` and its iterator are not `Sendable`. The parser borrows
+/// the underlying buffer and must be used within the same isolation context.
 public struct CSVParser: Sequence {
 
+    /// The underlying UTF-8 byte buffer being parsed.
     public let buffer: UnsafeBufferPointer<UInt8>
 
+    /// The ASCII byte value of the field delimiter (default: comma `0x2C`).
     public let delimiter: UInt8
 
     // ASCII constants
@@ -88,7 +193,7 @@ public struct CSVParser: Sequence {
     fileprivate static let cr: UInt8 = 0x0D         // \r
     fileprivate static let lf: UInt8 = 0x0A         // \n
 
-    /// Safely parses CSV data within a closure scope.
+    /// Safely parses CSV data within a closure scope, ensuring buffer validity.
     /// This ensures the parser's underlying buffer remains valid during iteration.
     ///
     /// - Parameters:
@@ -110,19 +215,31 @@ public struct CSVParser: Sequence {
         }
     }
 
+    /// Creates a parser for the given buffer with the specified delimiter.
+    ///
+    /// - Parameters:
+    ///   - buffer: A pointer to UTF-8 encoded CSV data. The buffer must remain
+    ///     valid for the lifetime of the parser and any ``CSVRowView`` instances it produces.
+    ///   - delimiter: The ASCII byte value of the field delimiter (e.g., `0x2C` for comma).
+    ///
+    /// - Warning: Prefer using ``parse(data:delimiter:body:)`` unless you need
+    ///   manual buffer lifetime management.
     public init(buffer: UnsafeBufferPointer<UInt8>, delimiter: UInt8) {
         self.buffer = buffer
         self.delimiter = delimiter
     }
 
+    /// Creates an iterator for traversing CSV rows.
     public func makeIterator() -> Iterator {
         Iterator(parser: self)
     }
 
+    /// An iterator that produces ``CSVRowView`` instances for each row in the CSV data.
     public struct Iterator: IteratorProtocol {
         let parser: CSVParser
         var offset: Int = 0
 
+        /// Advances to and returns the next row, or `nil` if no more rows exist.
         public mutating func next() -> CSVRowView? {
             guard offset < parser.buffer.count else { return nil }
 
@@ -176,7 +293,14 @@ public struct CSVParser: Sequence {
         }
     }
 
-    /// Parses the buffer and returns an array of row views.
+    /// Parses the entire buffer and returns all rows as an array.
+    ///
+    /// This is a convenience method that collects all ``CSVRowView`` instances
+    /// into an array. For large files, consider iterating directly to avoid
+    /// holding all row metadata in memory simultaneously.
+    ///
+    /// - Returns: An array of ``CSVRowView`` instances, one per CSV row.
+    /// - Complexity: O(n) where n is the total byte count.
     public func parse() -> [CSVRowView] {
         var rows: [CSVRowView] = []
         for row in self {
@@ -185,7 +309,7 @@ public struct CSVParser: Sequence {
         return rows
     }
 
-    /// Result of parsing a single field.
+    /// Internal result type for single-field parsing.
     struct FieldResult {
         let start: Int
         let length: Int

@@ -7,11 +7,70 @@
 
 import Foundation
 
-/// An encoder that encodes Encodable types to CSV data.
-/// nonisolated utility class with immutable configuration
+// MARK: - CSVEncoder
+
+/// A type-safe encoder that converts `Encodable` values to CSV format.
+///
+/// `CSVEncoder` provides a familiar API similar to `JSONEncoder`, supporting
+/// configurable encoding strategies for dates, numbers, booleans, and nil values.
+///
+/// ## Basic Usage
+///
+/// ```swift
+/// struct Person: Codable {
+///     let name: String
+///     let age: Int
+/// }
+///
+/// let people = [Person(name: "Alice", age: 30), Person(name: "Bob", age: 25)]
+/// let encoder = CSVEncoder()
+/// let csv = try encoder.encodeToString(people)
+/// // name,age
+/// // Alice,30
+/// // Bob,25
+/// ```
+///
+/// ## Configuration
+///
+/// Customize encoding via ``Configuration``:
+///
+/// ```swift
+/// var config = CSVEncoder.Configuration()
+/// config.delimiter = ";"
+/// config.dateEncodingStrategy = .iso8601
+/// config.boolEncodingStrategy = .trueFalse
+///
+/// let encoder = CSVEncoder(configuration: config)
+/// ```
+///
+/// ## Thread Safety
+///
+/// `CSVEncoder` is `Sendable` and safe to share across actor boundaries.
+/// The encoder is stateless; all configuration is immutable after initialization.
+/// Multiple concurrent encodes can safely share the same encoder instance.
+///
+/// ## Performance
+///
+/// - SIMD-accelerated field escaping for fields ≥64 bytes
+/// - Buffered file output for large datasets
+/// - For streaming large sequences, use ``encode(_:to:bufferSize:)-8c2n1``
+///
+/// ## See Also
+///
+/// - ``CSVDecoder`` for decoding CSV to types
+/// - ``Configuration`` for available options
+/// - ``NestedTypeEncodingStrategy`` for handling nested objects
 public nonisolated final class CSVEncoder: Sendable {
 
-    /// Configuration for CSV encoding.
+    /// Configuration options for CSV encoding.
+    ///
+    /// All properties have sensible defaults. Customize only what you need:
+    ///
+    /// ```swift
+    /// var config = CSVEncoder.Configuration()
+    /// config.delimiter = "\t"  // Tab-separated
+    /// config.hasHeaders = false // Skip header row
+    /// ```
     public struct Configuration: Sendable {
         /// The delimiter character used to separate fields. Default is comma (,).
         public var delimiter: Character

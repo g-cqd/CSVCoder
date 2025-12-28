@@ -7,7 +7,28 @@
 
 import Foundation
 
-/// Location information for errors in CSV data.
+// MARK: - CSVLocation
+
+/// Precise location information for errors in CSV data.
+///
+/// `CSVLocation` provides detailed context for debugging decoding failures,
+/// including row numbers, column identifiers, coding paths, and available
+/// keys for generating helpful suggestions.
+///
+/// ## Usage
+///
+/// Access location information from ``CSVDecodingError`` via the ``CSVDecodingError/location`` property:
+///
+/// ```swift
+/// do {
+///     let items = try decoder.decode([Item].self, from: data)
+/// } catch let error as CSVDecodingError {
+///     if let location = error.location {
+///         print("Error at \(location)")
+///         // e.g., "row 5, column 'price', path: items.price"
+///     }
+/// }
+/// ```
 public struct CSVLocation: Sendable, Equatable, CustomStringConvertible {
     /// The 1-based row number in the CSV file.
     public let row: Int?
@@ -52,7 +73,39 @@ public struct CSVLocation: Sendable, Equatable, CustomStringConvertible {
     }
 }
 
-/// Errors that can occur during CSV decoding.
+// MARK: - CSVDecodingError
+
+/// Errors that occur during CSV decoding with intelligent suggestions.
+///
+/// `CSVDecodingError` provides detailed error information including:
+/// - Precise location (row, column, coding path)
+/// - Typo detection using edit distance for key mismatches
+/// - Context-aware suggestions for fixing common issues
+///
+/// ## Error Handling
+///
+/// ```swift
+/// do {
+///     let items = try decoder.decode([Item].self, from: data)
+/// } catch let error as CSVDecodingError {
+///     print(error.errorDescription ?? "Unknown error")
+///     if let suggestion = error.suggestion {
+///         print("Suggestion: \(suggestion)")
+///     }
+/// }
+/// ```
+///
+/// ## Intelligent Suggestions
+///
+/// The error system provides context-aware suggestions:
+/// - **Key not found**: Suggests similar column names using Levenshtein distance
+/// - **Type mismatch**: Suggests appropriate decoding strategies (e.g., `.flexible` for European numbers)
+/// - **Parsing errors**: Suggests delimiter or quote fixes
+///
+/// ## See Also
+///
+/// - ``CSVLocation`` for error position details
+/// - ``CSVDecoder/Configuration`` for strategy options
 public enum CSVDecodingError: Error, LocalizedError, Sendable {
     /// The data could not be decoded with the specified encoding.
     case invalidEncoding

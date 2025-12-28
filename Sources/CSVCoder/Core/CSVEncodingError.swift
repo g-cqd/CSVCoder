@@ -7,7 +7,35 @@
 
 import Foundation
 
-/// Errors that can occur during CSV encoding.
+// MARK: - CSVEncodingError
+
+/// Errors that occur during CSV encoding.
+///
+/// These errors indicate issues with the data being encoded, such as
+/// unsupported types or invalid values that cannot be represented in CSV format.
+///
+/// ## Common Causes
+///
+/// - **unsupportedType**: Nested collections or unhandled `Codable` types
+///   without a ``CSVEncoder/NestedTypeEncodingStrategy``
+/// - **invalidValue**: Values that cannot be converted to valid CSV strings
+/// - **missingKey**: Internal error when a key is unexpectedly absent
+///
+/// ## Handling Nested Types
+///
+/// By default, the encoder throws for nested types. Configure handling:
+///
+/// ```swift
+/// var config = CSVEncoder.Configuration()
+/// config.nestedTypeEncodingStrategy = .json  // Encode as JSON string
+/// // or
+/// config.nestedTypeEncodingStrategy = .flatten(separator: "_")
+/// ```
+///
+/// ## See Also
+///
+/// - ``CSVEncoder/NestedTypeEncodingStrategy``
+/// - ``CSVDecodingError`` for decode-side errors
 public enum CSVEncodingError: Error, LocalizedError, Sendable {
     /// The value could not be encoded to the expected type.
     case invalidValue(String)

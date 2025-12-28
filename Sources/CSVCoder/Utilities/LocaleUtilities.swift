@@ -7,13 +7,47 @@
 
 import Foundation
 
-/// Utilities for locale-aware value parsing.
+// MARK: - LocaleUtilities
+
+/// Internal utilities for locale-aware value parsing.
+///
+/// `LocaleUtilities` provides parsing capabilities that adapt to regional number
+/// and date formats. It leverages Foundation's `FormatStyle.ParseStrategy` for
+/// comprehensive locale support across 300+ locales.
+///
+/// ## Supported Features
+///
+/// - **Number Parsing**: Handles US (`1,234.56`) and EU (`1.234,56`) formats
+/// - **Currency Stripping**: Removes all known currency symbols before parsing
+/// - **Unit Stripping**: Removes common measurement units (km, lbs, etc.)
+/// - **Date Parsing**: Locale-aware date interpretation (DD/MM vs MM/DD)
+///
+/// ## Usage
+///
+/// These utilities are used internally by ``CSVDecoder`` when configured with
+/// locale-aware decoding strategies:
+///
+/// ```swift
+/// var config = CSVDecoder.Configuration()
+/// config.numberDecodingStrategy = .parseStrategy(locale: .current)
+/// config.dateDecodingStrategy = .localeAware(locale: .current, style: .numeric)
+/// ```
+///
+/// ## Thread Safety
+///
+/// All methods are thread-safe. The `allCurrencySymbols` set is lazily computed
+/// once and cached for subsequent access.
 enum LocaleUtilities {
 
     // MARK: - Currency Symbol Enumeration
 
     /// All known currency symbols from system locales.
-    /// Lazily computed and cached for performance.
+    ///
+    /// This set is lazily computed on first access by iterating all available
+    /// locale identifiers. Includes both symbols (€, $, £) and common codes
+    /// (USD, EUR, GBP).
+    ///
+    /// - Note: Cached after first computation for O(1) subsequent access.
     static let allCurrencySymbols: Set<String> = {
         var symbols = Set<String>()
         for identifier in Locale.availableIdentifiers {

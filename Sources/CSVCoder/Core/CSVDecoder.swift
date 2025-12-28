@@ -7,10 +7,87 @@
 
 import Foundation
 
-/// A decoder that decodes CSV data into Decodable types.
+// MARK: - CSVDecoder
+
+/// A type-safe decoder that converts CSV data to `Decodable` types.
+///
+/// `CSVDecoder` provides a familiar API similar to `JSONDecoder`, with rich
+/// configuration options for dates, numbers, booleans, key transformations,
+/// and locale-aware parsing.
+///
+/// ## Basic Usage
+///
+/// ```swift
+/// struct Person: Codable {
+///     let name: String
+///     let age: Int
+/// }
+///
+/// let csv = """
+/// name,age
+/// Alice,30
+/// Bob,25
+/// """
+///
+/// let decoder = CSVDecoder()
+/// let people: [Person] = try decoder.decode(from: csv)
+/// ```
+///
+/// ## Configuration
+///
+/// Customize decoding via ``Configuration``:
+///
+/// ```swift
+/// var config = CSVDecoder.Configuration()
+/// config.delimiter = ";"
+/// config.dateDecodingStrategy = .flexible
+/// config.keyDecodingStrategy = .convertFromSnakeCase
+///
+/// let decoder = CSVDecoder(configuration: config)
+/// ```
+///
+/// ## Thread Safety
+///
+/// `CSVDecoder` is `Sendable` and safe to share across actor boundaries.
+/// The decoder is stateless; all configuration is immutable after initialization.
+/// Multiple concurrent decodes can safely share the same decoder instance.
+///
+/// ## Performance
+///
+/// - Zero-copy parsing using ``CSVParser`` for UTF-8 data
+/// - SIMD-accelerated field scanning for large files
+/// - Streaming and parallel decoding extensions available
+///
+/// ## RFC 4180 Compliance
+///
+/// Supports both lenient (default) and strict parsing modes. Lenient mode
+/// tolerates minor violations; strict mode enforces full compliance with
+/// detailed error locations.
+///
+/// ## See Also
+///
+/// - ``CSVEncoder`` for encoding types to CSV
+/// - ``Configuration`` for available options
+/// - ``CSVParser`` for low-level parsing
 public final class CSVDecoder: Sendable {
 
-    /// Configuration for CSV parsing.
+    /// Configuration options for CSV decoding.
+    ///
+    /// All properties have sensible defaults. Customize only what you need:
+    ///
+    /// ```swift
+    /// var config = CSVDecoder.Configuration()
+    /// config.delimiter = "\t"  // Tab-separated
+    /// config.trimWhitespace = false
+    /// ```
+    ///
+    /// ## Configuration Priority
+    ///
+    /// Header resolution follows this precedence:
+    /// 1. ``indexMapping`` - Explicit column index → property name mapping
+    /// 2. ``hasHeaders`` with ``keyDecodingStrategy`` - Transform header names
+    /// 3. `CSVIndexedDecodable` conformance - Use type's `CodingKeys` order
+    /// 4. Generated column names (`column0`, `column1`, ...)
     public struct Configuration: Sendable {
         /// The delimiter character used to separate fields. Default is comma (,).
         public var delimiter: Character
