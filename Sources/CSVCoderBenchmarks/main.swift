@@ -2,6 +2,56 @@ import Benchmark
 import CSVCoder
 import Foundation
 
+print("Starting Benchmark Registration...")
+
+// MARK: - Raw CSVParser Benchmarks (No Codable Overhead)
+// Defined early to ensure registration
+
+benchmark("Raw Parse 1M rows (Iterate Only)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        var count = 0
+        for _ in parser {
+            count += 1
+        }
+        precondition(count == 1_000_001)
+    }
+}
+
+benchmark("Raw Parse 1M rows (Iterate + String)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        for row in parser {
+            _ = row.string(at: 0)
+            _ = row.string(at: 1)
+            _ = row.string(at: 2)
+        }
+    }
+}
+
+benchmark("Raw Parse 100K Quoted Rows (Iterate Only)") {
+    quoted100KData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        var count = 0
+        for _ in parser {
+            count += 1
+        }
+        precondition(count == 100_001)
+    }
+}
+
+benchmark("Raw Parse 100K Quoted Rows (Iterate + String)") {
+    quoted100KData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        for row in parser {
+            _ = row.string(at: 0)
+            _ = row.string(at: 1) // "Item X" (quoted)
+            _ = row.string(at: 2) // Description (quoted with internal quotes)
+            _ = row.string(at: 3) // Int
+        }
+    }
+}
+
 // MARK: - Test Data
 
 struct SimpleRecord: Codable, Sendable {
@@ -100,6 +150,9 @@ let complex10KData = Data(complex10K.utf8)
 // Quoted dataset (10K rows)
 let quoted10K = generateQuotedCSV(rows: 10_000)
 let quoted10KData = Data(quoted10K.utf8)
+
+let quoted100K = generateQuotedCSV(rows: 100_000)
+let quoted100KData = Data(quoted100K.utf8)
 
 // Wide dataset (10K rows, 50 columns)
 let wide50Col10K = generateWideCSV(rows: 10_000, columns: 50)
@@ -411,7 +464,7 @@ benchmark("Decode 100K from file (parallel)") {
 
 // Parallel encode to file
 benchmark("Encode 100K to file (parallel)") {
-    _ = try runAsync { () -> Bool in
+    _ = try runAsync {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
         let encoder = CSVEncoder()
@@ -420,5 +473,54 @@ benchmark("Encode 100K to file (parallel)") {
         return true
     }
 }
+
+// MARK: - Raw CSVParser Benchmarks (No Codable Overhead)
+
+benchmark("Raw Parse 1M rows (Iterate Only)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        var count = 0
+        for _ in parser {
+            count += 1
+        }
+        precondition(count == 1_000_001)
+    }
+}
+
+benchmark("Raw Parse 1M rows (Iterate + String)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        for row in parser {
+            _ = row.string(at: 0)
+            _ = row.string(at: 1)
+            _ = row.string(at: 2)
+        }
+    }
+}
+
+benchmark("Raw Parse 100K Quoted Rows (Iterate Only)") {
+    quoted100KData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        var count = 0
+        for _ in parser {
+            count += 1
+        }
+        precondition(count == 100_001)
+    }
+}
+
+benchmark("Raw Parse 100K Quoted Rows (Iterate + String)") {
+    quoted100KData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        for row in parser {
+            _ = row.string(at: 0)
+            _ = row.string(at: 1) // "Item X" (quoted)
+            _ = row.string(at: 2) // Description (quoted with internal quotes)
+            _ = row.string(at: 3) // Int
+        }
+    }
+}
+
+print("Registering Raw Benchmarks completed.")
 
 Benchmark.main()

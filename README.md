@@ -410,6 +410,40 @@ Benchmark results on Apple Silicon (M-series):
 
 *Parallel decoding has overhead for smaller files. Benefits appear with larger datasets (1M+ rows) or complex parsing.
 
+### Raw High-Performance API (Codable Bypass)
+
+For performance-critical tasks (pre-processing, filtering, or massive datasets), you can bypass `Codable` overhead entirely using the zero-copy `CSVParser` API. This achieves **2.5x to 3x higher throughput** (~670K rows/s).
+
+**Safe Usage:**
+Use the `CSVParser.parse(data:)` wrapper to ensure memory safety.
+
+```swift
+let data = Data(contentsOf: bigFile)
+
+// Count rows where age > 18
+let count = try CSVParser.parse(data: data) { parser in
+    var validCount = 0
+    for row in parser {
+        // 'row' is a zero-allocation View
+        // Access fields by index (0-based)
+        if let ageStr = row.string(at: 1), let age = Int(ageStr), age > 18 {
+            validCount += 1
+        }
+    }
+    return validCount
+}
+```
+
+This approach avoids allocating `struct` or `class` instances for every row, drastically reducing ARC traffic.
+
+#### Raw API Benchmarks (1M Rows)
+
+| Benchmark | Time | Throughput | Speedup vs Codable |
+|-----------|------|------------|-------------------|
+| Raw Parse (Iterate Only) | 1.49 s | **~670K rows/s** | **2.6x** |
+| Raw Parse (Iterate + String) | 1.54 s | **~650K rows/s** | **2.5x** |
+| Raw Parse (Quoted Fields) | - | **~885K rows/s** | **2.8x** |
+
 ### Special Strategies (1K rows)
 
 | Benchmark | Time | Throughput |

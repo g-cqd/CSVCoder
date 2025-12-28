@@ -2048,4 +2048,32 @@ struct CSVDecoderTests {
         #expect(records[0].address.street == "123 \"Quoted\" St, Apt 5")
         #expect(records[0].address.city == "New\nYork")
     }
+
+    @Test("Safe parser wrapper prevents escaping")
+    func safeParserWrapper() throws {
+        let csv = """
+        name,age
+        Alice,30
+        Bob,25
+        """
+        let data = Data(csv.utf8)
+
+        // Count rows safely
+        let rowCount = try CSVParser.parse(data: data) { parser in
+            parser.reduce(0) { count, _ in count + 1 }
+        }
+        #expect(rowCount == 3) // header + 2 rows
+
+        // Extract values safely
+        let names = try CSVParser.parse(data: data) { parser -> [String] in
+            var results: [String] = []
+            for row in parser {
+                if let name = row.string(at: 0) {
+                    results.append(name)
+                }
+            }
+            return results
+        }
+        #expect(names == ["name", "Alice", "Bob"])
+    }
 }
