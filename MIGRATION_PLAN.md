@@ -34,9 +34,10 @@ Migrate from hardcoded parsing logic to Foundation's locale-aware FormatStyle/Pa
 - [x] Rationale: CSVCoder strategies work at decode time; normalizer works pre-decode
 - [ ] Future: Consider exposing LocaleUtilities for direct use (lower priority)
 
-### 2.2 FuelioCSVReader Update
-- [ ] Use new `.parseStrategy` or `.currency` strategy
-- [ ] Use new `.localeAware` date strategy
+### 2.2 FuelioCSVReader Assessment
+- [x] Analyzed: Fuelio has well-defined format (yyyy-MM-dd dates, standard numbers)
+- [x] Decision: Keep current `.flexible`/`.formatted` strategies - appropriate for fixed format
+- [x] Rationale: New locale-aware strategies benefit unknown/varying formats, not fixed ones
 
 ---
 
