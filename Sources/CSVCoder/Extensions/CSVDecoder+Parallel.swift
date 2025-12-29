@@ -8,11 +8,28 @@
 
 import Foundation
 
-// MARK: - Parallel Decoding Configuration
+// MARK: - CSVDecoder.ParallelConfiguration
 
-extension CSVDecoder {
+public extension CSVDecoder {
     /// Configuration for parallel decoding operations.
-    public struct ParallelConfiguration: Sendable {
+    struct ParallelConfiguration: Sendable {
+        // MARK: Lifecycle
+
+        /// Creates a parallel configuration with default values.
+        public init(
+            parallelism: Int = ProcessInfo.processInfo.activeProcessorCount,
+            chunkSize: Int = 1024 * 1024, // 1MB chunks
+            maxBufferedRows: Int = 10000,
+            preserveOrder: Bool = true,
+        ) {
+            self.parallelism = max(1, parallelism)
+            self.chunkSize = max(64 * 1024, chunkSize) // Minimum 64KB
+            self.maxBufferedRows = max(100, maxBufferedRows)
+            self.preserveOrder = preserveOrder
+        }
+
+        // MARK: Public
+
         /// Number of concurrent decoding tasks. Default uses all available processors.
         public var parallelism: Int
 
@@ -24,23 +41,10 @@ extension CSVDecoder {
 
         /// Whether to preserve original row order. Disabling may improve performance.
         public var preserveOrder: Bool
-
-        /// Creates a parallel configuration with default values.
-        public init(
-            parallelism: Int = ProcessInfo.processInfo.activeProcessorCount,
-            chunkSize: Int = 1024 * 1024, // 1MB chunks
-            maxBufferedRows: Int = 10_000,
-            preserveOrder: Bool = true
-        ) {
-            self.parallelism = max(1, parallelism)
-            self.chunkSize = max(64 * 1024, chunkSize) // Minimum 64KB
-            self.maxBufferedRows = max(100, maxBufferedRows)
-            self.preserveOrder = preserveOrder
-        }
     }
 }
 
-// MARK: - Chunk Boundary Detection
+// MARK: - CSVChunk
 
 /// Represents a chunk of CSV data with its boundaries.
 struct CSVChunk: Sendable {
@@ -50,17 +54,17 @@ struct CSVChunk: Sendable {
     let isFirstChunk: Bool
 }
 
+// MARK: - ChunkBoundaryFinder
+
 /// Finds safe chunk boundaries in CSV data, avoiding splits in quoted fields.
 struct ChunkBoundaryFinder: Sendable {
-    private static let quote: UInt8 = 0x22
-    private static let lf: UInt8 = 0x0A
-    private static let cr: UInt8 = 0x0D
+    // MARK: Internal
 
     /// Finds chunks in the given data, ensuring boundaries are at row ends.
     static func findChunks(
         in reader: MemoryMappedReader,
         targetChunkSize: Int,
-        skipHeader: Bool
+        skipHeader: Bool,
     ) -> [CSVChunk] {
         let totalSize = reader.count
         guard totalSize > 0 else { return [] }
@@ -97,7 +101,7 @@ struct ChunkBoundaryFinder: Sendable {
                 index: chunkIndex,
                 startOffset: currentOffset,
                 endOffset: targetEnd,
-                isFirstChunk: isFirst
+                isFirstChunk: isFirst,
             ))
 
             currentOffset = targetEnd
@@ -107,11 +111,17 @@ struct ChunkBoundaryFinder: Sendable {
         return chunks
     }
 
+    // MARK: Private
+
+    private static let quote: UInt8 = 0x22
+    private static let lf: UInt8 = 0x0A
+    private static let cr: UInt8 = 0x0D
+
     /// Finds the next row boundary after the given offset.
     private static func findNextRowBoundary(
         bytes: UnsafePointer<UInt8>,
         count: Int,
-        startingAt offset: Int
+        startingAt offset: Int,
     ) -> Int {
         var pos = offset
         var inQuotes = false
@@ -126,7 +136,7 @@ struct ChunkBoundaryFinder: Sendable {
                     return pos + 1
                 } else if byte == cr {
                     // CRLF or lone CR
-                    if pos + 1 < count && bytes[pos + 1] == lf {
+                    if pos + 1 < count, bytes[pos + 1] == lf {
                         return pos + 2
                     }
                     return pos + 1
@@ -143,7 +153,7 @@ struct ChunkBoundaryFinder: Sendable {
     private static func findSafeChunkBoundary(
         bytes: UnsafePointer<UInt8>,
         count: Int,
-        target: Int
+        target: Int,
     ) -> Int {
         // Scan backward to find quote state at target
         var inQuotes = false
@@ -153,7 +163,7 @@ struct ChunkBoundaryFinder: Sendable {
         let structuralPositions = SIMDScanner.scanStructural(
             buffer: bytes,
             count: min(target + 4096, count), // Scan slightly past target
-            delimiter: 0x2C
+            delimiter: 0x2C,
         )
 
         // Process structural positions to determine quote state at target
@@ -175,7 +185,7 @@ struct ChunkBoundaryFinder: Sendable {
                 if byte == lf {
                     return scanPos + 1
                 } else if byte == cr {
-                    if scanPos + 1 < count && bytes[scanPos + 1] == lf {
+                    if scanPos + 1 < count, bytes[scanPos + 1] == lf {
                         return scanPos + 2
                     }
                     return scanPos + 1
@@ -205,7 +215,7 @@ extension CSVDecoder {
     public func decodeParallel<T: Decodable & Sendable>(
         _ type: [T].Type,
         from url: URL,
-        parallelConfig: ParallelConfiguration = ParallelConfiguration()
+        parallelConfig: ParallelConfiguration = ParallelConfiguration(),
     ) async throws -> [T] {
         let reader = try MemoryMappedReader(url: url)
         return try await decodeParallel(type, reader: reader, parallelConfig: parallelConfig)
@@ -215,7 +225,7 @@ extension CSVDecoder {
     public func decodeParallel<T: Decodable & Sendable>(
         _ type: [T].Type,
         from data: Data,
-        parallelConfig: ParallelConfiguration = ParallelConfiguration()
+        parallelConfig: ParallelConfiguration = ParallelConfiguration(),
     ) async throws -> [T] {
         let reader = MemoryMappedReader(data: data)
         return try await decodeParallel(type, reader: reader, parallelConfig: parallelConfig)
@@ -224,11 +234,11 @@ extension CSVDecoder {
     private func decodeParallel<T: Decodable & Sendable>(
         _ type: [T].Type,
         reader: MemoryMappedReader,
-        parallelConfig: ParallelConfiguration
+        parallelConfig: ParallelConfiguration,
     ) async throws -> [T] {
         // Extract headers first
         let headers = try extractHeaders(from: reader)
-        
+
         // Build header map
         var headerMap: [String: Int] = [:]
         for (index, header) in headers.enumerated() {
@@ -239,13 +249,13 @@ extension CSVDecoder {
         let chunks = ChunkBoundaryFinder.findChunks(
             in: reader,
             targetChunkSize: parallelConfig.chunkSize,
-            skipHeader: configuration.hasHeaders
+            skipHeader: configuration.hasHeaders,
         )
 
         guard !chunks.isEmpty else { return [] }
 
         // Decode chunks in parallel
-        let config = self.configuration
+        let config = configuration
 
         if parallelConfig.preserveOrder {
             return try await decodeChunksOrdered(
@@ -254,7 +264,7 @@ extension CSVDecoder {
                 headers: headers,
                 headerMap: headerMap,
                 config: config,
-                parallelism: parallelConfig.parallelism
+                parallelism: parallelConfig.parallelism,
             )
         } else {
             return try await decodeChunksUnordered(
@@ -263,17 +273,17 @@ extension CSVDecoder {
                 headers: headers,
                 headerMap: headerMap,
                 config: config,
-                parallelism: parallelConfig.parallelism
+                parallelism: parallelConfig.parallelism,
             )
         }
     }
 
     private func extractHeaders(from reader: MemoryMappedReader) throws -> [String] {
-        return reader.withUnsafeBytes { buffer -> [String] in
+        reader.withUnsafeBytes { buffer -> [String] in
             guard let baseAddress = buffer.baseAddress else { return [] }
             let bytes = UnsafeBufferPointer(
                 start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                count: reader.count
+                count: reader.count,
             )
 
             // Handle UTF-8 BOM
@@ -281,7 +291,7 @@ extension CSVDecoder {
 
             let adjustedBytes = UnsafeBufferPointer(
                 start: bytes.baseAddress?.advanced(by: startOffset),
-                count: bytes.count - startOffset
+                count: bytes.count - startOffset,
             )
 
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
@@ -295,7 +305,7 @@ extension CSVDecoder {
             // Extract strings from CSVRowView
             var rawHeaders: [String] = []
             rawHeaders.reserveCapacity(firstRow.count)
-            for i in 0..<firstRow.count {
+            for i in 0 ..< firstRow.count {
                 if let s = firstRow.string(at: i) {
                     rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
                 } else {
@@ -307,7 +317,7 @@ extension CSVDecoder {
             return resolveHeaders(
                 rawHeaders: rawHeaders,
                 columnOrder: nil,
-                columnCount: firstRow.count
+                columnCount: firstRow.count,
             )
         }
     }
@@ -318,7 +328,7 @@ extension CSVDecoder {
         headers: [String],
         headerMap: [String: Int],
         config: Configuration,
-        parallelism: Int
+        parallelism: Int,
     ) async throws -> [T] {
         // Use TaskGroup with indexed results for ordering
         typealias ChunkResult = (index: Int, values: [T])
@@ -339,7 +349,7 @@ extension CSVDecoder {
                         reader: reader,
                         headers: headers,
                         headerMap: headerMap,
-                        config: config
+                        config: config,
                     )
                     return (chunk.index, values)
                 }
@@ -356,7 +366,7 @@ extension CSVDecoder {
                             reader: reader,
                             headers: headers,
                             headerMap: headerMap,
-                            config: config
+                            config: config,
                         )
                         return (nextChunk.index, values)
                     }
@@ -367,7 +377,7 @@ extension CSVDecoder {
         }
 
         // Sort by chunk index and flatten
-        return results.sorted { $0.index < $1.index }.flatMap { $0.values }
+        return results.sorted { $0.index < $1.index }.flatMap(\.values)
     }
 
     private func decodeChunksUnordered<T: Decodable & Sendable>(
@@ -376,7 +386,7 @@ extension CSVDecoder {
         headers: [String],
         headerMap: [String: Int],
         config: Configuration,
-        parallelism: Int
+        parallelism: Int,
     ) async throws -> [T] {
         // Unordered collection for maximum throughput
         var allValues: [T] = []
@@ -392,7 +402,7 @@ extension CSVDecoder {
                         reader: reader,
                         headers: headers,
                         headerMap: headerMap,
-                        config: config
+                        config: config,
                     )
                 }
                 activeTasks += 1
@@ -407,7 +417,7 @@ extension CSVDecoder {
                             reader: reader,
                             headers: headers,
                             headerMap: headerMap,
-                            config: config
+                            config: config,
                         )
                     }
                 }
@@ -422,35 +432,35 @@ extension CSVDecoder {
         reader: MemoryMappedReader,
         headers: [String],
         headerMap: [String: Int],
-        config: Configuration
+        config: Configuration,
     ) throws -> [T] {
-        return try reader.withUnsafeBytes { buffer in
+        try reader.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return [] }
             let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
-            
+
             // Create a view into the chunk
             let chunkBytes = UnsafeBufferPointer(
                 start: bytes.advanced(by: chunk.startOffset),
-                count: chunk.endOffset - chunk.startOffset
+                count: chunk.endOffset - chunk.startOffset,
             )
-            
+
             let delimiter = config.delimiter.asciiValue ?? 0x2C
             let parser = CSVParser(buffer: chunkBytes, delimiter: delimiter)
             let rows = parser.parse()
-            
+
             // Decode rows
             var results: [T] = []
             results.reserveCapacity(rows.count)
-            
+
             for (index, rowView) in rows.enumerated() {
                 let decoder = CSVRowDecoder(
                     view: rowView,
                     headerMap: headerMap,
                     configuration: config,
                     codingPath: [],
-                    rowIndex: chunk.index * 1000 + index // Approximate row index
+                    rowIndex: chunk.index * 1000 + index, // Approximate row index
                 )
-                results.append(try T(from: decoder))
+                try results.append(T(from: decoder))
             }
             return results
         }
@@ -459,7 +469,7 @@ extension CSVDecoder {
 
 // MARK: - Parallel Streaming Extension
 
-extension CSVDecoder {
+public extension CSVDecoder {
     /// Decodes CSV data in parallel, yielding batches of decoded values.
     /// Provides backpressure through AsyncThrowingStream buffering.
     ///
@@ -468,17 +478,17 @@ extension CSVDecoder {
     ///   - url: The file URL to read CSV data from.
     ///   - parallelConfig: Configuration for parallel processing.
     /// - Returns: An AsyncThrowingStream yielding arrays of decoded values (batches).
-    public func decodeParallelBatched<T: Decodable & Sendable>(
+    func decodeParallelBatched<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
-        parallelConfig: ParallelConfiguration = ParallelConfiguration()
+        parallelConfig: ParallelConfiguration = ParallelConfiguration(),
     ) -> AsyncThrowingStream<[T], Error> {
         AsyncThrowingStream { continuation in
             Task {
                 do {
                     let reader = try MemoryMappedReader(url: url)
                     let headers = try self.extractHeaders(from: reader)
-                    
+
                     let headerMap = headers.enumerated().reduce(into: [String: Int]()) { result, element in
                         result[element.element] = element.offset
                     }
@@ -486,7 +496,7 @@ extension CSVDecoder {
                     let chunks = ChunkBoundaryFinder.findChunks(
                         in: reader,
                         targetChunkSize: parallelConfig.chunkSize,
-                        skipHeader: self.configuration.hasHeaders
+                        skipHeader: self.configuration.hasHeaders,
                     )
 
                     let config = self.configuration
@@ -507,7 +517,7 @@ extension CSVDecoder {
                                     reader: reader,
                                     headers: headers,
                                     headerMap: headerMap,
-                                    config: config
+                                    config: config,
                                 )
                                 return (chunk.index, values)
                             }
@@ -534,7 +544,7 @@ extension CSVDecoder {
                                         reader: reader,
                                         headers: headers,
                                         headerMap: headerMap,
-                                        config: config
+                                        config: config,
                                     )
                                     return (nextChunk.index, values)
                                 }

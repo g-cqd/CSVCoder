@@ -29,7 +29,7 @@ extension CSVDecoder {
     /// ```
     public func decode<T: Decodable & Sendable>(
         _ type: T.Type,
-        from url: URL
+        from url: URL,
     ) -> AsyncThrowingStream<T, Error> {
         // Runtime detection of CSVIndexedDecodable conformance
         let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
@@ -48,7 +48,7 @@ extension CSVDecoder {
     /// - Returns: An `AsyncThrowingStream` that yields decoded values one at a time.
     public func decode<T: Decodable & Sendable>(
         _ type: T.Type,
-        from data: Data
+        from data: Data,
     ) -> AsyncThrowingStream<T, Error> {
         // Runtime detection of CSVIndexedDecodable conformance
         let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
@@ -70,7 +70,7 @@ extension CSVDecoder {
     ///   to avoid loading all records into memory.
     public func decode<T: Decodable & Sendable>(
         _ type: [T].Type,
-        from url: URL
+        from url: URL,
     ) async throws -> [T] {
         var results: [T] = []
         for try await value in decode(T.self, from: url) {
@@ -84,7 +84,7 @@ extension CSVDecoder {
     private func streamDecode<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
-        columnOrder: [String]?
+        columnOrder: [String]?,
     ) -> AsyncThrowingStream<T, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -97,11 +97,11 @@ extension CSVDecoder {
             }
         }
     }
-    
+
     private func decodeFromReader<T: Decodable & Sendable>(
         _ reader: MemoryMappedReader,
         columnOrder: [String]?,
-        continuation: AsyncThrowingStream<T, Error>.Continuation
+        continuation: AsyncThrowingStream<T, Error>.Continuation,
     ) throws {
         reader.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else {
@@ -112,7 +112,7 @@ extension CSVDecoder {
             // Handle UTF-8 BOM
             let rawBytes = UnsafeBufferPointer(
                 start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                count: buffer.count
+                count: buffer.count,
             )
             let startOffset = CSVUtilities.bomOffset(in: rawBytes)
 
@@ -133,19 +133,31 @@ extension CSVDecoder {
             while let rowView = iterator.next() {
                 // Check for unterminated quotes (always an error)
                 if rowView.hasUnterminatedQuote {
-                    continuation.finish(throwing: CSVDecodingError.parsingError("Unterminated quoted field", line: rowIndex + 1, column: nil))
+                    continuation.finish(throwing: CSVDecodingError.parsingError(
+                        "Unterminated quoted field",
+                        line: rowIndex + 1,
+                        column: nil,
+                    ))
                     return
                 }
 
                 // Strict mode: reject quotes in unquoted fields
-                if isStrict && rowView.hasQuoteInUnquotedField {
-                    continuation.finish(throwing: CSVDecodingError.parsingError("Quote character in unquoted field (RFC 4180 violation)", line: rowIndex + 1, column: nil))
+                if isStrict, rowView.hasQuoteInUnquotedField {
+                    continuation.finish(throwing: CSVDecodingError.parsingError(
+                        "Quote character in unquoted field (RFC 4180 violation)",
+                        line: rowIndex + 1,
+                        column: nil,
+                    ))
                     return
                 }
 
                 // Strict mode: validate field count
                 if isStrict, let expected = expectedFieldCount, rowView.count != expected {
-                    continuation.finish(throwing: CSVDecodingError.parsingError("Expected \(expected) fields but found \(rowView.count)", line: rowIndex + 1, column: nil))
+                    continuation.finish(throwing: CSVDecodingError.parsingError(
+                        "Expected \(expected) fields but found \(rowView.count)",
+                        line: rowIndex + 1,
+                        column: nil,
+                    ))
                     return
                 }
 
@@ -153,18 +165,18 @@ extension CSVDecoder {
                     // Extract potential headers
                     var firstRowStrings: [String] = []
                     firstRowStrings.reserveCapacity(rowView.count)
-                    for i in 0..<rowView.count {
+                    for i in 0 ..< rowView.count {
                         if let s = rowView.string(at: i) {
                             firstRowStrings.append(s)
                         } else {
                             firstRowStrings.append("column\(i)")
                         }
                     }
-                    
+
                     let resolvedHeaders = self.resolveHeaders(
                         rawHeaders: firstRowStrings,
                         columnOrder: columnOrder,
-                        columnCount: rowView.count
+                        columnCount: rowView.count,
                     )
                     headers = resolvedHeaders
 
@@ -174,23 +186,23 @@ extension CSVDecoder {
                         map[header] = index
                     }
                     headerMap = map
-                    
-                    if configuration.hasHeaders { 
+
+                    if configuration.hasHeaders {
                         rowIndex += 1
-                        continue 
+                        continue
                     }
                 }
-                
+
                 guard let map = headerMap else { continue }
-                
+
                 let decoder = CSVRowDecoder(
                     view: rowView,
                     headerMap: map,
                     configuration: configuration,
                     codingPath: [],
-                    rowIndex: rowIndex + 1
+                    rowIndex: rowIndex + 1,
                 )
-                
+
                 do {
                     let value = try T(from: decoder)
                     continuation.yield(value)
@@ -198,7 +210,7 @@ extension CSVDecoder {
                     continuation.finish(throwing: error)
                     return
                 }
-                
+
                 rowIndex += 1
             }
             continuation.finish()
@@ -208,7 +220,7 @@ extension CSVDecoder {
     private func streamDecode<T: Decodable & Sendable>(
         _ type: T.Type,
         from data: Data,
-        columnOrder: [String]?
+        columnOrder: [String]?,
     ) -> AsyncThrowingStream<T, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -221,5 +233,4 @@ extension CSVDecoder {
             }
         }
     }
-
 }

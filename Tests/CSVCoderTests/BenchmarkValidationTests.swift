@@ -1,12 +1,11 @@
-import Testing
 import CSVCoder
 import Foundation
+import Testing
 
 /// Validation tests for benchmark code.
 /// Ensures benchmark data generators and models work correctly.
 @Suite("Benchmark Validation")
 struct BenchmarkValidationTests {
-
     // MARK: - Test Data Models
 
     struct SimpleRecord: Codable, Sendable, Equatable {
@@ -88,7 +87,7 @@ struct BenchmarkValidationTests {
 
     func generateSimpleCSV(rows: Int) -> String {
         var csv = "name,age,score\n"
-        for i in 0..<rows {
+        for i in 0 ..< rows {
             csv += "Person\(i),\(20 + i % 50),\(Double(i) * 0.1)\n"
         }
         return csv
@@ -96,7 +95,7 @@ struct BenchmarkValidationTests {
 
     func generateComplexCSV(rows: Int) -> String {
         var csv = "id,firstName,lastName,email,age,salary,isActive,notes\n"
-        for i in 0..<rows {
+        for i in 0 ..< rows {
             csv += "\(i),John,Doe\(i),john\(i)@example.com,\(25 + i % 40),\(50000.0 + Double(i) * 100),\(i % 2 == 0),\"Some notes here with text\"\n"
         }
         return csv
@@ -104,7 +103,7 @@ struct BenchmarkValidationTests {
 
     func generateQuotedCSV(rows: Int) -> String {
         var csv = "name,description,value\n"
-        for i in 0..<rows {
+        for i in 0 ..< rows {
             csv += "\"Item \(i)\",\"A description with, commas and \"\"quotes\"\"\",\(i * 10)\n"
         }
         return csv
@@ -158,7 +157,7 @@ struct BenchmarkValidationTests {
 
     @Test("Encoding roundtrip")
     func encodingRoundtrip() throws {
-        let records = (0..<100).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+        let records = (0 ..< 100).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
 
         let encoder = CSVEncoder()
         let data = try encoder.encode(records)
@@ -208,13 +207,13 @@ struct BenchmarkValidationTests {
 
     @Test("Parallel encoding validation")
     func parallelEncodingValidation() async throws {
-        let records = (0..<1000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+        let records = (0 ..< 1000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
 
         let encoder = CSVEncoder()
         let config = CSVEncoder.ParallelEncodingConfiguration(chunkSize: 100)
         let data = try await encoder.encodeParallel(records, parallelConfig: config)
 
-        #expect(data.count > 0)
+        #expect(!data.isEmpty)
 
         // Verify the output is valid CSV
         let decoder = CSVDecoder()
@@ -224,20 +223,20 @@ struct BenchmarkValidationTests {
 
     @Test("Large dataset validation (10K rows)")
     func largeDatasetValidation() throws {
-        let csv = generateSimpleCSV(rows: 10_000)
+        let csv = generateSimpleCSV(rows: 10000)
         let data = Data(csv.utf8)
 
         let decoder = CSVDecoder()
         let records: [SimpleRecord] = try decoder.decode(from: data)
 
-        #expect(records.count == 10_000)
+        #expect(records.count == 10000)
     }
 
     @Test("Wide CSV validation (50 columns)")
     func wideCSVValidation() throws {
-        var csv = (0..<50).map { "col\($0)" }.joined(separator: ",") + "\n"
-        for i in 0..<100 {
-            csv += (0..<50).map { _ in "value\(i)" }.joined(separator: ",") + "\n"
+        var csv = (0 ..< 50).map { "col\($0)" }.joined(separator: ",") + "\n"
+        for i in 0 ..< 100 {
+            csv += (0 ..< 50).map { _ in "value\(i)" }.joined(separator: ",") + "\n"
         }
         let data = Data(csv.utf8)
 
@@ -260,7 +259,7 @@ struct BenchmarkValidationTests {
     func longFieldValidation() throws {
         let longValue = String(repeating: "x", count: 500)
         var csv = "id,data\n"
-        for i in 0..<100 {
+        for i in 0 ..< 100 {
             csv += "\(i),\(longValue)\n"
         }
         let data = Data(csv.utf8)
@@ -284,7 +283,7 @@ struct BenchmarkValidationTests {
             "Ελληνικά",
             "한국어",
             "中文测试",
-            "Émojis: 🚀🎉"
+            "Émojis: 🚀🎉",
         ]
 
         var csv = "id,text\n"
@@ -310,7 +309,7 @@ struct BenchmarkValidationTests {
     @Test("Stress quoted content validation")
     func stressQuotedContentValidation() throws {
         var csv = "id,content\n"
-        for i in 0..<10 {
+        for i in 0 ..< 10 {
             let content = "\"Field with \"\"nested quotes\"\", commas, and\nnewlines at row \(i)\""
             csv += "\(i),\(content)\n"
         }

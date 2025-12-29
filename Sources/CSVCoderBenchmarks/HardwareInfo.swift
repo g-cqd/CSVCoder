@@ -2,15 +2,6 @@ import Foundation
 
 /// System hardware and environment information for benchmark context
 struct HardwareInfo: Sendable {
-    let cpuModel: String
-    let cpuCores: Int
-    let cpuPerformanceCores: Int
-    let cpuEfficiencyCores: Int
-    let physicalMemoryGB: Double
-    let osVersion: String
-    let swiftVersion: String
-    let buildConfiguration: String
-
     static let current: HardwareInfo = {
         let processInfo = ProcessInfo.processInfo
 
@@ -40,20 +31,20 @@ struct HardwareInfo: Sendable {
 
         // Swift version from compiler
         #if swift(>=6.2)
-        let swiftVer = "6.2+"
+            let swiftVer = "6.2+"
         #elseif swift(>=6.1)
-        let swiftVer = "6.1"
+            let swiftVer = "6.1"
         #elseif swift(>=6.0)
-        let swiftVer = "6.0"
+            let swiftVer = "6.0"
         #else
-        let swiftVer = "5.x"
+            let swiftVer = "5.x"
         #endif
 
         // Build configuration
         #if DEBUG
-        let buildConfig = "Debug"
+            let buildConfig = "Debug"
         #else
-        let buildConfig = "Release"
+            let buildConfig = "Release"
         #endif
 
         return HardwareInfo(
@@ -64,9 +55,18 @@ struct HardwareInfo: Sendable {
             physicalMemoryGB: Double(processInfo.physicalMemory) / 1_073_741_824,
             osVersion: processInfo.operatingSystemVersionString,
             swiftVersion: swiftVer,
-            buildConfiguration: buildConfig
+            buildConfiguration: buildConfig,
         )
     }()
+
+    let cpuModel: String
+    let cpuCores: Int
+    let cpuPerformanceCores: Int
+    let cpuEfficiencyCores: Int
+    let physicalMemoryGB: Double
+    let osVersion: String
+    let swiftVersion: String
+    let buildConfiguration: String
 
     func printHeader() {
         let separator = String(repeating: "═", count: 72)

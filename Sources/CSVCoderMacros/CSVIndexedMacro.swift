@@ -6,8 +6,10 @@
 //
 
 import SwiftSyntax
-import SwiftSyntaxMacros
 import SwiftSyntaxBuilder
+import SwiftSyntaxMacros
+
+// MARK: - CSVIndexedMacroError
 
 /// Error types for macro diagnostics.
 public enum CSVIndexedMacroError: Error, CustomStringConvertible {
@@ -15,17 +17,23 @@ public enum CSVIndexedMacroError: Error, CustomStringConvertible {
     case noStoredProperties
     case existingCodingKeysNotCaseIterable
 
+    // MARK: Public
+
     public var description: String {
         switch self {
         case .notAStruct:
-            return "@CSVIndexed can only be applied to structs"
+            "@CSVIndexed can only be applied to structs"
+
         case .noStoredProperties:
-            return "@CSVIndexed requires at least one stored property"
+            "@CSVIndexed requires at least one stored property"
+
         case .existingCodingKeysNotCaseIterable:
-            return "Existing CodingKeys must conform to CaseIterable for @CSVIndexed"
+            "Existing CodingKeys must conform to CaseIterable for @CSVIndexed"
         }
     }
 }
+
+// MARK: - CSVIndexedMacro
 
 /// The @CSVIndexed macro generates CSVIndexedDecodable conformance.
 ///
@@ -34,6 +42,7 @@ public enum CSVIndexedMacroError: Error, CustomStringConvertible {
 /// - typealias CSVCodingKeys = CodingKeys
 /// - CSVIndexedDecodable and CSVIndexedEncodable conformance via extensions
 public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
+    // MARK: Public
 
     // MARK: - MemberMacro
 
@@ -41,7 +50,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
         conformingTo protocols: [TypeSyntax],
-        in context: some MacroExpansionContext
+        in context: some MacroExpansionContext,
     ) throws -> [DeclSyntax] {
         // Ensure we're attached to a struct
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
@@ -82,7 +91,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         attachedTo declaration: some DeclGroupSyntax,
         providingExtensionsOf type: some TypeSyntaxProtocol,
         conformingTo protocols: [TypeSyntax],
-        in context: some MacroExpansionContext
+        in context: some MacroExpansionContext,
     ) throws -> [ExtensionDeclSyntax] {
         // Generate extensions for protocol conformance
         let decodableExt = try ExtensionDeclSyntax("extension \(type): CSVIndexedDecodable {}")
@@ -91,12 +100,14 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         return [decodableExt, encodableExt]
     }
 
+    // MARK: Private
+
     // MARK: - Access Level Handling
 
     /// Access levels that can be applied to generated members.
     private enum AccessLevel: String {
         case `public` = "public "
-        case `open` = "open "
+        case open = "open "
         case `internal` = ""
         case `fileprivate` = "fileprivate "
         case `private` = "private "
@@ -108,14 +119,19 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
             switch modifier.name.tokenKind {
             case .keyword(.public):
                 return .public
+
             case .keyword(.open):
                 return .open
+
             case .keyword(.fileprivate):
                 return .fileprivate
+
             case .keyword(.private):
                 return .private
+
             case .keyword(.internal):
                 return .internal
+
             default:
                 continue
             }
@@ -131,7 +147,10 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     // MARK: - Helpers
 
     /// Extracts stored property names from a struct declaration.
-    private static func extractStoredProperties(from structDecl: StructDeclSyntax) -> [(name: String, customName: String?)] {
+    private static func extractStoredProperties(from structDecl: StructDeclSyntax) -> [(
+        name: String,
+        customName: String?,
+    )] {
         var properties: [(name: String, customName: String?)] = []
 
         for member in structDecl.memberBlock.members {
@@ -144,7 +163,8 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
                     switch accessor.accessors {
                     case .getter:
                         return true
-                    case .accessors(let list):
+
+                    case let .accessors(list):
                         return list.contains { $0.accessorSpecifier.tokenKind == .keyword(.get) }
                     }
                 }
@@ -171,17 +191,17 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     /// Extracts custom column name from @CSVColumn attribute if present.
     private static func extractCSVColumnName(from attributes: AttributeListSyntax) -> String? {
         for attribute in attributes {
-            guard case .attribute(let attr) = attribute else { continue }
+            guard case let .attribute(attr) = attribute else { continue }
             guard let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
                   identifier.name.text == "CSVColumn" else { continue }
 
             // Extract the argument
             if let arguments = attr.arguments,
-               case .argumentList(let argList) = arguments,
+               case let .argumentList(argList) = arguments,
                let firstArg = argList.first,
                let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self),
                let segment = stringLiteral.segments.first,
-               case .stringSegment(let stringSegment) = segment {
+               case let .stringSegment(stringSegment) = segment {
                 return stringSegment.content.text
             }
         }
@@ -200,7 +220,8 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     }
 
     /// Generates CodingKeys enum with CaseIterable conformance.
-    private static func generateCodingKeys(properties: [(name: String, customName: String?)], accessLevel: AccessLevel) -> DeclSyntax {
+    private static func generateCodingKeys(properties: [(name: String, customName: String?)],
+                                           accessLevel: AccessLevel) -> DeclSyntax {
         var casesCode = ""
         for (index, prop) in properties.enumerated() {
             if index > 0 { casesCode += "\n" }
@@ -212,12 +233,14 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         }
 
         return """
-            \(raw: accessLevel.rawValue)enum CodingKeys: String, CodingKey, CaseIterable {
-            \(raw: casesCode)
-            }
-            """
+        \(raw: accessLevel.rawValue)enum CodingKeys: String, CodingKey, CaseIterable {
+        \(raw: casesCode)
+        }
+        """
     }
 }
+
+// MARK: - CSVColumnMacro
 
 /// The @CSVColumn macro marks a property with a custom CSV column name.
 /// This is a peer macro that doesn't generate any code itself;
@@ -226,10 +249,10 @@ public struct CSVColumnMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
+        in context: some MacroExpansionContext,
     ) throws -> [DeclSyntax] {
         // This macro doesn't generate any code
         // It's just a marker that @CSVIndexed reads
-        return []
+        []
     }
 }

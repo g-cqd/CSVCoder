@@ -8,7 +8,7 @@
 
 import Foundation
 
-extension CSVEncoder {
+public extension CSVEncoder {
     // MARK: - Streaming to File
 
     /// Stream encodes values from an async sequence to a file.
@@ -31,10 +31,10 @@ extension CSVEncoder {
     /// }
     /// try await encoder.encode(records, to: fileURL)
     /// ```
-    public func encode<S: AsyncSequence>(
+    func encode<S: AsyncSequence>(
         _ values: S,
         to url: URL,
-        bufferSize: Int = 65_536
+        bufferSize: Int = 65536,
     ) async throws where S.Element: Encodable & Sendable {
         // Create or truncate the file
         FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -50,10 +50,10 @@ extension CSVEncoder {
     ///   - values: An async sequence of encodable values.
     ///   - handle: The file handle to write to.
     ///   - bufferSize: The write buffer size in bytes.
-    public func encode<S: AsyncSequence>(
+    func encode<S: AsyncSequence>(
         _ values: S,
         to handle: FileHandle,
-        bufferSize: Int = 65_536
+        bufferSize: Int = 65536,
     ) async throws where S.Element: Encodable & Sendable {
         var writer = BufferedCSVWriter(handle: handle, bufferSize: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
@@ -94,10 +94,10 @@ extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - url: The file URL to write to.
     ///   - bufferSize: The write buffer size in bytes.
-    public func encode<T: Encodable & Sendable>(
-        _ values: [T],
+    func encode(
+        _ values: [some Encodable & Sendable],
         to url: URL,
-        bufferSize: Int = 65_536
+        bufferSize: Int = 65536,
     ) async throws {
         let stream = AsyncStream { continuation in
             for value in values {
@@ -115,8 +115,8 @@ extension CSVEncoder {
     ///
     /// - Parameter values: An async sequence of encodable values.
     /// - Returns: An async throwing stream of CSV row strings.
-    public func encodeToStream<S: AsyncSequence>(
-        _ values: S
+    func encodeToStream<S: AsyncSequence>(
+        _ values: S,
     ) -> AsyncThrowingStream<String, Error> where S.Element: Encodable & Sendable, S: Sendable {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -158,7 +158,7 @@ extension CSVEncoder {
 
     /// Encodes a single value to an ordered dictionary.
     /// Returns both the dictionary and the key order.
-    func encodeValue<T: Encodable>(_ value: T) throws -> (row: [String: String], keys: [String]) {
+    internal func encodeValue(_ value: some Encodable) throws -> (row: [String: String], keys: [String]) {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try value.encode(to: encoder)
@@ -175,10 +175,10 @@ extension CSVEncoder {
     ///   - url: The file URL to write to.
     ///   - bufferSize: The write buffer size in bytes. Default is 64KB.
     /// - Throws: `CSVEncodingError` or `AsyncCSVWriterError` if encoding fails.
-    public func encodeAsync<S: AsyncSequence>(
+    func encodeAsync<S: AsyncSequence>(
         _ values: S,
         to url: URL,
-        bufferSize: Int = 65_536
+        bufferSize: Int = 65536,
     ) async throws where S.Element: Encodable & Sendable {
         let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
@@ -214,11 +214,11 @@ extension CSVEncoder {
     ///   - url: The file URL to write to.
     ///   - bufferSize: The write buffer size in bytes.
     ///   - progress: Handler called with (rowsWritten, bytesWritten) after each row.
-    public func encodeAsync<S: AsyncSequence>(
+    func encodeAsync<S: AsyncSequence>(
         _ values: S,
         to url: URL,
-        bufferSize: Int = 65_536,
-        progress: @Sendable @escaping (Int, Int) async -> Void
+        bufferSize: Int = 65536,
+        progress: @Sendable @escaping (Int, Int) async -> Void,
     ) async throws where S.Element: Encodable & Sendable {
         let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
@@ -244,7 +244,7 @@ extension CSVEncoder {
             try await writer.writeRow(rowBytes)
 
             rowCount += 1
-            await progress(rowCount, await writer.totalBytesWritten)
+            await progress(rowCount, writer.totalBytesWritten)
         }
 
         try await writer.close()
@@ -260,11 +260,11 @@ extension CSVEncoder {
     ///   - url: The file URL to write to.
     ///   - batchSize: Number of rows to buffer before writing. Default is 100.
     ///   - bufferSize: The write buffer size in bytes. Default is 64KB.
-    public func encodeBatched<S: AsyncSequence>(
+    func encodeBatched<S: AsyncSequence>(
         _ values: S,
         to url: URL,
         batchSize: Int = 100,
-        bufferSize: Int = 65_536
+        bufferSize: Int = 65536,
     ) async throws where S.Element: Encodable & Sendable {
         let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)

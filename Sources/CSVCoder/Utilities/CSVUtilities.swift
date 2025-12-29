@@ -8,7 +8,7 @@
 
 import Foundation
 
-// MARK: - BOM Handling & Encoding Utilities
+// MARK: - CSVUtilities
 
 /// Shared utilities for CSV operations.
 enum CSVUtilities {
@@ -35,7 +35,8 @@ enum CSVUtilities {
         guard bytes.count >= 3,
               bytes[0] == utf8BOM.0,
               bytes[1] == utf8BOM.1,
-              bytes[2] == utf8BOM.2 else {
+              bytes[2] == utf8BOM.2
+        else {
             return 0
         }
         return 3
@@ -51,7 +52,8 @@ enum CSVUtilities {
         guard count >= 3,
               baseAddress[0] == utf8BOM.0,
               baseAddress[1] == utf8BOM.1,
-              baseAddress[2] == utf8BOM.2 else {
+              baseAddress[2] == utf8BOM.2
+        else {
             return 0
         }
         return 3
@@ -65,28 +67,28 @@ enum CSVUtilities {
 
         // Check UTF-32 first (4-byte BOM, but first 2 bytes overlap with UTF-16 LE)
         if data.count >= 4 {
-            if data[0] == utf32LEBOM.0 && data[1] == utf32LEBOM.1 &&
-               data[2] == utf32LEBOM.2 && data[3] == utf32LEBOM.3 {
+            if data[0] == utf32LEBOM.0, data[1] == utf32LEBOM.1,
+               data[2] == utf32LEBOM.2, data[3] == utf32LEBOM.3 {
                 return (.utf32LittleEndian, 4)
             }
-            if data[0] == utf32BEBOM.0 && data[1] == utf32BEBOM.1 &&
-               data[2] == utf32BEBOM.2 && data[3] == utf32BEBOM.3 {
+            if data[0] == utf32BEBOM.0, data[1] == utf32BEBOM.1,
+               data[2] == utf32BEBOM.2, data[3] == utf32BEBOM.3 {
                 return (.utf32BigEndian, 4)
             }
         }
 
         // Check UTF-8 (3-byte BOM)
         if data.count >= 3 {
-            if data[0] == utf8BOM.0 && data[1] == utf8BOM.1 && data[2] == utf8BOM.2 {
+            if data[0] == utf8BOM.0, data[1] == utf8BOM.1, data[2] == utf8BOM.2 {
                 return (.utf8, 3)
             }
         }
 
         // Check UTF-16 (2-byte BOM)
-        if data[0] == utf16LEBOM.0 && data[1] == utf16LEBOM.1 {
+        if data[0] == utf16LEBOM.0, data[1] == utf16LEBOM.1 {
             return (.utf16LittleEndian, 2)
         }
-        if data[0] == utf16BEBOM.0 && data[1] == utf16BEBOM.1 {
+        if data[0] == utf16BEBOM.0, data[1] == utf16BEBOM.1 {
             return (.utf16BigEndian, 2)
         }
 
@@ -104,18 +106,30 @@ enum CSVUtilities {
     @inline(__always)
     static func isASCIICompatible(_ encoding: String.Encoding) -> Bool {
         switch encoding {
-        case .utf8, .ascii, .isoLatin1, .isoLatin2,
-             .windowsCP1250, .windowsCP1251, .windowsCP1252,
-             .windowsCP1253, .windowsCP1254,
-             .macOSRoman, .nextstep:
-            return true
-        case .utf16, .utf16BigEndian, .utf16LittleEndian,
-             .utf32, .utf32BigEndian, .utf32LittleEndian,
-             .unicode:
-            return false
+        case .ascii,
+             .isoLatin1,
+             .isoLatin2,
+             .macOSRoman,
+             .nextstep,
+             .utf8,
+             .windowsCP1250,
+             .windowsCP1251,
+             .windowsCP1252,
+             .windowsCP1253,
+             .windowsCP1254:
+            true
+        case .unicode,
+             .utf16,
+             .utf16BigEndian,
+             .utf16LittleEndian,
+             .utf32,
+             .utf32BigEndian,
+             .utf32LittleEndian:
+            false
+
         default:
             // For unknown encodings, assume not ASCII-compatible for safety
-            return false
+            false
         }
     }
 
@@ -141,12 +155,12 @@ enum CSVUtilities {
     }
 }
 
-// MARK: - Field Unescaping
+// MARK: - CSVUnescaper
 
 /// Zero-allocation field unescaper for quoted CSV fields.
 /// Converts `""` sequences to single `"` without intermediate string allocations.
 enum CSVUnescaper: Sendable {
-    private static let quote: UInt8 = 0x22  // "
+    // MARK: Internal
 
     /// Checks if a buffer contains escaped quotes (`""`).
     /// Uses SWAR for medium-sized buffers, SIMD for large ones.
@@ -171,10 +185,10 @@ enum CSVUnescaper: Sendable {
             let quoteMask2 = SWARUtils.findByte(nextWord, target: quote)
 
             // Consecutive quotes exist if we have a quote followed by a quote
-            if quoteMask1 != 0 && quoteMask2 != 0 {
+            if quoteMask1 != 0, quoteMask2 != 0 {
                 // Check byte-by-byte in this region
-                for i in 0..<8 {
-                    if buffer[offset + i] == quote && buffer[offset + i + 1] == quote {
+                for i in 0 ..< 8 {
+                    if buffer[offset + i] == quote, buffer[offset + i + 1] == quote {
                         return true
                     }
                 }
@@ -184,7 +198,7 @@ enum CSVUnescaper: Sendable {
 
         // Scalar fallback for remainder
         while offset < count - 1 {
-            if buffer[offset] == quote && buffer[offset + 1] == quote {
+            if buffer[offset] == quote, buffer[offset + 1] == quote {
                 return true
             }
             offset += 1
@@ -217,7 +231,7 @@ enum CSVUnescaper: Sendable {
         var i = 0
         while i < count {
             let byte = baseAddress[i]
-            if byte == quote && i + 1 < count && baseAddress[i + 1] == quote {
+            if byte == quote, i + 1 < count, baseAddress[i + 1] == quote {
                 // Escaped quote: append single quote, skip both
                 result.append(quote)
                 i += 2
@@ -261,17 +275,18 @@ enum CSVUnescaper: Sendable {
 
         return str.replacingOccurrences(of: "\"\"", with: "\"")
     }
+
+    // MARK: Private
+
+    private static let quote: UInt8 = 0x22 // "
 }
 
-// MARK: - Field Escaping
+// MARK: - CSVFieldEscaper
 
 /// RFC 4180 compliant field escaper.
 /// Handles quoting of fields containing delimiters, quotes, or newlines.
 enum CSVFieldEscaper: Sendable {
-    // ASCII constants
-    private static let quote: UInt8 = 0x22      // "
-    private static let lf: UInt8 = 0x0A         // \n
-    private static let cr: UInt8 = 0x0D         // \r
+    // MARK: Internal
 
     /// Checks if a field needs quoting per RFC 4180 using raw pointer.
     /// Uses SWAR for medium-sized fields, SIMD for large ones.
@@ -346,7 +361,7 @@ enum CSVFieldEscaper: Sendable {
         var mutableValue = value
         let handled = mutableValue.withUTF8 { utf8 -> Bool in
             guard let baseAddress = utf8.baseAddress else {
-                return true  // Empty string - handled
+                return true // Empty string - handled
             }
 
             let count = utf8.count
@@ -354,7 +369,7 @@ enum CSVFieldEscaper: Sendable {
 
             if needsQuotes {
                 buffer.append(quote)
-                for i in 0..<count {
+                for i in 0 ..< count {
                     let byte = baseAddress[i]
                     if byte == quote {
                         buffer.append(quote) // Escape quote by doubling
@@ -397,9 +412,9 @@ enum CSVFieldEscaper: Sendable {
         let delimString = String(delimiter)
 
         let needsQuoting = value.contains(delimString) ||
-                          value.contains("\"") ||
-                          value.contains("\n") ||
-                          value.contains("\r")
+            value.contains("\"") ||
+            value.contains("\n") ||
+            value.contains("\r")
 
         if needsQuoting {
             let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
@@ -408,15 +423,21 @@ enum CSVFieldEscaper: Sendable {
 
         return value
     }
+
+    // MARK: Private
+
+    // ASCII constants
+    private static let quote: UInt8 = 0x22 // "
+    private static let lf: UInt8 = 0x0A // \n
+    private static let cr: UInt8 = 0x0D // \r
 }
 
-// MARK: - Row Builder
+// MARK: - CSVRowBuilder
 
 /// A builder for constructing CSV rows directly into byte buffers.
 /// Avoids intermediate String allocations for better performance.
 struct CSVRowBuilder: Sendable {
-    let delimiter: UInt8
-    let lineEnding: [UInt8]
+    // MARK: Lifecycle
 
     /// Creates a row builder with the specified delimiter and line ending.
     /// - Parameters:
@@ -426,6 +447,11 @@ struct CSVRowBuilder: Sendable {
         self.delimiter = delimiter.asciiValue ?? 0x2C
         self.lineEnding = Array(lineEnding.rawValue.utf8)
     }
+
+    // MARK: Internal
+
+    let delimiter: UInt8
+    let lineEnding: [UInt8]
 
     /// Builds a row from field values into the output buffer.
     /// - Parameters:

@@ -5,17 +5,33 @@
 //  Basic decoding tests: simple records, delimiters, types.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Basic Tests")
 struct CSVDecoderBasicTests {
-
     struct SimpleRecord: Codable, Equatable {
         let name: String
         let age: Int
         let score: Double
+    }
+
+    struct NameAge: Codable, Equatable {
+        let name: String
+        let age: Int
+    }
+
+    struct DateRecord: Codable {
+        let event: String
+        let date: Date
+    }
+
+    // MARK: - Encoding Tests
+
+    struct NameValue: Codable, Equatable {
+        let name: String
+        let value: String
     }
 
     @Test("Decode simple records")
@@ -34,11 +50,6 @@ struct CSVDecoderBasicTests {
         #expect(records[1] == SimpleRecord(name: "Bob", age: 25, score: 88.0))
     }
 
-    struct NameAge: Codable, Equatable {
-        let name: String
-        let age: Int
-    }
-
     @Test("Decode with semicolon delimiter")
     func decodeWithSemicolonDelimiter() throws {
         let csv = """
@@ -55,11 +66,6 @@ struct CSVDecoderBasicTests {
         #expect(records[0].age == 35)
     }
 
-    struct DateRecord: Codable {
-        let event: String
-        let date: Date
-    }
-
     @Test("Decode dates with format")
     func decodeDatesWithFormat() throws {
         let csv = """
@@ -68,7 +74,7 @@ struct CSVDecoderBasicTests {
         """
 
         let config = CSVDecoder.Configuration(
-            dateDecodingStrategy: .formatted("dd/MM/yyyy")
+            dateDecodingStrategy: .formatted("dd/MM/yyyy"),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DateRecord].self, from: csv)
@@ -256,13 +262,6 @@ struct CSVDecoderBasicTests {
         #expect(record.age == 35)
     }
 
-    // MARK: - Encoding Tests
-
-    struct NameValue: Codable, Equatable {
-        let name: String
-        let value: String
-    }
-
     @Test("Decode ISO-8859-1 (Latin-1) encoded data")
     func decodeISOLatin1() throws {
         // Create CSV with Latin-1 specific characters (é = 0xE9 in Latin-1)
@@ -361,7 +360,7 @@ struct CSVDecoderBasicTests {
     func asciiCompatibleEncodingPerformance() throws {
         // Large CSV to ensure we're testing actual parsing
         var csv = "name,value\n"
-        for i in 0..<1000 {
+        for i in 0 ..< 1000 {
             csv += "Item\(i),Value\(i)\n"
         }
 

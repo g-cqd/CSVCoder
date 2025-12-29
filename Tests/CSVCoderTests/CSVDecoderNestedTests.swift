@@ -5,13 +5,12 @@
 //  Tests for nested type decoding strategies (flatten, JSON, codable).
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Nested Tests")
 struct CSVDecoderNestedTests {
-
     struct Address: Codable, Equatable {
         let street: String
         let city: String

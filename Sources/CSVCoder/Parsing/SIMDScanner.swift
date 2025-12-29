@@ -9,7 +9,7 @@
 
 import Foundation
 
-// MARK: - SWAR Utilities
+// MARK: - SWARUtils
 
 /// SWAR (SIMD Within A Register) utilities for 8-byte parallel operations.
 /// Processes 8 bytes at a time using UInt64 bit manipulation.
@@ -35,9 +35,9 @@ enum SWARUtils: Sendable {
     @inline(__always)
     static func hasAnyByte(_ word: UInt64, _ t1: UInt8, _ t2: UInt8, _ t3: UInt8, _ t4: UInt8) -> Bool {
         findByte(word, target: t1) != 0 ||
-        findByte(word, target: t2) != 0 ||
-        findByte(word, target: t3) != 0 ||
-        findByte(word, target: t4) != 0
+            findByte(word, target: t2) != 0 ||
+            findByte(word, target: t3) != 0 ||
+            findByte(word, target: t4) != 0
     }
 
     /// Finds the byte index (0-7) of the first match, or nil if none.
@@ -83,7 +83,7 @@ func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
         buffer[48], buffer[49], buffer[50], buffer[51],
         buffer[52], buffer[53], buffer[54], buffer[55],
         buffer[56], buffer[57], buffer[58], buffer[59],
-        buffer[60], buffer[61], buffer[62], buffer[63]
+        buffer[60], buffer[61], buffer[62], buffer[63],
     )
 }
 
@@ -93,13 +93,7 @@ func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
 /// Uses 64-byte SIMD vectors to scan for quotes, delimiters, and newlines.
 /// Falls back to SWAR (8-byte) for smaller data, then scalar for remainder.
 struct SIMDScanner: Sendable {
-
-    // CSV structural bytes (ASCII)
-    private static let quote: UInt8 = 0x22      // "
-    private static let comma: UInt8 = 0x2C      // ,
-    private static let cr: UInt8 = 0x0D         // \r
-    private static let lf: UInt8 = 0x0A         // \n
-    private static let tab: UInt8 = 0x09        // \t
+    // MARK: Internal
 
     /// Represents a structural index entry.
     struct StructuralPosition: Sendable {
@@ -134,7 +128,7 @@ struct SIMDScanner: Sendable {
     static func scanStructural(
         buffer: UnsafePointer<UInt8>,
         count: Int,
-        delimiter: UInt8 = comma
+        delimiter: UInt8 = comma,
     ) -> [StructuralPosition] {
         var positions: [StructuralPosition] = []
         positions.reserveCapacity(count / 8) // Estimate ~1 structural per 8 bytes
@@ -161,7 +155,7 @@ struct SIMDScanner: Sendable {
             let structuralMask = quoteMask .| delimMask .| crMask .| lfMask
 
             // Direct iteration - O(64) but avoids bitmask conversion overhead
-            for i in 0..<64 where structuralMask[i] {
+            for i in 0 ..< 64 where structuralMask[i] {
                 positions.append(StructuralPosition(offset: offset + i, byte: buffer[offset + i]))
             }
 
@@ -173,7 +167,7 @@ struct SIMDScanner: Sendable {
             let word = SWARUtils.load(buffer.advanced(by: offset))
             if SWARUtils.hasAnyByte(word, quote, delimiter, cr, lf) {
                 // Found structural byte, scan individually
-                for i in 0..<8 {
+                for i in 0 ..< 8 {
                     let byte = buffer[offset + i]
                     if byte == quote || byte == delimiter || byte == cr || byte == lf {
                         positions.append(StructuralPosition(offset: offset + i, byte: byte))
@@ -208,7 +202,7 @@ struct SIMDScanner: Sendable {
         buffer: UnsafePointer<UInt8>,
         count: Int,
         delimiter: UInt8 = comma,
-        startOffset: Int = 0
+        startOffset: Int = 0,
     ) -> RowBoundaries {
         // Fast path: scan for structural characters
         let structural = scanStructural(buffer: buffer, count: count, delimiter: delimiter)
@@ -220,17 +214,17 @@ struct SIMDScanner: Sendable {
         for pos in structural {
             if pos.isQuote {
                 inQuotes.toggle()
-            } else if !inQuotes && pos.isNewline {
+            } else if !inQuotes, pos.isNewline {
                 // Found row boundary
                 var endOffset = pos.offset
 
                 // Handle CRLF as single newline
-                if pos.byte == cr && pos.offset + 1 < count && buffer[pos.offset + 1] == lf {
+                if pos.byte == cr, pos.offset + 1 < count, buffer[pos.offset + 1] == lf {
                     endOffset = pos.offset + 1
                 }
 
                 // Skip if this is the LF of a CRLF we already processed
-                if pos.byte == lf && pos.offset > 0 && buffer[pos.offset - 1] == cr {
+                if pos.byte == lf, pos.offset > 0, buffer[pos.offset - 1] == cr {
                     continue
                 }
 
@@ -244,7 +238,7 @@ struct SIMDScanner: Sendable {
         return RowBoundaries(
             rowStarts: rowStarts,
             endsInQuote: inQuotes,
-            lastCompleteRowEnd: startOffset + lastNewlineEnd
+            lastCompleteRowEnd: startOffset + lastNewlineEnd,
         )
     }
 
@@ -259,7 +253,7 @@ struct SIMDScanner: Sendable {
     @inline(__always)
     static func countNewlinesApprox(
         buffer: UnsafePointer<UInt8>,
-        count: Int
+        count: Int,
     ) -> Int {
         var total = 0
         var offset = 0
@@ -271,7 +265,7 @@ struct SIMDScanner: Sendable {
             let mask = chunk .== lfVec
 
             // Direct count - avoids bitmask conversion overhead
-            for i in 0..<64 where mask[i] {
+            for i in 0 ..< 64 where mask[i] {
                 total += 1
             }
             offset += 64
@@ -311,7 +305,7 @@ struct SIMDScanner: Sendable {
     static func findNextStructural(
         buffer: UnsafePointer<UInt8>,
         count: Int,
-        delimiter: UInt8
+        delimiter: UInt8,
     ) -> Int {
         var offset = 0
 
@@ -330,7 +324,7 @@ struct SIMDScanner: Sendable {
             let structuralMask = delimMask .| crMask .| lfMask
 
             // Linear scan - exits early on first hit
-            for i in 0..<64 where structuralMask[i] {
+            for i in 0 ..< 64 where structuralMask[i] {
                 return offset + i
             }
 
@@ -354,7 +348,7 @@ struct SIMDScanner: Sendable {
     @inline(__always)
     static func findNextQuote(
         buffer: UnsafePointer<UInt8>,
-        count: Int
+        count: Int,
     ) -> Int {
         var offset = 0
 
@@ -365,7 +359,7 @@ struct SIMDScanner: Sendable {
             let quoteMask = chunk .== quoteVec
 
             // Linear scan - exits early on first hit
-            for i in 0..<64 where quoteMask[i] {
+            for i in 0 ..< 64 where quoteMask[i] {
                 return offset + i
             }
 
@@ -394,4 +388,13 @@ struct SIMDScanner: Sendable {
 
         return count
     }
+
+    // MARK: Private
+
+    // CSV structural bytes (ASCII)
+    private static let quote: UInt8 = 0x22 // "
+    private static let comma: UInt8 = 0x2C // ,
+    private static let cr: UInt8 = 0x0D // \r
+    private static let lf: UInt8 = 0x0A // \n
+    private static let tab: UInt8 = 0x09 // \t
 }

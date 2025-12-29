@@ -8,7 +8,7 @@
 
 import Foundation
 
-// MARK: - Internal Runtime Detection
+// MARK: - _CSVIndexedMarker
 
 /// Internal marker protocol for runtime conformance detection.
 /// Has no associated types, enabling `as?` casting at runtime.
@@ -17,30 +17,30 @@ public protocol _CSVIndexedMarker {
     static var _csvColumnOrder: [String] { get }
 }
 
-// MARK: - Base Protocol
+// MARK: - CSVIndexedBase
 
 /// Base protocol providing the common requirements for CSV indexed types.
 /// Both CSVIndexedDecodable and CSVIndexedEncodable refine this protocol.
 public protocol CSVIndexedBase: _CSVIndexedMarker {
     /// The CodingKeys type, which must be CaseIterable to define column order.
-    associatedtype CSVCodingKeys: CodingKey & CaseIterable
+    associatedtype CSVCodingKeys: CodingKey, CaseIterable
 
     /// Returns the ordered column names derived from CodingKeys.
     /// Default implementation uses `CSVCodingKeys.allCases`.
     static var csvColumnOrder: [String] { get }
 }
 
-extension CSVIndexedBase {
+public extension CSVIndexedBase {
     /// Default implementation: extracts column names from CodingKeys.allCases in order.
-    public static var csvColumnOrder: [String] {
-        CSVCodingKeys.allCases.map { $0.stringValue }
+    static var csvColumnOrder: [String] {
+        CSVCodingKeys.allCases.map(\.stringValue)
     }
 
     /// Internal marker implementation for runtime detection.
-    public static var _csvColumnOrder: [String] { csvColumnOrder }
+    static var _csvColumnOrder: [String] { csvColumnOrder }
 }
 
-// MARK: - CSVIndexedDecodable Protocol
+// MARK: - CSVIndexedDecodable
 
 /// A type that can be decoded from headerless CSV using the order of its CodingKeys.
 ///
@@ -69,7 +69,7 @@ extension CSVIndexedBase {
 ///   You can use the standard `decode([T].self, from:)` method.
 public protocol CSVIndexedDecodable: Decodable, CSVIndexedBase {}
 
-// MARK: - CSVIndexedEncodable Protocol
+// MARK: - CSVIndexedEncodable
 
 /// A type that can be encoded to CSV with columns in the order of its CodingKeys.
 ///

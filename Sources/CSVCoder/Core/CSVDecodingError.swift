@@ -30,6 +30,22 @@ import Foundation
 /// }
 /// ```
 public struct CSVLocation: Sendable, Equatable, CustomStringConvertible {
+    // MARK: Lifecycle
+
+    public init(
+        row: Int? = nil,
+        column: String? = nil,
+        codingPath: [CodingKey] = [],
+        availableKeys: [String]? = nil,
+    ) {
+        self.row = row
+        self.column = column
+        self.codingPath = codingPath.map(\.stringValue)
+        self.availableKeys = availableKeys
+    }
+
+    // MARK: Public
+
     /// The 1-based row number in the CSV file.
     public let row: Int?
     /// The column name or index where the error occurred.
@@ -38,18 +54,6 @@ public struct CSVLocation: Sendable, Equatable, CustomStringConvertible {
     public let codingPath: [String]
     /// Available keys in the current context (for suggestions).
     public let availableKeys: [String]?
-
-    public init(
-        row: Int? = nil,
-        column: String? = nil,
-        codingPath: [CodingKey] = [],
-        availableKeys: [String]? = nil
-    ) {
-        self.row = row
-        self.column = column
-        self.codingPath = codingPath.map { $0.stringValue }
-        self.availableKeys = availableKeys
-    }
 
     public var description: String {
         var parts: [String] = []
@@ -67,8 +71,8 @@ public struct CSVLocation: Sendable, Equatable, CustomStringConvertible {
 
     public static func == (lhs: CSVLocation, rhs: CSVLocation) -> Bool {
         lhs.row == rhs.row &&
-        lhs.column == rhs.column &&
-        lhs.codingPath == rhs.codingPath
+            lhs.column == rhs.column &&
+            lhs.codingPath == rhs.codingPath
         // Note: availableKeys intentionally excluded from equality
     }
 }
@@ -122,17 +126,23 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
     /// A parsing error occurred.
     case parsingError(String, line: Int?, column: Int?)
 
+    // MARK: Public
+
     /// The location where the error occurred, if available.
     public var location: CSVLocation? {
         switch self {
-        case .invalidEncoding, .unsupportedType:
-            return nil
-        case .keyNotFound(_, let location):
-            return location
-        case .typeMismatch(_, _, let location):
-            return location
-        case .parsingError(_, let line, let column):
-            return CSVLocation(row: line, column: column.map { "character \($0)" })
+        case .invalidEncoding,
+             .unsupportedType:
+            nil
+
+        case let .keyNotFound(_, location):
+            location
+
+        case let .typeMismatch(_, _, location):
+            location
+
+        case let .parsingError(_, line, column):
+            CSVLocation(row: line, column: column.map { "character \($0)" })
         }
     }
 
@@ -140,23 +150,27 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
         switch self {
         case .invalidEncoding:
             return "The data could not be decoded with the specified encoding"
-        case .keyNotFound(let key, let location):
+
+        case let .keyNotFound(key, location):
             let loc = location.row != nil ? " at \(location)" : ""
             var message = "Key '\(key)' not found in CSV row\(loc)"
             if let suggestion = suggestion {
                 message += ". \(suggestion)"
             }
             return message
-        case .typeMismatch(let expected, let actual, let location):
+
+        case let .typeMismatch(expected, actual, location):
             let loc = location.row != nil ? " at \(location)" : ""
             var message = "Type mismatch: expected \(expected), found '\(actual)'\(loc)"
             if let suggestion = suggestion {
                 message += ". \(suggestion)"
             }
             return message
-        case .unsupportedType(let message):
+
+        case let .unsupportedType(message):
             return "Unsupported operation: \(message)"
-        case .parsingError(let message, let line, let column):
+
+        case let .parsingError(message, line, column):
             var loc = ""
             if let line = line {
                 loc = " at line \(line)"
@@ -173,21 +187,52 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
     /// Returns a helpful suggestion for fixing the error.
     public var suggestion: String? {
         switch self {
-        case .keyNotFound(let key, let location):
-            return suggestSimilarKey(key, from: location.availableKeys)
+        case let .keyNotFound(key, location):
+            suggestSimilarKey(key, from: location.availableKeys)
 
-        case .typeMismatch(let expected, let actual, _):
-            return suggestTypeFix(expected: expected, actual: actual)
+        case let .typeMismatch(expected, actual, _):
+            suggestTypeFix(expected: expected, actual: actual)
 
         case .invalidEncoding:
-            return "Try using a different encoding (e.g., .utf8, .isoLatin1, .windowsCP1252)"
+            "Try using a different encoding (e.g., .utf8, .isoLatin1, .windowsCP1252)"
 
-        case .parsingError(let message, _, _):
-            return suggestParsingFix(message)
+        case let .parsingError(message, _, _):
+            suggestParsingFix(message)
 
         case .unsupportedType:
-            return nil
+            nil
         }
+    }
+
+    // MARK: Private
+
+    /// Computes Levenshtein edit distance between two strings.
+    private static func editDistance(_ s1: String, _ s2: String) -> Int {
+        let a = Array(s1)
+        let b = Array(s2)
+        let m = a.count
+        let n = b.count
+
+        if m == 0 { return n }
+        if n == 0 { return m }
+
+        var prev = Array(0 ... n)
+        var curr = [Int](repeating: 0, count: n + 1)
+
+        for i in 1 ... m {
+            curr[0] = i
+            for j in 1 ... n {
+                let cost = a[i - 1] == b[j - 1] ? 0 : 1
+                curr[j] = min(
+                    prev[j] + 1, // deletion
+                    curr[j - 1] + 1, // insertion
+                    prev[j - 1] + cost, // substitution
+                )
+            }
+            swap(&prev, &curr)
+        }
+
+        return prev[n]
     }
 
     /// Finds similar keys using edit distance.
@@ -223,7 +268,16 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
         let lowercaseActual = actual.lowercased()
 
         switch expected {
-        case "Int", "Int8", "Int16", "Int32", "Int64", "UInt", "UInt8", "UInt16", "UInt32", "UInt64":
+        case "Int",
+             "Int8",
+             "Int16",
+             "Int32",
+             "Int64",
+             "UInt",
+             "UInt8",
+             "UInt16",
+             "UInt32",
+             "UInt64":
             if actual.contains(".") || actual.contains(",") {
                 return "Value appears to be a decimal. Use Double or Decimal type, or check for locale-specific formatting"
             }
@@ -231,7 +285,9 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
                 return "Value contains currency symbol. Use numberDecodingStrategy: .flexible to strip currency symbols"
             }
 
-        case "Double", "Float", "Decimal":
+        case "Decimal",
+             "Double",
+             "Float":
             if actual.contains(",") && actual.contains(".") {
                 return "Value may use European number format (1.234,56). Use numberDecodingStrategy: .flexible or .locale(Locale)"
             }
@@ -269,34 +325,5 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
             return "Try a different delimiter (e.g., semicolon ';' for European CSV, tab '\\t' for TSV)"
         }
         return nil
-    }
-
-    /// Computes Levenshtein edit distance between two strings.
-    private static func editDistance(_ s1: String, _ s2: String) -> Int {
-        let a = Array(s1)
-        let b = Array(s2)
-        let m = a.count
-        let n = b.count
-
-        if m == 0 { return n }
-        if n == 0 { return m }
-
-        var prev = Array(0...n)
-        var curr = [Int](repeating: 0, count: n + 1)
-
-        for i in 1...m {
-            curr[0] = i
-            for j in 1...n {
-                let cost = a[i - 1] == b[j - 1] ? 0 : 1
-                curr[j] = min(
-                    prev[j] + 1,      // deletion
-                    curr[j - 1] + 1,  // insertion
-                    prev[j - 1] + cost // substitution
-                )
-            }
-            swap(&prev, &curr)
-        }
-
-        return prev[n]
     }
 }

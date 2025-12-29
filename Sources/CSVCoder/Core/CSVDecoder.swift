@@ -70,6 +70,14 @@ import Foundation
 /// - ``Configuration`` for available options
 /// - ``CSVParser`` for low-level parsing
 public final class CSVDecoder: Sendable {
+    // MARK: Lifecycle
+
+    /// Creates a new CSV decoder with the given configuration.
+    public init(configuration: Configuration = Configuration()) {
+        self.configuration = configuration
+    }
+
+    // MARK: Public
 
     /// Configuration options for CSV decoding.
     ///
@@ -89,6 +97,43 @@ public final class CSVDecoder: Sendable {
     /// 3. `CSVIndexedDecodable` conformance - Use type's `CodingKeys` order
     /// 4. Generated column names (`column0`, `column1`, ...)
     public struct Configuration: Sendable {
+        // MARK: Lifecycle
+
+        /// Creates a new configuration with default values.
+        public init(
+            delimiter: Character = ",",
+            hasHeaders: Bool = true,
+            encoding: String.Encoding = .utf8,
+            trimWhitespace: Bool = true,
+            dateDecodingStrategy: DateDecodingStrategy = .deferredToDate,
+            numberDecodingStrategy: NumberDecodingStrategy = .standard,
+            boolDecodingStrategy: BoolDecodingStrategy = .standard,
+            nilDecodingStrategy: NilDecodingStrategy = .emptyString,
+            keyDecodingStrategy: KeyDecodingStrategy = .useDefaultKeys,
+            columnMapping: [String: String] = [:],
+            indexMapping: [Int: String] = [:],
+            parsingMode: ParsingMode = .lenient,
+            expectedFieldCount: Int? = nil,
+            nestedTypeDecodingStrategy: NestedTypeDecodingStrategy = .error,
+        ) {
+            self.delimiter = delimiter
+            self.hasHeaders = hasHeaders
+            self.encoding = encoding
+            self.trimWhitespace = trimWhitespace
+            self.dateDecodingStrategy = dateDecodingStrategy
+            self.numberDecodingStrategy = numberDecodingStrategy
+            self.boolDecodingStrategy = boolDecodingStrategy
+            self.nilDecodingStrategy = nilDecodingStrategy
+            self.keyDecodingStrategy = keyDecodingStrategy
+            self.columnMapping = columnMapping
+            self.indexMapping = indexMapping
+            self.parsingMode = parsingMode
+            self.expectedFieldCount = expectedFieldCount
+            self.nestedTypeDecodingStrategy = nestedTypeDecodingStrategy
+        }
+
+        // MARK: Public
+
         /// The delimiter character used to separate fields. Default is comma (,).
         public var delimiter: Character
 
@@ -148,39 +193,6 @@ public final class CSVDecoder: Sendable {
 
         /// Strategy for decoding nested Codable types.
         public var nestedTypeDecodingStrategy: NestedTypeDecodingStrategy
-
-        /// Creates a new configuration with default values.
-        public init(
-            delimiter: Character = ",",
-            hasHeaders: Bool = true,
-            encoding: String.Encoding = .utf8,
-            trimWhitespace: Bool = true,
-            dateDecodingStrategy: DateDecodingStrategy = .deferredToDate,
-            numberDecodingStrategy: NumberDecodingStrategy = .standard,
-            boolDecodingStrategy: BoolDecodingStrategy = .standard,
-            nilDecodingStrategy: NilDecodingStrategy = .emptyString,
-            keyDecodingStrategy: KeyDecodingStrategy = .useDefaultKeys,
-            columnMapping: [String: String] = [:],
-            indexMapping: [Int: String] = [:],
-            parsingMode: ParsingMode = .lenient,
-            expectedFieldCount: Int? = nil,
-            nestedTypeDecodingStrategy: NestedTypeDecodingStrategy = .error
-        ) {
-            self.delimiter = delimiter
-            self.hasHeaders = hasHeaders
-            self.encoding = encoding
-            self.trimWhitespace = trimWhitespace
-            self.dateDecodingStrategy = dateDecodingStrategy
-            self.numberDecodingStrategy = numberDecodingStrategy
-            self.boolDecodingStrategy = boolDecodingStrategy
-            self.nilDecodingStrategy = nilDecodingStrategy
-            self.keyDecodingStrategy = keyDecodingStrategy
-            self.columnMapping = columnMapping
-            self.indexMapping = indexMapping
-            self.parsingMode = parsingMode
-            self.expectedFieldCount = expectedFieldCount
-            self.nestedTypeDecodingStrategy = nestedTypeDecodingStrategy
-        }
     }
 
     /// Strategies for decoding nested Codable types.
@@ -217,11 +229,13 @@ public final class CSVDecoder: Sendable {
         /// Automatically handles date order preferences (DD/MM vs MM/DD) per region.
         case localeAware(locale: Locale = .autoupdatingCurrent, style: DateStyle = .numeric)
 
+        // MARK: Public
+
         /// Date styles for localeAware parsing.
         public enum DateStyle: Sendable {
-            case numeric    // 12/31/2024 or 31/12/2024 depending on locale
+            case numeric // 12/31/2024 or 31/12/2024 depending on locale
             case abbreviated // Dec 31, 2024 or 31 Dec 2024
-            case long       // December 31, 2024
+            case long // December 31, 2024
         }
     }
 
@@ -300,11 +314,6 @@ public final class CSVDecoder: Sendable {
     /// The configuration used for decoding.
     public let configuration: Configuration
 
-    /// Creates a new CSV decoder with the given configuration.
-    public init(configuration: Configuration = Configuration()) {
-        self.configuration = configuration
-    }
-
     /// Decodes an array of values from the given CSV data.
     ///
     /// For headerless CSV, the decoder automatically detects `CSVIndexedDecodable`
@@ -337,232 +346,6 @@ public final class CSVDecoder: Sendable {
         return try decodeRows(type, from: string, columnOrder: columnOrder)
     }
 
-    /// Internal method that handles both regular Decodable and CSVIndexedDecodable.
-    /// Uses CSVParser for consistent zero-copy performance.
-    private func decodeRows<T: Decodable>(
-        _ type: [T].Type,
-        from string: String,
-        columnOrder: [String]?
-    ) throws -> [T] {
-        // Convert string to UTF-8 bytes and use CSVParser for consistency
-        let utf8Data = Data(string.utf8)
-        return try decodeRowsFromBytes(type, from: utf8Data, columnOrder: columnOrder)
-    }
-
-    /// Optimized zero-copy decoding from Data.
-    private func decodeRowsFromBytes<T: Decodable>(
-        _ type: [T].Type,
-        from data: Data,
-        columnOrder: [String]?
-    ) throws -> [T] {
-        // Check if encoding requires transcoding
-        let encoding = configuration.encoding
-        let isASCIICompatible = CSVUtilities.isASCIICompatible(encoding)
-
-        // For non-ASCII encodings (UTF-16, UTF-32), transcode to UTF-8 first
-        let effectiveData: Data
-        let effectiveEncoding: String.Encoding
-
-        if !isASCIICompatible {
-            guard let transcoded = CSVUtilities.transcodeToUTF8(data, from: encoding) else {
-                throw CSVDecodingError.parsingError(
-                    "Failed to transcode data from \(encoding) to UTF-8",
-                    line: nil,
-                    column: nil
-                )
-            }
-            effectiveData = transcoded
-            effectiveEncoding = .utf8  // After transcoding, we're working with UTF-8
-        } else {
-            effectiveData = data
-            effectiveEncoding = encoding
-        }
-
-        return try effectiveData.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else { return [] }
-
-            // Handle BOM (UTF-8 BOM for transcoded data, original BOM was handled during transcode)
-            let rawBytes = UnsafeBufferPointer(
-                start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                count: buffer.count
-            )
-            let startOffset = CSVUtilities.bomOffset(in: rawBytes)
-
-            let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
-            let adjustedCount = buffer.count - startOffset
-            let bytes = UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
-            let delimiter = configuration.delimiter.asciiValue ?? 0x2C
-
-            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
-            let rows = parser.parse()
-
-            // Check for parsing errors
-            let isStrict = configuration.parsingMode == .strict
-            let expectedFieldCount = configuration.expectedFieldCount
-
-            for (index, row) in rows.enumerated() {
-                // Check for unterminated quotes (always an error)
-                if row.hasUnterminatedQuote {
-                    throw CSVDecodingError.parsingError("Unterminated quoted field", line: index + 1, column: nil)
-                }
-
-                // Strict mode: reject quotes in unquoted fields
-                if isStrict && row.hasQuoteInUnquotedField {
-                    throw CSVDecodingError.parsingError("Quote character in unquoted field (RFC 4180 violation)", line: index + 1, column: nil)
-                }
-
-                // Strict mode: validate field count
-                if isStrict, let expected = expectedFieldCount, row.count != expected {
-                    throw CSVDecodingError.parsingError("Expected \(expected) fields but found \(row.count)", line: index + 1, column: nil)
-                }
-            }
-
-            guard !rows.isEmpty else { return [] }
-
-            // Extract raw headers from first row using the effective encoding
-            let firstRow = rows[0]
-            var rawHeaders: [String] = []
-            rawHeaders.reserveCapacity(firstRow.count)
-            for i in 0..<firstRow.count {
-                if let s = firstRow.string(at: i, encoding: effectiveEncoding) {
-                    // Apply trimWhitespace to headers for consistency with parallel decoding
-                    rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
-                } else {
-                    rawHeaders.append("column\(i)")
-                }
-            }
-
-            // Resolve headers using unified method
-            let headers = resolveHeaders(
-                rawHeaders: rawHeaders,
-                columnOrder: columnOrder,
-                columnCount: firstRow.count
-            )
-
-            // Build header map (Header -> Column Index)
-            var headerMap: [String: Int] = [:]
-            for (index, header) in headers.enumerated() {
-                headerMap[header] = index
-            }
-
-            // Skip header row if present
-            let startIndex = configuration.hasHeaders ? 1 : 0
-            
-            // Decode rows
-            var results: [T] = []
-            results.reserveCapacity(rows.count - startIndex)
-            
-            for i in startIndex..<rows.count {
-                let rowView = rows[i]
-                let decoder = CSVRowDecoder(
-                    view: rowView,
-                    headerMap: headerMap,
-                    configuration: configuration,
-                    codingPath: [],
-                    rowIndex: i + 1,
-                    encoding: effectiveEncoding
-                )
-                results.append(try T(from: decoder))
-            }
-            
-            return results
-        }
-    }
-
-    /// Transforms a CSV header key using the configured strategy.
-    func transformKey(_ key: String) -> String {
-        // Custom column mapping takes precedence
-        if let mapped = configuration.columnMapping[key] {
-            return mapped
-        }
-
-        switch configuration.keyDecodingStrategy {
-        case .useDefaultKeys:
-            return key
-
-        case .convertFromSnakeCase:
-            return convertFromSnakeCase(key)
-
-        case .convertFromKebabCase:
-            return convertFromKebabCase(key)
-
-        case .convertFromScreamingSnakeCase:
-            return convertFromScreamingSnakeCase(key)
-
-        case .convertFromPascalCase:
-            return convertFromPascalCase(key)
-
-        case .custom(let transform):
-            return transform(key)
-        }
-    }
-
-    /// Converts snake_case to camelCase.
-    private func convertFromSnakeCase(_ key: String) -> String {
-        let parts = key.split(separator: "_")
-        guard let first = parts.first else { return key }
-        let rest = parts.dropFirst().map { $0.capitalized }
-        return String(first).lowercased() + rest.joined()
-    }
-
-    /// Converts kebab-case to camelCase.
-    private func convertFromKebabCase(_ key: String) -> String {
-        let parts = key.split(separator: "-")
-        guard let first = parts.first else { return key }
-        let rest = parts.dropFirst().map { $0.capitalized }
-        return String(first).lowercased() + rest.joined()
-    }
-
-    /// Converts SCREAMING_SNAKE_CASE to camelCase.
-    private func convertFromScreamingSnakeCase(_ key: String) -> String {
-        let parts = key.lowercased().split(separator: "_")
-        guard let first = parts.first else { return key }
-        let rest = parts.dropFirst().map { $0.capitalized }
-        return String(first) + rest.joined()
-    }
-
-    /// Converts PascalCase to camelCase.
-    private func convertFromPascalCase(_ key: String) -> String {
-        guard let first = key.first else { return key }
-        return first.lowercased() + String(key.dropFirst())
-    }
-
-    // MARK: - Header Resolution
-
-    /// Resolves headers based on configuration priority.
-    /// Priority: indexMapping > hasHeaders (with key transform) > columnOrder > generated
-    ///
-    /// - Parameters:
-    ///   - rawHeaders: The raw header strings from the first row (or generated column names).
-    ///   - columnOrder: Optional column order from CSVIndexedDecodable conformance.
-    ///   - columnCount: Number of columns in the data (used for generation if needed).
-    /// - Returns: The resolved header names.
-    func resolveHeaders(
-        rawHeaders: [String],
-        columnOrder: [String]?,
-        columnCount: Int? = nil
-    ) -> [String] {
-        // 1. Explicit index mapping takes highest precedence
-        if !configuration.indexMapping.isEmpty {
-            let maxIndex = configuration.indexMapping.keys.max() ?? 0
-            return (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
-        }
-
-        // 2. If hasHeaders, use first row with key transformation
-        if configuration.hasHeaders {
-            return rawHeaders.map { transformKey($0) }
-        }
-
-        // 3. If CSVIndexedDecodable provides column order, use it
-        if let columnOrder = columnOrder {
-            return columnOrder
-        }
-
-        // 4. Generate column names based on count
-        let count = columnCount ?? rawHeaders.count
-        return (0..<count).map { "column\($0)" }
-    }
-
     /// Decodes a single row from a dictionary representation.
     /// - Parameters:
     ///   - type: The type to decode.
@@ -572,7 +355,7 @@ public final class CSVDecoder: Sendable {
         let decoder = CSVRowDecoder(
             row: row,
             configuration: configuration,
-            codingPath: []
+            codingPath: [],
         )
         return try T(from: decoder)
     }
@@ -616,5 +399,243 @@ public final class CSVDecoder: Sendable {
     /// - Returns: The decoded value.
     public func decode<T: Decodable>(from row: [String: String]) throws -> T {
         try decode(T.self, from: row)
+    }
+
+    // MARK: Internal
+
+    /// Transforms a CSV header key using the configured strategy.
+    func transformKey(_ key: String) -> String {
+        // Custom column mapping takes precedence
+        if let mapped = configuration.columnMapping[key] {
+            return mapped
+        }
+
+        switch configuration.keyDecodingStrategy {
+        case .useDefaultKeys:
+            return key
+
+        case .convertFromSnakeCase:
+            return convertFromSnakeCase(key)
+
+        case .convertFromKebabCase:
+            return convertFromKebabCase(key)
+
+        case .convertFromScreamingSnakeCase:
+            return convertFromScreamingSnakeCase(key)
+
+        case .convertFromPascalCase:
+            return convertFromPascalCase(key)
+
+        case let .custom(transform):
+            return transform(key)
+        }
+    }
+
+    // MARK: - Header Resolution
+
+    /// Resolves headers based on configuration priority.
+    /// Priority: indexMapping > hasHeaders (with key transform) > columnOrder > generated
+    ///
+    /// - Parameters:
+    ///   - rawHeaders: The raw header strings from the first row (or generated column names).
+    ///   - columnOrder: Optional column order from CSVIndexedDecodable conformance.
+    ///   - columnCount: Number of columns in the data (used for generation if needed).
+    /// - Returns: The resolved header names.
+    func resolveHeaders(
+        rawHeaders: [String],
+        columnOrder: [String]?,
+        columnCount: Int? = nil,
+    ) -> [String] {
+        // 1. Explicit index mapping takes highest precedence
+        if !configuration.indexMapping.isEmpty {
+            let maxIndex = configuration.indexMapping.keys.max() ?? 0
+            return (0 ... maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
+        }
+
+        // 2. If hasHeaders, use first row with key transformation
+        if configuration.hasHeaders {
+            return rawHeaders.map { transformKey($0) }
+        }
+
+        // 3. If CSVIndexedDecodable provides column order, use it
+        if let columnOrder = columnOrder {
+            return columnOrder
+        }
+
+        // 4. Generate column names based on count
+        let count = columnCount ?? rawHeaders.count
+        return (0 ..< count).map { "column\($0)" }
+    }
+
+    // MARK: Private
+
+    /// Internal method that handles both regular Decodable and CSVIndexedDecodable.
+    /// Uses CSVParser for consistent zero-copy performance.
+    private func decodeRows<T: Decodable>(
+        _ type: [T].Type,
+        from string: String,
+        columnOrder: [String]?,
+    ) throws -> [T] {
+        // Convert string to UTF-8 bytes and use CSVParser for consistency
+        let utf8Data = Data(string.utf8)
+        return try decodeRowsFromBytes(type, from: utf8Data, columnOrder: columnOrder)
+    }
+
+    /// Optimized zero-copy decoding from Data.
+    private func decodeRowsFromBytes<T: Decodable>(
+        _ type: [T].Type,
+        from data: Data,
+        columnOrder: [String]?,
+    ) throws -> [T] {
+        // Check if encoding requires transcoding
+        let encoding = configuration.encoding
+        let isASCIICompatible = CSVUtilities.isASCIICompatible(encoding)
+
+        // For non-ASCII encodings (UTF-16, UTF-32), transcode to UTF-8 first
+        let effectiveData: Data
+        let effectiveEncoding: String.Encoding
+
+        if !isASCIICompatible {
+            guard let transcoded = CSVUtilities.transcodeToUTF8(data, from: encoding) else {
+                throw CSVDecodingError.parsingError(
+                    "Failed to transcode data from \(encoding) to UTF-8",
+                    line: nil,
+                    column: nil,
+                )
+            }
+            effectiveData = transcoded
+            effectiveEncoding = .utf8 // After transcoding, we're working with UTF-8
+        } else {
+            effectiveData = data
+            effectiveEncoding = encoding
+        }
+
+        return try effectiveData.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return [] }
+
+            // Handle BOM (UTF-8 BOM for transcoded data, original BOM was handled during transcode)
+            let rawBytes = UnsafeBufferPointer(
+                start: baseAddress.assumingMemoryBound(to: UInt8.self),
+                count: buffer.count,
+            )
+            let startOffset = CSVUtilities.bomOffset(in: rawBytes)
+
+            let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
+            let adjustedCount = buffer.count - startOffset
+            let bytes = UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
+            let delimiter = configuration.delimiter.asciiValue ?? 0x2C
+
+            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
+            let rows = parser.parse()
+
+            // Check for parsing errors
+            let isStrict = configuration.parsingMode == .strict
+            let expectedFieldCount = configuration.expectedFieldCount
+
+            for (index, row) in rows.enumerated() {
+                // Check for unterminated quotes (always an error)
+                if row.hasUnterminatedQuote {
+                    throw CSVDecodingError.parsingError("Unterminated quoted field", line: index + 1, column: nil)
+                }
+
+                // Strict mode: reject quotes in unquoted fields
+                if isStrict, row.hasQuoteInUnquotedField {
+                    throw CSVDecodingError.parsingError(
+                        "Quote character in unquoted field (RFC 4180 violation)",
+                        line: index + 1,
+                        column: nil,
+                    )
+                }
+
+                // Strict mode: validate field count
+                if isStrict, let expected = expectedFieldCount, row.count != expected {
+                    throw CSVDecodingError.parsingError(
+                        "Expected \(expected) fields but found \(row.count)",
+                        line: index + 1,
+                        column: nil,
+                    )
+                }
+            }
+
+            guard !rows.isEmpty else { return [] }
+
+            // Extract raw headers from first row using the effective encoding
+            let firstRow = rows[0]
+            var rawHeaders: [String] = []
+            rawHeaders.reserveCapacity(firstRow.count)
+            for i in 0 ..< firstRow.count {
+                if let s = firstRow.string(at: i, encoding: effectiveEncoding) {
+                    // Apply trimWhitespace to headers for consistency with parallel decoding
+                    rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
+                } else {
+                    rawHeaders.append("column\(i)")
+                }
+            }
+
+            // Resolve headers using unified method
+            let headers = resolveHeaders(
+                rawHeaders: rawHeaders,
+                columnOrder: columnOrder,
+                columnCount: firstRow.count,
+            )
+
+            // Build header map (Header -> Column Index)
+            var headerMap: [String: Int] = [:]
+            for (index, header) in headers.enumerated() {
+                headerMap[header] = index
+            }
+
+            // Skip header row if present
+            let startIndex = configuration.hasHeaders ? 1 : 0
+
+            // Decode rows
+            var results: [T] = []
+            results.reserveCapacity(rows.count - startIndex)
+
+            for i in startIndex ..< rows.count {
+                let rowView = rows[i]
+                let decoder = CSVRowDecoder(
+                    view: rowView,
+                    headerMap: headerMap,
+                    configuration: configuration,
+                    codingPath: [],
+                    rowIndex: i + 1,
+                    encoding: effectiveEncoding,
+                )
+                try results.append(T(from: decoder))
+            }
+
+            return results
+        }
+    }
+
+    /// Converts snake_case to camelCase.
+    private func convertFromSnakeCase(_ key: String) -> String {
+        let parts = key.split(separator: "_")
+        guard let first = parts.first else { return key }
+        let rest = parts.dropFirst().map(\.capitalized)
+        return String(first).lowercased() + rest.joined()
+    }
+
+    /// Converts kebab-case to camelCase.
+    private func convertFromKebabCase(_ key: String) -> String {
+        let parts = key.split(separator: "-")
+        guard let first = parts.first else { return key }
+        let rest = parts.dropFirst().map(\.capitalized)
+        return String(first).lowercased() + rest.joined()
+    }
+
+    /// Converts SCREAMING_SNAKE_CASE to camelCase.
+    private func convertFromScreamingSnakeCase(_ key: String) -> String {
+        let parts = key.lowercased().split(separator: "_")
+        guard let first = parts.first else { return key }
+        let rest = parts.dropFirst().map(\.capitalized)
+        return String(first) + rest.joined()
+    }
+
+    /// Converts PascalCase to camelCase.
+    private func convertFromPascalCase(_ key: String) -> String {
+        guard let first = key.first else { return key }
+        return first.lowercased() + String(key.dropFirst())
     }
 }

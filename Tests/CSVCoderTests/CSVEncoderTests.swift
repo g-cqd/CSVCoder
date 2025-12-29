@@ -5,24 +5,110 @@
 //  Tests for CSVEncoder.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVEncoder Tests")
 struct CSVEncoderTests {
-
     struct SimpleRecord: Codable, Equatable {
         let name: String
         let age: Int
         let score: Double
     }
 
+    struct DateRecord: Codable {
+        let event: String
+        let date: Date
+    }
+
+    struct QuotedRecord: Codable {
+        let name: String
+        let description: String
+    }
+
+    struct OptionalRecord: Codable {
+        let name: String
+        let value: String?
+    }
+
+    struct BoolRecord: Codable {
+        let name: String
+        let active: Bool
+    }
+
+    struct DecimalRecord: Codable, Equatable {
+        let price: Decimal
+        let quantity: Int
+    }
+
+    struct UUIDRecord: Codable {
+        let id: UUID
+        let name: String
+    }
+
+    struct URLRecord: Codable {
+        let name: String
+        let website: URL
+    }
+
+    struct AllNumericTypes: Codable, Equatable {
+        let int: Int
+        let int8: Int8
+        let int16: Int16
+        let int32: Int32
+        let int64: Int64
+        let uint: UInt
+        let uint8: UInt8
+        let uint16: UInt16
+        let uint32: UInt32
+        let uint64: UInt64
+        let float: Float
+        let double: Double
+    }
+
+    // MARK: - Streaming Encoding Tests
+
+    struct SendableRecord: Codable, Equatable, Sendable {
+        let id: Int
+        let name: String
+        let value: Double
+    }
+
+    // MARK: - KeyEncodingStrategy Tests
+
+    struct CamelCaseRecord: Codable {
+        let firstName: String
+        let lastName: String
+        let phoneNumber: String
+    }
+
+    // MARK: - NumberEncodingStrategy Tests
+
+    struct NumberRecord: Codable {
+        let name: String
+        let value: Double
+    }
+
+    // MARK: - Nested Codable Encoding Tests
+
+    struct Address: Codable, Equatable {
+        let street: String
+        let city: String
+        let zipCode: String
+    }
+
+    struct PersonWithAddress: Codable, Equatable {
+        let name: String
+        let age: Int
+        let address: Address
+    }
+
     @Test("Encode simple records")
     func encodeSimpleRecords() throws {
         let records = [
             SimpleRecord(name: "Alice", age: 30, score: 95.5),
-            SimpleRecord(name: "Bob", age: 25, score: 88.0)
+            SimpleRecord(name: "Bob", age: 25, score: 88.0),
         ]
 
         let encoder = CSVEncoder()
@@ -57,11 +143,6 @@ struct CSVEncoderTests {
         #expect(csv.contains("Dave"))
     }
 
-    struct DateRecord: Codable {
-        let event: String
-        let date: Date
-    }
-
     @Test("Encode dates with ISO8601")
     func encodeDatesISO8601() throws {
         let date = Date(timeIntervalSince1970: 0)
@@ -75,7 +156,7 @@ struct CSVEncoderTests {
 
     @Test("Encode dates with custom format")
     func encodeDatesCustomFormat() throws {
-        let date = Date(timeIntervalSince1970: 1735084800) // 2024-12-25
+        let date = Date(timeIntervalSince1970: 1_735_084_800) // 2024-12-25
         let records = [DateRecord(event: "Christmas", date: date)]
 
         let config = CSVEncoder.Configuration(dateEncodingStrategy: .formatted("dd/MM/yyyy"))
@@ -83,11 +164,6 @@ struct CSVEncoderTests {
         let csv = try encoder.encodeToString(records)
 
         #expect(csv.contains("25/12/2024"))
-    }
-
-    struct QuotedRecord: Codable {
-        let name: String
-        let description: String
     }
 
     @Test("Escape fields with delimiter")
@@ -120,11 +196,6 @@ struct CSVEncoderTests {
         #expect(csv.contains("\"Line1\nLine2\""))
     }
 
-    struct OptionalRecord: Codable {
-        let name: String
-        let value: String?
-    }
-
     @Test("Encode nil as empty string")
     func encodeNilAsEmptyString() throws {
         let records = [OptionalRecord(name: "Test", value: nil)]
@@ -135,16 +206,11 @@ struct CSVEncoderTests {
         #expect(csv.contains("Test,"))
     }
 
-    struct BoolRecord: Codable {
-        let name: String
-        let active: Bool
-    }
-
     @Test("Encode boolean values")
     func encodeBooleanValues() throws {
         let records = [
             BoolRecord(name: "Yes", active: true),
-            BoolRecord(name: "No", active: false)
+            BoolRecord(name: "No", active: false),
         ]
 
         let encoder = CSVEncoder()
@@ -154,16 +220,11 @@ struct CSVEncoderTests {
         #expect(csv.contains("No,0"))
     }
 
-    struct DecimalRecord: Codable, Equatable {
-        let price: Decimal
-        let quantity: Int
-    }
-
     @Test("Encode Decimal values")
     func encodeDecimalValues() throws {
         let records = [
             DecimalRecord(price: Decimal(string: "19.99")!, quantity: 100),
-            DecimalRecord(price: Decimal(string: "0.001")!, quantity: 999999)
+            DecimalRecord(price: Decimal(string: "0.001")!, quantity: 999_999),
         ]
 
         let encoder = CSVEncoder()
@@ -171,11 +232,6 @@ struct CSVEncoderTests {
 
         #expect(csv.contains("19.99"))
         #expect(csv.contains("0.001"))
-    }
-
-    struct UUIDRecord: Codable {
-        let id: UUID
-        let name: String
     }
 
     @Test("Encode UUID values")
@@ -187,11 +243,6 @@ struct CSVEncoderTests {
         let csv = try encoder.encodeToString(records)
 
         #expect(csv.contains(uuid.uuidString))
-    }
-
-    struct URLRecord: Codable {
-        let name: String
-        let website: URL
     }
 
     @Test("Encode URL values")
@@ -223,7 +274,7 @@ struct CSVEncoderTests {
         let encoder = CSVEncoder()
         let row = try encoder.encodeRow(record)
 
-        #expect(!row.contains("name"))  // No header
+        #expect(!row.contains("name")) // No header
         #expect(row.contains("Single"))
         #expect(row.contains("30"))
     }
@@ -244,7 +295,7 @@ struct CSVEncoderTests {
     func roundtripEncodeDecode() throws {
         let original = [
             SimpleRecord(name: "Alice", age: 30, score: 95.5),
-            SimpleRecord(name: "Bob", age: 25, score: 88.0)
+            SimpleRecord(name: "Bob", age: 25, score: 88.0),
         ]
 
         let encoder = CSVEncoder()
@@ -259,7 +310,7 @@ struct CSVEncoderTests {
     @Test("Roundtrip with special characters")
     func roundtripWithSpecialCharacters() throws {
         let original = [
-            QuotedRecord(name: "Special", description: "Has, commas and \"quotes\"")
+            QuotedRecord(name: "Special", description: "Has, commas and \"quotes\""),
         ]
 
         let encoder = CSVEncoder()
@@ -274,7 +325,7 @@ struct CSVEncoderTests {
     @Test("Roundtrip Decimal preserves precision")
     func roundtripDecimalPreservesPrecision() throws {
         let original = [
-            DecimalRecord(price: Decimal(string: "123.456789")!, quantity: 1)
+            DecimalRecord(price: Decimal(string: "123.456789")!, quantity: 1),
         ]
 
         let encoder = CSVEncoder()
@@ -296,21 +347,6 @@ struct CSVEncoderTests {
         #expect(csv.isEmpty)
     }
 
-    struct AllNumericTypes: Codable, Equatable {
-        let int: Int
-        let int8: Int8
-        let int16: Int16
-        let int32: Int32
-        let int64: Int64
-        let uint: UInt
-        let uint8: UInt8
-        let uint16: UInt16
-        let uint32: UInt32
-        let uint64: UInt64
-        let float: Float
-        let double: Double
-    }
-
     @Test("Roundtrip all numeric types")
     func roundtripAllNumericTypes() throws {
         let original = [
@@ -326,8 +362,8 @@ struct CSVEncoderTests {
                 uint32: 32,
                 uint64: 64,
                 float: 3.14,
-                double: 2.718281828
-            )
+                double: 2.718281828,
+            ),
         ]
 
         let encoder = CSVEncoder()
@@ -343,7 +379,7 @@ struct CSVEncoderTests {
     func crlfLineEndings() throws {
         let records = [
             SimpleRecord(name: "A", age: 1, score: 1.0),
-            SimpleRecord(name: "B", age: 2, score: 2.0)
+            SimpleRecord(name: "B", age: 2, score: 2.0),
         ]
 
         let config = CSVEncoder.Configuration(lineEnding: .crlf)
@@ -354,17 +390,9 @@ struct CSVEncoderTests {
         #expect(!csv.contains("\n") || csv.components(separatedBy: "\r\n").count > 1)
     }
 
-    // MARK: - Streaming Encoding Tests
-
-    struct SendableRecord: Codable, Equatable, Sendable {
-        let id: Int
-        let name: String
-        let value: Double
-    }
-
     @Test("Stream encode to file")
     func streamEncodeToFile() async throws {
-        let records = (0..<100).map { SendableRecord(id: $0, name: "Item\($0)", value: Double($0) * 1.5) }
+        let records = (0 ..< 100).map { SendableRecord(id: $0, name: "Item\($0)", value: Double($0) * 1.5) }
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_encode_test.csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -384,7 +412,7 @@ struct CSVEncoderTests {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_async_test.csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
-        let records = (0..<50).map { SendableRecord(id: $0, name: "Async\($0)", value: Double($0)) }
+        let records = (0 ..< 50).map { SendableRecord(id: $0, name: "Async\($0)", value: Double($0)) }
         let stream = AsyncStream { continuation in
             for record in records {
                 continuation.yield(record)
@@ -405,7 +433,7 @@ struct CSVEncoderTests {
     func streamEncodeToAsyncStream() async throws {
         let records = [
             SendableRecord(id: 1, name: "First", value: 1.0),
-            SendableRecord(id: 2, name: "Second", value: 2.0)
+            SendableRecord(id: 2, name: "Second", value: 2.0),
         ]
 
         let inputStream = AsyncStream { continuation in
@@ -433,7 +461,7 @@ struct CSVEncoderTests {
 
     @Test("Parallel encode preserves order")
     func parallelEncodePreservesOrder() async throws {
-        let records = (0..<1000).map { SendableRecord(id: $0, name: "Record\($0)", value: Double($0)) }
+        let records = (0 ..< 1000).map { SendableRecord(id: $0, name: "Record\($0)", value: Double($0)) }
 
         let encoder = CSVEncoder()
         let data = try await encoder.encodeParallel(records, parallelConfig: .init(parallelism: 4))
@@ -448,7 +476,7 @@ struct CSVEncoderTests {
 
     @Test("Parallel encode to file")
     func parallelEncodeToFile() async throws {
-        let records = (0..<500).map { SendableRecord(id: $0, name: "Parallel\($0)", value: Double($0) * 2.0) }
+        let records = (0 ..< 500).map { SendableRecord(id: $0, name: "Parallel\($0)", value: Double($0) * 2.0) }
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("parallel_encode_test.csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -467,7 +495,7 @@ struct CSVEncoderTests {
         let records = [
             SendableRecord(id: 1, name: "A", value: 1.0),
             SendableRecord(id: 2, name: "B", value: 2.0),
-            SendableRecord(id: 3, name: "C", value: 3.0)
+            SendableRecord(id: 3, name: "C", value: 3.0),
         ]
 
         let encoder = CSVEncoder()
@@ -481,7 +509,7 @@ struct CSVEncoderTests {
 
     @Test("Parallel batched encode yields chunks")
     func parallelBatchedEncodeYieldsChunks() async throws {
-        let records = (0..<100).map { SendableRecord(id: $0, name: "Batch\($0)", value: Double($0)) }
+        let records = (0 ..< 100).map { SendableRecord(id: $0, name: "Batch\($0)", value: Double($0)) }
 
         let encoder = CSVEncoder()
         var batches: [[String]] = []
@@ -516,7 +544,7 @@ struct CSVEncoderTests {
         let records = [
             SendableRecord(id: 1, name: "Has, comma", value: 1.0),
             SendableRecord(id: 2, name: "Has \"quotes\"", value: 2.0),
-            SendableRecord(id: 3, name: "Has\nnewline", value: 3.0)
+            SendableRecord(id: 3, name: "Has\nnewline", value: 3.0),
         ]
 
         let encoder = CSVEncoder()
@@ -533,7 +561,7 @@ struct CSVEncoderTests {
     @Test("Parallel encode is faster than sequential for large data")
     func parallelEncodeFasterThanSequential() async throws {
         // Generate large dataset (10K records)
-        let records = (0..<10_000).map { i in
+        let records = (0 ..< 10000).map { i in
             SendableRecord(id: i, name: "Person\(i) with a longer name", value: Double(i) * 1.5)
         }
 
@@ -559,11 +587,13 @@ struct CSVEncoderTests {
         let coreCount = ProcessInfo.processInfo.activeProcessorCount
         if coreCount > 1 {
             // Convert to nanoseconds for comparison
-            let seqNanos = Double(sequentialDuration.components.seconds) * 1e9 + Double(sequentialDuration.components.attoseconds) / 1e9
-            let parNanos = Double(parallelDuration.components.seconds) * 1e9 + Double(parallelDuration.components.attoseconds) / 1e9
+            let seqNanos = Double(sequentialDuration.components.seconds) * 1e9 +
+                Double(sequentialDuration.components.attoseconds) / 1e9
+            let parNanos = Double(parallelDuration.components.seconds) * 1e9 +
+                Double(parallelDuration.components.attoseconds) / 1e9
             let speedup = seqNanos / parNanos
             // Just verify correctness - speedup varies by machine/load
-            #expect(parallelResult.count > 0, "Parallel encode should complete successfully")
+            #expect(!parallelResult.isEmpty, "Parallel encode should complete successfully")
             _ = speedup // Suppress unused warning
         }
     }
@@ -603,14 +633,6 @@ struct CSVEncoderTests {
 
         let result = String(decoding: buffer, as: UTF8.self)
         #expect(result.hasSuffix("\r\n"))
-    }
-
-    // MARK: - KeyEncodingStrategy Tests
-
-    struct CamelCaseRecord: Codable {
-        let firstName: String
-        let lastName: String
-        let phoneNumber: String
     }
 
     @Test("Key encoding with snake_case")
@@ -659,7 +681,7 @@ struct CSVEncoderTests {
         let config = CSVEncoder.Configuration(
             keyEncodingStrategy: .custom { key in
                 key.uppercased()
-            }
+            },
         )
         let encoder = CSVEncoder(configuration: config)
         let csv = try encoder.encodeToString(records)
@@ -675,7 +697,7 @@ struct CSVEncoderTests {
     func boolEncodingTrueFalse() throws {
         let records = [
             BoolRecord(name: "A", active: true),
-            BoolRecord(name: "B", active: false)
+            BoolRecord(name: "B", active: false),
         ]
 
         let config = CSVEncoder.Configuration(boolEncodingStrategy: .trueFalse)
@@ -690,7 +712,7 @@ struct CSVEncoderTests {
     func boolEncodingNumeric() throws {
         let records = [
             BoolRecord(name: "A", active: true),
-            BoolRecord(name: "B", active: false)
+            BoolRecord(name: "B", active: false),
         ]
 
         let config = CSVEncoder.Configuration(boolEncodingStrategy: .numeric)
@@ -706,7 +728,7 @@ struct CSVEncoderTests {
     func boolEncodingYesNo() throws {
         let records = [
             BoolRecord(name: "A", active: true),
-            BoolRecord(name: "B", active: false)
+            BoolRecord(name: "B", active: false),
         ]
 
         let config = CSVEncoder.Configuration(boolEncodingStrategy: .yesNo)
@@ -721,24 +743,17 @@ struct CSVEncoderTests {
     func boolEncodingCustom() throws {
         let records = [
             BoolRecord(name: "A", active: true),
-            BoolRecord(name: "B", active: false)
+            BoolRecord(name: "B", active: false),
         ]
 
         let config = CSVEncoder.Configuration(
-            boolEncodingStrategy: .custom(trueValue: "ON", falseValue: "OFF")
+            boolEncodingStrategy: .custom(trueValue: "ON", falseValue: "OFF"),
         )
         let encoder = CSVEncoder(configuration: config)
         let csv = try encoder.encodeToString(records)
 
         #expect(csv.contains("ON"))
         #expect(csv.contains("OFF"))
-    }
-
-    // MARK: - NumberEncodingStrategy Tests
-
-    struct NumberRecord: Codable {
-        let name: String
-        let value: Double
     }
 
     @Test("Number encoding with standard strategy")
@@ -765,28 +780,14 @@ struct CSVEncoderTests {
         #expect(csv.contains("1234,56") || csv.contains("1.234,56"))
     }
 
-    // MARK: - Nested Codable Encoding Tests
-
-    struct Address: Codable, Equatable {
-        let street: String
-        let city: String
-        let zipCode: String
-    }
-
-    struct PersonWithAddress: Codable, Equatable {
-        let name: String
-        let age: Int
-        let address: Address
-    }
-
     @Test("Nested encoding with flatten strategy")
     func nestedEncodingFlatten() throws {
         let records = [
             PersonWithAddress(
                 name: "Alice",
                 age: 30,
-                address: Address(street: "123 Main St", city: "Springfield", zipCode: "12345")
-            )
+                address: Address(street: "123 Main St", city: "Springfield", zipCode: "12345"),
+            ),
         ]
 
         let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .flatten(separator: "_"))
@@ -807,8 +808,8 @@ struct CSVEncoderTests {
             PersonWithAddress(
                 name: "Bob",
                 age: 25,
-                address: Address(street: "456 Oak Ave", city: "Shelbyville", zipCode: "67890")
-            )
+                address: Address(street: "456 Oak Ave", city: "Shelbyville", zipCode: "67890"),
+            ),
         ]
 
         let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json)
@@ -829,8 +830,8 @@ struct CSVEncoderTests {
             PersonWithAddress(
                 name: "Carol",
                 age: 35,
-                address: Address(street: "789 Pine Rd", city: "Capital City", zipCode: "11111")
-            )
+                address: Address(street: "789 Pine Rd", city: "Capital City", zipCode: "11111"),
+            ),
         ]
 
         let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .codable)
@@ -849,8 +850,8 @@ struct CSVEncoderTests {
             PersonWithAddress(
                 name: "Dave",
                 age: 40,
-                address: Address(street: "321 Elm St", city: "Townsville", zipCode: "22222")
-            )
+                address: Address(street: "321 Elm St", city: "Townsville", zipCode: "22222"),
+            ),
         ]
 
         let encoderConfig = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .flatten(separator: "_"))
@@ -870,8 +871,8 @@ struct CSVEncoderTests {
             PersonWithAddress(
                 name: "Eve",
                 age: 28,
-                address: Address(street: "555 Maple Dr", city: "Riverdale", zipCode: "33333")
-            )
+                address: Address(street: "555 Maple Dr", city: "Riverdale", zipCode: "33333"),
+            ),
         ]
 
         let encoderConfig = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json)
@@ -902,8 +903,8 @@ struct CSVEncoderTests {
             Employee(
                 name: "Frank",
                 address: Address(street: "100 Work St", city: "Office City", zipCode: "44444"),
-                contact: Contact(email: "frank@example.com", phone: "555-1234")
-            )
+                contact: Contact(email: "frank@example.com", phone: "555-1234"),
+            ),
         ]
 
         let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .flatten(separator: "_"))
@@ -921,8 +922,8 @@ struct CSVEncoderTests {
             PersonWithAddress(
                 name: "Grace",
                 age: 45,
-                address: Address(street: "999 Error St", city: "Failtown", zipCode: "00000")
-            )
+                address: Address(street: "999 Error St", city: "Failtown", zipCode: "00000"),
+            ),
         ]
 
         let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .error)
@@ -940,8 +941,8 @@ struct CSVEncoderTests {
             PersonWithAddress(
                 name: "Henry",
                 age: 50,
-                address: Address(street: "123 \"Quoted\" St, Apt 5", city: "New\nYork", zipCode: "55555")
-            )
+                address: Address(street: "123 \"Quoted\" St, Apt 5", city: "New\nYork", zipCode: "55555"),
+            ),
         ]
 
         let encoderConfig = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .flatten(separator: "_"))

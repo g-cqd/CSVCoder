@@ -12,16 +12,7 @@ import Foundation
 /// Conforms to `AsyncSequence` for `for await` iteration.
 /// Uses UTF-8 byte-level parsing for optimal performance.
 struct StreamingCSVParser: AsyncSequence, Sendable {
-    typealias Element = [String]
-
-    private let reader: MemoryMappedReader
-    private let configuration: CSVDecoder.Configuration
-
-    // UTF-8 byte constants (ASCII subset) - shared with CSVParser
-    private static let quote: UInt8 = 0x22      // "
-    private static let comma: UInt8 = 0x2C      // ,
-    private static let cr: UInt8 = 0x0D         // \r
-    private static let lf: UInt8 = 0x0A         // \n
+    // MARK: Lifecycle
 
     /// Initialize with a memory-mapped reader.
     init(reader: MemoryMappedReader, configuration: CSVDecoder.Configuration) {
@@ -31,34 +22,30 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
 
     /// Initialize with a file URL.
     init(url: URL, configuration: CSVDecoder.Configuration) throws {
-        self.reader = try MemoryMappedReader(url: url)
+        reader = try MemoryMappedReader(url: url)
         self.configuration = configuration
     }
 
     /// Initialize with Data.
     init(data: Data, configuration: CSVDecoder.Configuration) {
-        self.reader = MemoryMappedReader(data: data)
+        reader = MemoryMappedReader(data: data)
         self.configuration = configuration
     }
 
-    func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(reader: reader, configuration: configuration)
-    }
+    // MARK: Internal
+
+    typealias Element = [String]
 
     struct AsyncIterator: AsyncIteratorProtocol {
-        private let reader: MemoryMappedReader
-        private let configuration: CSVDecoder.Configuration
-        private let delimiterByte: UInt8
-        private var offset: Int = 0
-        private var lineNumber: Int = 1
-        private var columnNumber: Int = 1
-        private var bomSkipped: Bool = false
+        // MARK: Lifecycle
 
         init(reader: MemoryMappedReader, configuration: CSVDecoder.Configuration) {
             self.reader = reader
             self.configuration = configuration
-            self.delimiterByte = configuration.delimiter.asciiValue ?? StreamingCSVParser.comma
+            delimiterByte = configuration.delimiter.asciiValue ?? StreamingCSVParser.comma
         }
+
+        // MARK: Internal
 
         mutating func next() async throws -> [String]? {
             // Skip BOM on first read
@@ -76,13 +63,23 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
             }
         }
 
+        // MARK: Private
+
+        private let reader: MemoryMappedReader
+        private let configuration: CSVDecoder.Configuration
+        private let delimiterByte: UInt8
+        private var offset: Int = 0
+        private var lineNumber: Int = 1
+        private var columnNumber: Int = 1
+        private var bomSkipped: Bool = false
+
         private mutating func skipBOM() {
             guard reader.count >= 3 else { return }
             reader.withUnsafeBytes { buffer in
                 guard let baseAddress = buffer.baseAddress else { return }
                 let bytes = UnsafeBufferPointer(
                     start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                    count: reader.count
+                    count: reader.count,
                 )
                 offset = CSVUtilities.bomOffset(in: bytes)
             }
@@ -106,7 +103,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                 if inQuotes {
                     if byte == StreamingCSVParser.quote {
                         // Check for escaped quote ""
-                        if offset + 1 < count && bytes[offset + 1] == StreamingCSVParser.quote {
+                        if offset + 1 < count, bytes[offset + 1] == StreamingCSVParser.quote {
                             fieldBytes.append(StreamingCSVParser.quote)
                             offset += 2
                             columnNumber += 2
@@ -153,7 +150,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                             throw CSVDecodingError.parsingError(
                                 "Quote character in unquoted field (RFC 4180 violation)",
                                 line: lineNumber,
-                                column: columnNumber
+                                column: columnNumber,
                             )
                         }
                         // Lenient mode: treat as literal
@@ -175,7 +172,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                 // Handle line endings
                 if byte == StreamingCSVParser.cr {
                     // Check for CRLF
-                    if offset + 1 < count && bytes[offset + 1] == StreamingCSVParser.lf {
+                    if offset + 1 < count, bytes[offset + 1] == StreamingCSVParser.lf {
                         // CRLF
                         fields.append(processField(fieldBytes))
                         offset += 2
@@ -215,7 +212,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                 throw CSVDecodingError.parsingError(
                     "Unterminated quoted field",
                     line: fieldStartLine,
-                    column: fieldStartColumn
+                    column: fieldStartColumn,
                 )
             }
 
@@ -235,7 +232,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                 throw CSVDecodingError.parsingError(
                     "Expected \(expected) fields but found \(fields.count)",
                     line: rowLine,
-                    column: nil
+                    column: nil,
                 )
             }
         }
@@ -248,4 +245,19 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
             return string
         }
     }
+
+    func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(reader: reader, configuration: configuration)
+    }
+
+    // MARK: Private
+
+    // UTF-8 byte constants (ASCII subset) - shared with CSVParser
+    private static let quote: UInt8 = 0x22 // "
+    private static let comma: UInt8 = 0x2C // ,
+    private static let cr: UInt8 = 0x0D // \r
+    private static let lf: UInt8 = 0x0A // \n
+
+    private let reader: MemoryMappedReader
+    private let configuration: CSVDecoder.Configuration
 }

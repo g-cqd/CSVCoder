@@ -5,13 +5,12 @@
 //  Tests for SIMD scanner, parallel decoding, backpressure, and memory configuration.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Parallel Tests")
 struct CSVDecoderParallelTests {
-
     struct SimpleRecord: Codable, Equatable, Sendable {
         let name: String
         let age: Int
@@ -31,8 +30,8 @@ struct CSVDecoderParallelTests {
         }
 
         // Should find: comma, LF, comma, LF, comma
-        let commas = positions.filter { $0.isComma }
-        let newlines = positions.filter { $0.isNewline }
+        let commas = positions.filter(\.isComma)
+        let newlines = positions.filter(\.isNewline)
 
         #expect(commas.count == 3)
         #expect(newlines.count == 2)
@@ -85,7 +84,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel decode from Data")
     func parallelDecodeFromData() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<100 {
+        for i in 0 ..< 100 {
             csvLines.append("Person\(i),\(20 + i % 50),\(Double(i) * 0.5)")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -94,7 +93,7 @@ struct CSVDecoderParallelTests {
         let decoder = CSVDecoder()
         let config = CSVDecoder.ParallelConfiguration(
             parallelism: 4,
-            chunkSize: 256 // Small chunks to test parallel behavior
+            chunkSize: 256, // Small chunks to test parallel behavior
         )
 
         let records = try await decoder.decodeParallel([SimpleRecord].self, from: data, parallelConfig: config)
@@ -107,7 +106,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel decode preserves order")
     func parallelDecodePreservesOrder() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<50 {
+        for i in 0 ..< 50 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -117,7 +116,7 @@ struct CSVDecoderParallelTests {
         let config = CSVDecoder.ParallelConfiguration(
             parallelism: 4,
             chunkSize: 128,
-            preserveOrder: true
+            preserveOrder: true,
         )
 
         let records = try await decoder.decodeParallel([SimpleRecord].self, from: data, parallelConfig: config)
@@ -132,7 +131,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel decode unordered")
     func parallelDecodeUnordered() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<50 {
+        for i in 0 ..< 50 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -142,7 +141,7 @@ struct CSVDecoderParallelTests {
         let config = CSVDecoder.ParallelConfiguration(
             parallelism: 4,
             chunkSize: 128,
-            preserveOrder: false
+            preserveOrder: false,
         )
 
         let records = try await decoder.decodeParallel([SimpleRecord].self, from: data, parallelConfig: config)
@@ -150,8 +149,8 @@ struct CSVDecoderParallelTests {
         // All records present, but possibly unordered
         #expect(records.count == 50)
 
-        let names = Set(records.map { $0.name })
-        for i in 0..<50 {
+        let names = Set(records.map(\.name))
+        for i in 0 ..< 50 {
             #expect(names.contains("Person\(i)"))
         }
     }
@@ -159,7 +158,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel batched decode yields batches")
     func parallelBatchedDecode() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<100 {
+        for i in 0 ..< 100 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -186,8 +185,11 @@ struct CSVDecoderParallelTests {
     func parallelDecodeFasterThanSequential() async throws {
         // Generate large dataset (10K rows with complex fields)
         var csvLines = ["id,name,email,value,active,notes"]
-        for i in 0..<10_000 {
-            csvLines.append("\(i),Person\(i),person\(i)@example.com,\(Double(i) * 1.5),\(i % 2 == 0),\"Notes for person \(i)\"")
+        for i in 0 ..< 10000 {
+            csvLines
+                .append(
+                    "\(i),Person\(i),person\(i)@example.com,\(Double(i) * 1.5),\(i % 2 == 0),\"Notes for person \(i)\"",
+                )
         }
         let csv = csvLines.joined(separator: "\n")
         let data = Data(csv.utf8)
@@ -206,26 +208,36 @@ struct CSVDecoderParallelTests {
         // Measure sequential decode (parallelism: 1)
         let sequentialStart = ContinuousClock.now
         let sequentialConfig = CSVDecoder.ParallelConfiguration(parallelism: 1, chunkSize: 64 * 1024)
-        let sequentialResult = try await decoder.decodeParallel([LargeRecord].self, from: data, parallelConfig: sequentialConfig)
+        let sequentialResult = try await decoder.decodeParallel(
+            [LargeRecord].self,
+            from: data,
+            parallelConfig: sequentialConfig,
+        )
         let sequentialDuration = ContinuousClock.now - sequentialStart
 
         // Measure parallel decode (all cores)
         let parallelStart = ContinuousClock.now
         let parallelConfig = CSVDecoder.ParallelConfiguration(chunkSize: 64 * 1024)
-        let parallelResult = try await decoder.decodeParallel([LargeRecord].self, from: data, parallelConfig: parallelConfig)
+        let parallelResult = try await decoder.decodeParallel(
+            [LargeRecord].self,
+            from: data,
+            parallelConfig: parallelConfig,
+        )
         let parallelDuration = ContinuousClock.now - parallelStart
 
         // Verify correctness
-        #expect(sequentialResult.count == 10_000)
-        #expect(parallelResult.count == 10_000)
+        #expect(sequentialResult.count == 10000)
+        #expect(parallelResult.count == 10000)
 
         // On multi-core machines, parallel should be faster
         let coreCount = ProcessInfo.processInfo.activeProcessorCount
         if coreCount > 1 {
-            let seqNanos = Double(sequentialDuration.components.seconds) * 1e9 + Double(sequentialDuration.components.attoseconds) / 1e9
-            let parNanos = Double(parallelDuration.components.seconds) * 1e9 + Double(parallelDuration.components.attoseconds) / 1e9
+            let seqNanos = Double(sequentialDuration.components.seconds) * 1e9 +
+                Double(sequentialDuration.components.attoseconds) / 1e9
+            let parNanos = Double(parallelDuration.components.seconds) * 1e9 +
+                Double(parallelDuration.components.attoseconds) / 1e9
             let speedup = seqNanos / parNanos
-            #expect(parallelResult.count == 10_000, "Parallel decode should complete successfully")
+            #expect(parallelResult.count == 10000, "Parallel decode should complete successfully")
             _ = speedup // Suppress unused warning
         }
     }
@@ -235,7 +247,7 @@ struct CSVDecoderParallelTests {
     @Test("Decode with memory configuration")
     func decodeWithMemoryConfig() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<50 {
+        for i in 0 ..< 50 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -248,11 +260,15 @@ struct CSVDecoderParallelTests {
         let memoryConfig = CSVDecoder.MemoryLimitConfiguration(
             memoryBudget: 1024 * 1024, // 1MB
             estimatedRowSize: 256,
-            batchSize: 25
+            batchSize: 25,
         )
 
         var records: [SimpleRecord] = []
-        for try await record in decoder.decodeWithBackpressure(SimpleRecord.self, from: tempURL, memoryConfig: memoryConfig) {
+        for try await record in decoder.decodeWithBackpressure(
+            SimpleRecord.self,
+            from: tempURL,
+            memoryConfig: memoryConfig,
+        ) {
             records.append(record)
         }
 
@@ -262,7 +278,7 @@ struct CSVDecoderParallelTests {
     @Test("Batched decode with backpressure")
     func batchedDecodeWithBackpressure() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<100 {
+        for i in 0 ..< 100 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -275,18 +291,22 @@ struct CSVDecoderParallelTests {
         let memoryConfig = CSVDecoder.MemoryLimitConfiguration(batchSize: 25)
 
         var batches: [[SimpleRecord]] = []
-        for try await batch in decoder.decodeBatchedWithBackpressure(SimpleRecord.self, from: tempURL, memoryConfig: memoryConfig) {
+        for try await batch in decoder.decodeBatchedWithBackpressure(
+            SimpleRecord.self,
+            from: tempURL,
+            memoryConfig: memoryConfig,
+        ) {
             batches.append(batch)
         }
 
         #expect(batches.count == 4) // 100 records / 25 per batch
-        #expect(batches.flatMap { $0 }.count == 100)
+        #expect(batches.flatMap(\.self).count == 100)
     }
 
     @Test("Decode with progress reporting")
     func decodeWithProgress() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0..<100 {
+        for i in 0 ..< 100 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -311,7 +331,7 @@ struct CSVDecoderParallelTests {
             from: tempURL,
             progressHandler: { _ in
                 Task { await counter.increment() }
-            }
+            },
         ) {
             records.append(record)
         }

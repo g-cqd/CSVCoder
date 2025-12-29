@@ -5,13 +5,12 @@
 //  Tests for locale-aware decoding strategies.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("Locale-Aware Decoding Tests")
 struct LocaleAwareDecodingTests {
-
     // MARK: - Test Models
 
     struct PriceRecord: Codable, Equatable {
@@ -41,7 +40,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US"))
+            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US")),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PriceRecord].self, from: csv)
@@ -61,7 +60,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "de_DE"))
+            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "de_DE")),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PriceRecord].self, from: csv)
@@ -82,7 +81,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US"))
+            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US")),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PriceRecord].self, from: csv)
@@ -103,7 +102,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US"))
+            numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US")),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PriceRecord].self, from: csv)
@@ -125,7 +124,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            numberDecodingStrategy: .currency(code: "USD", locale: Locale(identifier: "en_US"))
+            numberDecodingStrategy: .currency(code: "USD", locale: Locale(identifier: "en_US")),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DecimalRecord].self, from: csv)
@@ -145,7 +144,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            numberDecodingStrategy: .currency(code: "EUR", locale: Locale(identifier: "de_DE"))
+            numberDecodingStrategy: .currency(code: "EUR", locale: Locale(identifier: "de_DE")),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DecimalRecord].self, from: csv)
@@ -167,7 +166,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_US"), style: .numeric)
+            dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_US"), style: .numeric),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DateRecord].self, from: csv)
@@ -191,7 +190,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_GB"), style: .numeric)
+            dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_GB"), style: .numeric),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DateRecord].self, from: csv)
@@ -214,7 +213,7 @@ struct LocaleAwareDecodingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_US"), style: .numeric)
+            dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_US"), style: .numeric),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DateRecord].self, from: csv)

@@ -5,13 +5,12 @@
 //  Tests for error locations, error suggestions, and diagnostics.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Error Tests")
 struct CSVDecoderErrorTests {
-
     struct SimpleRecord: Codable, Equatable {
         let name: String
         let age: Int
@@ -36,7 +35,7 @@ struct CSVDecoderErrorTests {
             Issue.record("Expected error to be thrown")
         } catch let error as CSVDecodingError {
             let location = error.location
-            #expect(location?.row == 3)  // Row 3 (1-based, after header)
+            #expect(location?.row == 3) // Row 3 (1-based, after header)
             #expect(location?.column == "age")
 
             let description = error.errorDescription ?? ""
@@ -133,7 +132,8 @@ struct CSVDecoderErrorTests {
         } catch let error as CSVDecodingError {
             let description = error.errorDescription ?? ""
             // Should list available columns when no close match exists
-            #expect(description.contains("Available columns") || description.contains("foo") || description.contains("bar"))
+            #expect(description.contains("Available columns") || description.contains("foo") || description
+                .contains("bar"))
         }
     }
 
@@ -184,7 +184,7 @@ struct CSVDecoderErrorTests {
     @Test("Error suggestion for case mismatch")
     func errorSuggestionForCaseMismatch() throws {
         struct CaseSensitive: Codable {
-            let Name: String  // uppercase N
+            let Name: String // uppercase N
         }
 
         let csv = """

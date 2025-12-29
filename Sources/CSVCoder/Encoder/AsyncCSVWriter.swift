@@ -9,25 +9,28 @@ import Foundation
 
 /// Actor-isolated async CSV file writer with buffered output.
 actor AsyncCSVWriter {
-    private let handle: FileHandle
-    private var buffer: [UInt8]
-    private let bufferCapacity: Int
-    private var _totalBytesWritten: Int = 0
-
-    /// Total bytes written to file (including buffered).
-    var totalBytesWritten: Int { _totalBytesWritten }
+    // MARK: Lifecycle
 
     /// Creates an async writer for the given file URL.
     /// - Parameters:
     ///   - url: The file URL to write to.
     ///   - bufferCapacity: Size of internal buffer in bytes (default 64KB).
-    init(url: URL, bufferCapacity: Int = 65_536) throws {
+    init(url: URL, bufferCapacity: Int = 65536) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
-        self.handle = try FileHandle(forWritingTo: url)
-        self.buffer = []
-        self.buffer.reserveCapacity(bufferCapacity)
+        handle = try FileHandle(forWritingTo: url)
+        buffer = []
+        buffer.reserveCapacity(bufferCapacity)
         self.bufferCapacity = bufferCapacity
     }
+
+    deinit {
+        try? handle.close()
+    }
+
+    // MARK: Internal
+
+    /// Total bytes written to file (including buffered).
+    var totalBytesWritten: Int { _totalBytesWritten }
 
     /// Writes a complete row to the buffer.
     func writeRow(_ bytes: [UInt8]) async throws {
@@ -68,7 +71,10 @@ actor AsyncCSVWriter {
         try handle.close()
     }
 
-    deinit {
-        try? handle.close()
-    }
+    // MARK: Private
+
+    private let handle: FileHandle
+    private var buffer: [UInt8]
+    private let bufferCapacity: Int
+    private var _totalBytesWritten: Int = 0
 }

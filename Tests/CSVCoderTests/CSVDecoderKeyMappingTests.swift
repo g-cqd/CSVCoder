@@ -5,13 +5,12 @@
 //  Tests for key strategies, column mapping, index mapping, and CSVIndexedDecodable.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Key Mapping Tests")
 struct CSVDecoderKeyMappingTests {
-
     struct SimpleRecord: Codable, Equatable {
         let name: String
         let age: Int
@@ -22,6 +21,36 @@ struct CSVDecoderKeyMappingTests {
         let firstName: String
         let lastName: String
         let emailAddress: String
+    }
+
+    // MARK: - CSVIndexedDecodable Tests
+
+    struct IndexedRecord: CSVIndexedDecodable, Equatable {
+        enum CodingKeys: String, CodingKey, CaseIterable {
+            case name
+            case age
+            case score
+        }
+
+        typealias CSVCodingKeys = CodingKeys
+
+        let name: String
+        let age: Int
+        let score: Double
+    }
+
+    struct ReorderedRecord: CSVIndexedDecodable, Equatable {
+        enum CodingKeys: String, CodingKey, CaseIterable {
+            case third
+            case first
+            case second // Different order than properties
+        }
+
+        typealias CSVCodingKeys = CodingKeys
+
+        let first: String
+        let second: Int
+        let third: Double
     }
 
     // MARK: - Key Decoding Strategy Tests
@@ -35,7 +64,7 @@ struct CSVDecoderKeyMappingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            keyDecodingStrategy: .convertFromSnakeCase
+            keyDecodingStrategy: .convertFromSnakeCase,
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -53,7 +82,7 @@ struct CSVDecoderKeyMappingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            keyDecodingStrategy: .convertFromKebabCase
+            keyDecodingStrategy: .convertFromKebabCase,
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -71,7 +100,7 @@ struct CSVDecoderKeyMappingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            keyDecodingStrategy: .convertFromScreamingSnakeCase
+            keyDecodingStrategy: .convertFromScreamingSnakeCase,
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -88,7 +117,7 @@ struct CSVDecoderKeyMappingTests {
         """
 
         let config = CSVDecoder.Configuration(
-            keyDecodingStrategy: .convertFromPascalCase
+            keyDecodingStrategy: .convertFromPascalCase,
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -107,11 +136,11 @@ struct CSVDecoderKeyMappingTests {
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .custom { key in
                 switch key {
-                case "fn": return "firstName"
-                case "ln": return "lastName"
-                default: return key + "Address"
+                case "fn": "firstName"
+                case "ln": "lastName"
+                default: key + "Address"
                 }
-            }
+            },
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -135,8 +164,8 @@ struct CSVDecoderKeyMappingTests {
             columnMapping: [
                 "First Name": "firstName",
                 "Last Name": "lastName",
-                "E-mail": "emailAddress"
-            ]
+                "E-mail": "emailAddress",
+            ],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -157,8 +186,8 @@ struct CSVDecoderKeyMappingTests {
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .convertFromSnakeCase,
             columnMapping: [
-                "surname": "lastName"  // Override snake_case conversion for this column
-            ]
+                "surname": "lastName", // Override snake_case conversion for this column
+            ],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([CamelCaseRecord].self, from: csv)
@@ -180,7 +209,7 @@ struct CSVDecoderKeyMappingTests {
 
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
-            indexMapping: [0: "name", 1: "age", 2: "score"]
+            indexMapping: [0: "name", 1: "age", 2: "score"],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([SimpleRecord].self, from: csv)
@@ -201,7 +230,7 @@ struct CSVDecoderKeyMappingTests {
 
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
-            indexMapping: [1: "name", 3: "age", 5: "score"]
+            indexMapping: [1: "name", 3: "age", 5: "score"],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([SimpleRecord].self, from: csv)
@@ -222,7 +251,7 @@ struct CSVDecoderKeyMappingTests {
 
         let config = CSVDecoder.Configuration(
             hasHeaders: true,
-            indexMapping: [0: "name", 1: "age", 2: "score"]
+            indexMapping: [0: "name", 1: "age", 2: "score"],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([SimpleRecord].self, from: csv)
@@ -246,7 +275,7 @@ struct CSVDecoderKeyMappingTests {
 
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
-            indexMapping: [0: "first", 2: "third"]
+            indexMapping: [0: "first", 2: "third"],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PartialRecord].self, from: csv)
@@ -254,20 +283,6 @@ struct CSVDecoderKeyMappingTests {
         #expect(records.count == 2) // Header row is treated as data
         #expect(records[0].first == "a")
         #expect(records[0].third == "c")
-    }
-
-    // MARK: - CSVIndexedDecodable Tests
-
-    struct IndexedRecord: CSVIndexedDecodable, Equatable {
-        let name: String
-        let age: Int
-        let score: Double
-
-        enum CodingKeys: String, CodingKey, CaseIterable {
-            case name, age, score
-        }
-
-        typealias CSVCodingKeys = CodingKeys
     }
 
     @Test("Decode headerless CSV with CSVIndexedDecodable")
@@ -318,7 +333,7 @@ struct CSVDecoderKeyMappingTests {
         // Explicit indexMapping should take precedence
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
-            indexMapping: [2: "name", 1: "age", 0: "score"]
+            indexMapping: [2: "name", 1: "age", 0: "score"],
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([IndexedRecord].self, from: csv)
@@ -327,18 +342,6 @@ struct CSVDecoderKeyMappingTests {
         #expect(records[0].name == "Alice")
         #expect(records[0].age == 30)
         #expect(records[0].score == 95.5)
-    }
-
-    struct ReorderedRecord: CSVIndexedDecodable, Equatable {
-        let first: String
-        let second: Int
-        let third: Double
-
-        enum CodingKeys: String, CodingKey, CaseIterable {
-            case third, first, second  // Different order than properties
-        }
-
-        typealias CSVCodingKeys = CodingKeys
     }
 
     @Test("CSVIndexedDecodable respects CodingKeys case order")

@@ -5,13 +5,12 @@
 //  Tests for RFC 4180 compliance: quoted fields, line endings, strict/lenient mode, nil decoding.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder RFC 4180 Tests")
 struct CSVDecoderRFC4180Tests {
-
     struct TextRecord: Codable, Equatable {
         let name: String
         let value: String
@@ -259,7 +258,7 @@ struct CSVDecoderRFC4180Tests {
             TextRecord(name: "Commas", value: "a,b,c"),
             TextRecord(name: "Quotes", value: "Say \"Hi\""),
             TextRecord(name: "Newline", value: "Line1\nLine2"),
-            TextRecord(name: "Mixed", value: "All: \", \n together")
+            TextRecord(name: "Mixed", value: "All: \", \n together"),
         ]
 
         let encoder = CSVEncoder()
@@ -298,7 +297,7 @@ struct CSVDecoderRFC4180Tests {
 
         let config = CSVDecoder.Configuration(
             parsingMode: .strict,
-            expectedFieldCount: 2
+            expectedFieldCount: 2,
         )
         let decoder = CSVDecoder(configuration: config)
 
@@ -383,7 +382,7 @@ struct CSVDecoderRFC4180Tests {
         """
 
         let config = CSVDecoder.Configuration(
-            nilDecodingStrategy: .custom(["N/A", "-", "n/a"])
+            nilDecodingStrategy: .custom(["N/A", "-", "n/a"]),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([OptionalRecord].self, from: csv)

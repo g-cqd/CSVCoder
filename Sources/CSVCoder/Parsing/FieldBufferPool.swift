@@ -11,15 +11,15 @@ import Foundation
 
 /// Thread-safe pool of reusable byte buffers for field decoding.
 final class FieldBufferPool: @unchecked Sendable {
-    private var buffers: [[UInt8]] = []
-    private let lock = NSLock()
-    private let maxPoolSize: Int
+    // MARK: Lifecycle
 
     /// Creates a buffer pool.
     /// - Parameter maxPoolSize: Maximum number of buffers to retain (default 16).
     init(maxPoolSize: Int = 16) {
         self.maxPoolSize = maxPoolSize
     }
+
+    // MARK: Internal
 
     /// Leases a buffer with at least the specified capacity.
     /// - Parameter capacity: Minimum buffer capacity.
@@ -58,4 +58,10 @@ final class FieldBufferPool: @unchecked Sendable {
         defer { lock.unlock() }
         buffers.removeAll()
     }
+
+    // MARK: Private
+
+    private var buffers: [[UInt8]] = []
+    private let lock = NSLock()
+    private let maxPoolSize: Int
 }

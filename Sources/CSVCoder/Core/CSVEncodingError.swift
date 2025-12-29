@@ -49,16 +49,21 @@ public enum CSVEncodingError: Error, LocalizedError, Sendable {
     /// The encoding produced invalid output.
     case invalidOutput(String)
 
+    // MARK: Public
+
     public var errorDescription: String? {
         switch self {
-        case .invalidValue(let message):
-            return "Invalid value: \(message)"
-        case .unsupportedType(let message):
-            return "Unsupported operation: \(message)"
-        case .missingKey(let key):
-            return "Missing key '\(key)' during encoding"
-        case .invalidOutput(let message):
-            return "Invalid output: \(message)"
+        case let .invalidValue(message):
+            "Invalid value: \(message)"
+
+        case let .unsupportedType(message):
+            "Unsupported operation: \(message)"
+
+        case let .missingKey(key):
+            "Missing key '\(key)' during encoding"
+
+        case let .invalidOutput(message):
+            "Invalid output: \(message)"
         }
     }
 }

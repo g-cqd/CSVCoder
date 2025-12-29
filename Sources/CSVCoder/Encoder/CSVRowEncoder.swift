@@ -7,14 +7,12 @@
 
 import Foundation
 
+// MARK: - CSVRowEncoder
+
 /// An encoder for a single CSV row.
 /// nonisolated utility type for encoding
 nonisolated struct CSVRowEncoder: Encoder {
-    let configuration: CSVEncoder.Configuration
-    let codingPath: [CodingKey]
-    nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
-
-    let storage: CSVEncodingStorage
+    // MARK: Lifecycle
 
     init(configuration: CSVEncoder.Configuration, codingPath: [CodingKey] = [], storage: CSVEncodingStorage) {
         self.configuration = configuration
@@ -22,8 +20,20 @@ nonisolated struct CSVRowEncoder: Encoder {
         self.storage = storage
     }
 
+    // MARK: Internal
+
+    let configuration: CSVEncoder.Configuration
+    let codingPath: [CodingKey]
+    let storage: CSVEncodingStorage
+
+    nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
+
     nonisolated func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        KeyedEncodingContainer(CSVKeyedEncodingContainer(configuration: configuration, codingPath: codingPath, storage: storage))
+        KeyedEncodingContainer(CSVKeyedEncodingContainer(
+            configuration: configuration,
+            codingPath: codingPath,
+            storage: storage,
+        ))
     }
 
     nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
@@ -35,40 +45,46 @@ nonisolated struct CSVRowEncoder: Encoder {
     }
 }
 
+// MARK: - CSVKeyedEncodingContainer
+
 /// A keyed encoding container for CSV data.
 nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
-    let configuration: CSVEncoder.Configuration
-    let codingPath: [CodingKey]
-    private let storage: CSVEncodingStorage
-    private let keyPrefix: String
+    // MARK: Lifecycle
 
-    init(configuration: CSVEncoder.Configuration, codingPath: [CodingKey], storage: CSVEncodingStorage, keyPrefix: String = "") {
+    init(
+        configuration: CSVEncoder.Configuration,
+        codingPath: [CodingKey],
+        storage: CSVEncodingStorage,
+        keyPrefix: String = "",
+    ) {
         self.configuration = configuration
         self.codingPath = codingPath
         self.storage = storage
         self.keyPrefix = keyPrefix
     }
 
-    /// Returns the full key name including any prefix.
-    private func prefixedKey(_ key: Key) -> String {
-        keyPrefix.isEmpty ? key.stringValue : keyPrefix + key.stringValue
-    }
+    // MARK: Internal
+
+    let configuration: CSVEncoder.Configuration
+    let codingPath: [CodingKey]
 
     mutating func encodeNil(forKey key: Key) throws {
         storage.setValue("", forKey: prefixedKey(key))
     }
 
     mutating func encode(_ value: Bool, forKey key: Key) throws {
-        let stringValue: String
-        switch configuration.boolEncodingStrategy {
+        let stringValue: String = switch configuration.boolEncodingStrategy {
         case .trueFalse:
-            stringValue = value ? "true" : "false"
+            value ? "true" : "false"
+
         case .numeric:
-            stringValue = value ? "1" : "0"
+            value ? "1" : "0"
+
         case .yesNo:
-            stringValue = value ? "yes" : "no"
-        case .custom(let trueValue, let falseValue):
-            stringValue = value ? trueValue : falseValue
+            value ? "yes" : "no"
+
+        case let .custom(trueValue, falseValue):
+            value ? trueValue : falseValue
         }
         storage.setValue(stringValue, forKey: prefixedKey(key))
     }
@@ -91,21 +107,6 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         }
         let stringValue = try formatNumber(Double(value))
         storage.setValue(stringValue, forKey: prefixedKey(key))
-    }
-
-    private func formatNumber(_ value: Double) throws -> String {
-        switch configuration.numberEncodingStrategy {
-        case .standard:
-            return String(value)
-        case .locale(let locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            formatter.maximumFractionDigits = 15
-            return formatter.string(from: NSNumber(value: value)) ?? String(value)
-        case .custom(let transform):
-            return try transform(value)
-        }
     }
 
     mutating func encode(_ value: Int, forKey key: Key) throws {
@@ -148,7 +149,7 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         storage.setValue(String(value), forKey: prefixedKey(key))
     }
 
-    mutating func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
+    mutating func encode(_ value: some Encodable, forKey key: Key) throws {
         let fullKey = prefixedKey(key)
 
         // Handle Date specially
@@ -191,21 +192,22 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             let singleValueEncoder = CSVSingleValueEncoder(
                 configuration: configuration,
                 codingPath: codingPath + [key],
-                storage: storage
+                storage: storage,
             )
             try value.encode(to: singleValueEncoder)
 
-        case .flatten(let separator):
+        case let .flatten(separator):
             // Encode nested type with prefixed keys
             let nestedEncoder = CSVNestedEncoder(
                 configuration: configuration,
                 codingPath: codingPath + [key],
                 storage: storage,
-                keyPrefix: fullKey + separator
+                keyPrefix: fullKey + separator,
             )
             try value.encode(to: nestedEncoder)
 
-        case .json, .codable:
+        case .codable,
+             .json:
             // Encode as JSON string
             let jsonEncoder = JSONEncoder()
             jsonEncoder.outputFormatting = [.sortedKeys]
@@ -217,49 +219,24 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         }
     }
 
-    private func encodeDate(_ date: Date) throws -> String {
-        switch configuration.dateEncodingStrategy {
-        case .deferredToDate:
-            throw CSVEncodingError.unsupportedType("deferredToDate requires a date encoding strategy")
-
-        case .secondsSince1970:
-            return String(date.timeIntervalSince1970)
-
-        case .millisecondsSince1970:
-            return String(date.timeIntervalSince1970 * 1000)
-
-        case .iso8601:
-            let formatter = ISO8601DateFormatter()
-            return formatter.string(from: date)
-
-        case .formatted(let format):
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            return formatter.string(from: date)
-
-        case .custom(let closure):
-            return try closure(date)
-        }
-    }
-
-    mutating func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
+    mutating func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type,
+                                                        forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
         switch configuration.nestedTypeEncodingStrategy {
         case .error:
             fatalError("Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable.")
 
-        case .flatten(let separator):
+        case let .flatten(separator):
             let nestedPrefix = prefixedKey(key) + separator
             let nestedContainer = CSVKeyedEncodingContainer<NestedKey>(
                 configuration: configuration,
                 codingPath: codingPath + [key],
                 storage: storage,
-                keyPrefix: nestedPrefix
+                keyPrefix: nestedPrefix,
             )
             return KeyedEncodingContainer(nestedContainer)
 
-        case .json, .codable:
+        case .codable,
+             .json:
             // For JSON strategy, we can't return a proper nested container
             // since we need to buffer all values and serialize at the end.
             // This case is handled in encode<T: Encodable> instead.
@@ -280,6 +257,7 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     // MARK: - Optional Encoding (encodeIfPresent)
+
     // These are called by Swift's synthesized Codable for optional properties
 
     mutating func encodeIfPresent(_ value: Bool?, forKey key: Key) throws {
@@ -338,16 +316,70 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
     }
 
-    mutating func encodeIfPresent<T: Encodable>(_ value: T?, forKey key: Key) throws {
+    mutating func encodeIfPresent(_ value: (some Encodable)?, forKey key: Key) throws {
         if let value = value {
             try encode(value, forKey: key)
         } else {
             storage.setValue("", forKey: prefixedKey(key))
         }
     }
+
+    // MARK: Private
+
+    private let storage: CSVEncodingStorage
+    private let keyPrefix: String
+
+    /// Returns the full key name including any prefix.
+    private func prefixedKey(_ key: Key) -> String {
+        keyPrefix.isEmpty ? key.stringValue : keyPrefix + key.stringValue
+    }
+
+    private func formatNumber(_ value: Double) throws -> String {
+        switch configuration.numberEncodingStrategy {
+        case .standard:
+            return String(value)
+
+        case let .locale(locale):
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            formatter.maximumFractionDigits = 15
+            return formatter.string(from: NSNumber(value: value)) ?? String(value)
+
+        case let .custom(transform):
+            return try transform(value)
+        }
+    }
+
+    private func encodeDate(_ date: Date) throws -> String {
+        switch configuration.dateEncodingStrategy {
+        case .deferredToDate:
+            throw CSVEncodingError.unsupportedType("deferredToDate requires a date encoding strategy")
+
+        case .secondsSince1970:
+            return String(date.timeIntervalSince1970)
+
+        case .millisecondsSince1970:
+            return String(date.timeIntervalSince1970 * 1000)
+
+        case .iso8601:
+            let formatter = ISO8601DateFormatter()
+            return formatter.string(from: date)
+
+        case let .formatted(format):
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            return formatter.string(from: date)
+
+        case let .custom(closure):
+            return try closure(date)
+        }
+    }
 }
 
-// MARK: - Nested Encoder for Flatten Strategy
+// MARK: - CSVNestedEncoder
 
 /// An encoder for nested types that uses prefixed keys.
 nonisolated struct CSVNestedEncoder: Encoder {
@@ -355,6 +387,7 @@ nonisolated struct CSVNestedEncoder: Encoder {
     let codingPath: [CodingKey]
     let storage: CSVEncodingStorage
     let keyPrefix: String
+
     nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     nonisolated func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
@@ -362,7 +395,7 @@ nonisolated struct CSVNestedEncoder: Encoder {
             configuration: configuration,
             codingPath: codingPath,
             storage: storage,
-            keyPrefix: keyPrefix
+            keyPrefix: keyPrefix,
         ))
     }
 
@@ -375,10 +408,14 @@ nonisolated struct CSVNestedEncoder: Encoder {
     }
 }
 
+// MARK: - OptionalEncodable
+
 /// Protocol for handling optional encoding.
 private protocol OptionalEncodable {
     nonisolated var isNil: Bool { get }
 }
+
+// MARK: - Optional + OptionalEncodable
 
 extension Optional: OptionalEncodable {
     nonisolated var isNil: Bool { self == nil }

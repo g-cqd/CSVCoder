@@ -5,18 +5,31 @@
 //  Tests for date, number, and boolean decoding strategies.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Strategy Tests")
 struct CSVDecoderStrategyTests {
-
     // MARK: - Flexible Date Decoding Tests
 
     struct DateRecord: Codable {
         let event: String
         let date: Date
+    }
+
+    // MARK: - Flexible Number Decoding Tests
+
+    struct PriceRecord: Codable, Equatable {
+        let item: String
+        let price: Double
+    }
+
+    // MARK: - Flexible Boolean Decoding Tests
+
+    struct BoolRecord: Codable {
+        let name: String
+        let active: Bool
     }
 
     @Test("Decode dates with flexible strategy - ISO format")
@@ -76,19 +89,12 @@ struct CSVDecoderStrategyTests {
         """
 
         let config = CSVDecoder.Configuration(
-            dateDecodingStrategy: .flexibleWithHint(preferred: "dd-MMM-yyyy")
+            dateDecodingStrategy: .flexibleWithHint(preferred: "dd-MMM-yyyy"),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([DateRecord].self, from: csv)
 
         #expect(records.count == 1)
-    }
-
-    // MARK: - Flexible Number Decoding Tests
-
-    struct PriceRecord: Codable, Equatable {
-        let item: String
-        let price: Double
     }
 
     @Test("Decode numbers with flexible strategy - US format")
@@ -164,13 +170,6 @@ struct CSVDecoderStrategyTests {
         #expect(records[0].price == Decimal(string: "1234.56"))
     }
 
-    // MARK: - Flexible Boolean Decoding Tests
-
-    struct BoolRecord: Codable {
-        let name: String
-        let active: Bool
-    }
-
     @Test("Decode booleans with flexible strategy - standard values")
     func decodeBoolFlexibleStandard() throws {
         let csv = """
@@ -230,8 +229,8 @@ struct CSVDecoderStrategyTests {
         let config = CSVDecoder.Configuration(
             boolDecodingStrategy: .custom(
                 trueValues: ["enabled", "on"],
-                falseValues: ["disabled", "off"]
-            )
+                falseValues: ["disabled", "off"],
+            ),
         )
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([BoolRecord].self, from: csv)

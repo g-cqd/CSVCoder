@@ -8,9 +8,27 @@
 
 import Foundation
 
-extension CSVEncoder {
+public extension CSVEncoder {
     /// Configuration for parallel encoding.
-    public struct ParallelEncodingConfiguration: Sendable {
+    struct ParallelEncodingConfiguration: Sendable {
+        // MARK: Lifecycle
+
+        /// Creates a parallel encoding configuration.
+        public init(
+            parallelism: Int = ProcessInfo.processInfo.activeProcessorCount,
+            chunkSize: Int = 10000,
+            bufferSize: Int = 65536,
+        ) {
+            self.parallelism = max(1, parallelism)
+            self.chunkSize = max(1, chunkSize)
+            self.bufferSize = bufferSize
+        }
+
+        // MARK: Public
+
+        /// Default configuration using all available cores.
+        public static var `default`: Self { .init() }
+
         /// Maximum number of concurrent encoding tasks.
         public var parallelism: Int
 
@@ -19,20 +37,6 @@ extension CSVEncoder {
 
         /// Write buffer size in bytes.
         public var bufferSize: Int
-
-        /// Creates a parallel encoding configuration.
-        public init(
-            parallelism: Int = ProcessInfo.processInfo.activeProcessorCount,
-            chunkSize: Int = 10_000,
-            bufferSize: Int = 65_536
-        ) {
-            self.parallelism = max(1, parallelism)
-            self.chunkSize = max(1, chunkSize)
-            self.bufferSize = bufferSize
-        }
-
-        /// Default configuration using all available cores.
-        public static var `default`: Self { .init() }
     }
 
     // MARK: - Parallel Encode to File
@@ -51,10 +55,10 @@ extension CSVEncoder {
     /// try await encoder.encodeParallel(records, to: fileURL,
     ///     parallelConfig: .init(parallelism: 8, chunkSize: 5_000))
     /// ```
-    public func encodeParallel<T: Encodable & Sendable>(
-        _ values: [T],
+    func encodeParallel(
+        _ values: [some Encodable & Sendable],
         to url: URL,
-        parallelConfig: ParallelEncodingConfiguration = .default
+        parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
@@ -64,10 +68,10 @@ extension CSVEncoder {
     }
 
     /// Encodes an array in parallel and writes to a file handle.
-    public func encodeParallel<T: Encodable & Sendable>(
-        _ values: [T],
+    func encodeParallel(
+        _ values: [some Encodable & Sendable],
         to handle: FileHandle,
-        parallelConfig: ParallelEncodingConfiguration = .default
+        parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws {
         guard !values.isEmpty else { return }
 
@@ -89,7 +93,7 @@ extension CSVEncoder {
             values,
             keys: orderedKeys,
             parallelism: parallelConfig.parallelism,
-            chunkSize: parallelConfig.chunkSize
+            chunkSize: parallelConfig.chunkSize,
         )
 
         // Write rows sequentially (I/O bound)
@@ -113,9 +117,9 @@ extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: The encoded CSV data.
-    public func encodeParallel<T: Encodable & Sendable>(
-        _ values: [T],
-        parallelConfig: ParallelEncodingConfiguration = .default
+    func encodeParallel(
+        _ values: [some Encodable & Sendable],
+        parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> Data {
         guard !values.isEmpty else {
             return Data()
@@ -140,7 +144,7 @@ extension CSVEncoder {
             values,
             keys: orderedKeys,
             parallelism: parallelConfig.parallelism,
-            chunkSize: parallelConfig.chunkSize
+            chunkSize: parallelConfig.chunkSize,
         )
 
         // Append all rows
@@ -152,9 +156,9 @@ extension CSVEncoder {
     }
 
     /// Encodes an array in parallel and returns a String.
-    public func encodeParallelToString<T: Encodable & Sendable>(
-        _ values: [T],
-        parallelConfig: ParallelEncodingConfiguration = .default
+    func encodeParallelToString(
+        _ values: [some Encodable & Sendable],
+        parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> String {
         let data = try await encodeParallel(values, parallelConfig: parallelConfig)
         guard let string = String(data: data, encoding: configuration.encoding) else {
@@ -172,9 +176,9 @@ extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: An async stream of encoded row batches.
-    public func encodeParallelBatched<T: Encodable & Sendable>(
-        _ values: [T],
-        parallelConfig: ParallelEncodingConfiguration = .default
+    func encodeParallelBatched(
+        _ values: [some Encodable & Sendable],
+        parallelConfig: ParallelEncodingConfiguration = .default,
     ) -> AsyncThrowingStream<[String], Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -195,7 +199,7 @@ extension CSVEncoder {
 
                     // Process chunks
                     let chunks = stride(from: 0, to: values.count, by: parallelConfig.chunkSize).map {
-                        Array(values[$0..<min($0 + parallelConfig.chunkSize, values.count)])
+                        Array(values[$0 ..< min($0 + parallelConfig.chunkSize, values.count)])
                     }
 
                     for chunk in chunks {
@@ -203,7 +207,7 @@ extension CSVEncoder {
                             chunk,
                             keys: orderedKeys,
                             parallelism: parallelConfig.parallelism,
-                            chunkSize: chunk.count
+                            chunkSize: chunk.count,
                         )
 
                         let rows = encoded.map { fields in
@@ -231,7 +235,7 @@ extension CSVEncoder {
         _ values: [T],
         keys: [String],
         parallelism: Int,
-        chunkSize: Int
+        chunkSize: Int,
     ) async throws -> [[String]] {
         // For small arrays, encode sequentially
         guard values.count > parallelism * 2 else {
@@ -245,10 +249,11 @@ extension CSVEncoder {
         let chunkCount = min(parallelism, (values.count + chunkSize - 1) / chunkSize)
         let effectiveChunkSize = (values.count + chunkCount - 1) / chunkCount
 
-        let chunks: [(offset: Int, values: ArraySlice<T>)] = stride(from: 0, to: values.count, by: effectiveChunkSize).map {
-            let end = min($0 + effectiveChunkSize, values.count)
-            return ($0, values[$0..<end])
-        }
+        let chunks: [(offset: Int, values: ArraySlice<T>)] = stride(from: 0, to: values.count, by: effectiveChunkSize)
+            .map {
+                let end = min($0 + effectiveChunkSize, values.count)
+                return ($0, values[$0 ..< end])
+            }
 
         // Process chunks in parallel
         return try await withThrowingTaskGroup(of: (Int, [[String]]).self) { group in
@@ -273,7 +278,7 @@ extension CSVEncoder {
             // Sort by offset and flatten
             return results
                 .sorted { $0.0 < $1.0 }
-                .flatMap { $0.1 }
+                .flatMap(\.1)
         }
     }
 }

@@ -5,13 +5,12 @@
 //  Tests for streaming and async decoding.
 //
 
-import Testing
 @testable import CSVCoder
 import Foundation
+import Testing
 
 @Suite("CSVDecoder Streaming Tests")
 struct CSVDecoderStreamingTests {
-
     struct SimpleRecord: Codable, Equatable {
         let name: String
         let age: Int
@@ -244,7 +243,7 @@ struct CSVDecoderStreamingTests {
 
         let config = CSVDecoder.Configuration(
             parsingMode: .strict,
-            expectedFieldCount: 2
+            expectedFieldCount: 2,
         )
         let decoder = CSVDecoder(configuration: config)
 

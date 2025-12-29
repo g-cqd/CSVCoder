@@ -11,26 +11,27 @@ import Foundation
 /// Memory-mapped file reader for efficient large file processing.
 /// Uses `mmap` under the hood to avoid loading entire file into RAM.
 final class MemoryMappedReader: Sendable {
-    private let data: Data
-    private let _count: Int
-
-    /// Total byte count of the file.
-    var count: Int { _count }
+    // MARK: Lifecycle
 
     /// Initialize with a file URL using memory-mapped I/O.
     /// - Parameter url: File URL to read.
     /// - Throws: Error if file cannot be opened or mapped.
     init(url: URL) throws {
-        self.data = try Data(contentsOf: url, options: .mappedIfSafe)
-        self._count = data.count
+        data = try Data(contentsOf: url, options: .mappedIfSafe)
+        _count = data.count
     }
 
     /// Initialize with existing Data (for in-memory sources).
     /// - Parameter data: Data to wrap.
     init(data: Data) {
         self.data = data
-        self._count = data.count
+        _count = data.count
     }
+
+    // MARK: Internal
+
+    /// Total byte count of the file.
+    var count: Int { _count }
 
     /// Access a byte at a specific index.
     /// - Parameter index: Byte offset.
@@ -52,4 +53,9 @@ final class MemoryMappedReader: Sendable {
     func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
         try data.withUnsafeBytes(body)
     }
+
+    // MARK: Private
+
+    private let data: Data
+    private let _count: Int
 }
