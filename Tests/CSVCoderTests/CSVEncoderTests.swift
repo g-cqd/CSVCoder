@@ -427,5 +427,4 @@ struct CSVEncoderTests {
         #expect(rows[1].contains("First"))
         #expect(rows[2].contains("Second"))
     }
-
 }

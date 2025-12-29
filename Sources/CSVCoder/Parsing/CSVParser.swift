@@ -241,6 +241,8 @@ public struct CSVParser: Sequence {
         }
     }
 
+    // MARK: Private
+
     /// Creates an empty field result for EOF conditions.
     @inline(__always)
     private func makeEmptyFieldResult(at offset: Int) -> FieldResult {
