@@ -7,163 +7,6 @@
 
 import Foundation
 
-// MARK: - CSVRowView
-
-/// A zero-copy view into a single CSV row within a raw UTF-8 buffer.
-///
-/// `CSVRowView` provides efficient access to field data without allocating copies.
-/// It stores byte offsets and lengths rather than string values, enabling
-/// high-performance parsing of large CSV files.
-///
-/// ## Thread Safety
-///
-/// `CSVRowView` is **not** `Sendable` because it references a borrowed buffer
-/// that must remain valid for the view's lifetime. Always use within the closure
-/// scope of ``CSVParser/parse(data:delimiter:body:)``.
-///
-/// ## Usage
-///
-/// ```swift
-/// CSVParser.parse(data: csvData) { parser in
-///     for row in parser {
-///         for i in 0..<row.count {
-///             if let value = row.string(at: i) {
-///                 print(value)
-///             }
-///         }
-///     }
-/// }
-/// ```
-///
-/// ## Performance Notes
-///
-/// - Field access via ``string(at:)`` is O(1) for unquoted fields
-/// - Quoted fields with escaped quotes (`""`) require O(n) unescaping
-/// - Use ``getBytes(at:)`` for maximum performance when UTF-8 bytes suffice
-public struct CSVRowView {
-    // MARK: Lifecycle
-
-    /// Creates a row view with the given buffer and field metadata.
-    public init(
-        buffer: UnsafeBufferPointer<UInt8>,
-        fieldStarts: [Int],
-        fieldLengths: [Int],
-        fieldQuoted: [Bool],
-        fieldHasEscapedQuote: [Bool],
-        hasUnterminatedQuote: Bool,
-        hasQuoteInUnquotedField: Bool,
-    ) {
-        self.buffer = buffer
-        self.fieldStarts = fieldStarts
-        self.fieldLengths = fieldLengths
-        self.fieldQuoted = fieldQuoted
-        self.fieldHasEscapedQuote = fieldHasEscapedQuote
-        self.hasUnterminatedQuote = hasUnterminatedQuote
-        self.hasQuoteInUnquotedField = hasQuoteInUnquotedField
-    }
-
-    // MARK: Public
-
-    /// Reference to the full buffer (owned elsewhere).
-    public let buffer: UnsafeBufferPointer<UInt8>
-
-    /// Offsets of field starts within the buffer.
-    public let fieldStarts: [Int]
-
-    /// Lengths of each field.
-    public let fieldLengths: [Int]
-
-    /// Whether each field was quoted (needs unescaping).
-    public let fieldQuoted: [Bool]
-
-    /// Whether each field contains escaped quotes ("" that need unescaping.
-    public let fieldHasEscapedQuote: [Bool]
-
-    /// Whether any field has an unterminated quote.
-    public let hasUnterminatedQuote: Bool
-
-    /// Whether any unquoted field contains a quote character (RFC 4180 violation).
-    public let hasQuoteInUnquotedField: Bool
-
-    /// The number of fields in this row.
-    public var count: Int { fieldStarts.count }
-
-    /// Returns the raw UTF-8 bytes for the field at the given index.
-    ///
-    /// This method provides zero-copy access to field data, useful when
-    /// you need to perform custom parsing or validation without allocating strings.
-    ///
-    /// - Parameter index: The zero-based field index.
-    /// - Returns: A buffer pointer to the field's UTF-8 bytes, or an empty buffer if out of bounds.
-    /// - Complexity: O(1)
-    ///
-    /// - Warning: The returned buffer is only valid while the parent `CSVParser`'s
-    ///   data remains in scope. Do not store the buffer beyond the parsing closure.
-    public func getBytes(at index: Int) -> UnsafeBufferPointer<UInt8> {
-        let start = fieldStarts[index]
-        let length = fieldLengths[index]
-        guard start + length <= buffer.count else { return UnsafeBufferPointer(start: nil, count: 0) }
-        return UnsafeBufferPointer(start: buffer.baseAddress?.advanced(by: start), count: length)
-    }
-
-    /// Decodes and returns the string value for the field at the given index.
-    ///
-    /// Handles RFC 4180 quote unescaping automatically:
-    /// - Quoted fields have outer quotes stripped
-    /// - Escaped quotes (`""`) are converted to single quotes (`"`)
-    ///
-    /// - Parameter index: The zero-based field index.
-    /// - Returns: The decoded string value, or `nil` if the index is out of bounds.
-    /// - Complexity: O(1) for unquoted fields; O(n) for quoted fields with escaped quotes.
-    public func string(at index: Int) -> String? {
-        string(at: index, encoding: .utf8)
-    }
-
-    /// Decodes and returns the string value for the field at the given index using the specified encoding.
-    ///
-    /// Handles RFC 4180 quote unescaping automatically:
-    /// - Quoted fields have outer quotes stripped
-    /// - Escaped quotes (`""`) are converted to single quotes (`"`)
-    ///
-    /// - Parameters:
-    ///   - index: The zero-based field index.
-    ///   - encoding: The string encoding to use for conversion. For best performance, use `.utf8`.
-    /// - Returns: The decoded string value, or `nil` if the index is out of bounds or conversion fails.
-    /// - Complexity: O(1) for unquoted UTF-8 fields; O(n) for quoted fields with escaped quotes or non-UTF-8 encodings.
-    public func string(at index: Int, encoding: String.Encoding) -> String? {
-        guard index < fieldStarts.count else { return nil }
-
-        let start = fieldStarts[index]
-        let length = fieldLengths[index]
-        let isQuoted = fieldQuoted[index]
-        let hasEscapedQuote = fieldHasEscapedQuote[index]
-
-        guard let base = buffer.baseAddress else { return nil }
-
-        let ptr = base.advanced(by: start)
-        let fieldBuffer = UnsafeBufferPointer(start: ptr, count: length)
-
-        // Fast path for UTF-8 (most common case)
-        if encoding == .utf8 {
-            if isQuoted, hasEscapedQuote {
-                // Use zero-allocation unescaper
-                return CSVUnescaper.unescape(buffer: fieldBuffer)
-            } else {
-                // No unescaping needed - direct decode
-                return String(decoding: fieldBuffer, as: UTF8.self)
-            }
-        }
-
-        // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)
-        if isQuoted, hasEscapedQuote {
-            return CSVUnescaper.unescape(buffer: fieldBuffer, encoding: encoding)
-        }
-
-        let data = Data(bytes: ptr, count: length)
-        return String(data: data, encoding: encoding)
-    }
-}
-
 // MARK: - CSVParser
 
 /// A high-performance, zero-copy CSV parser operating directly on UTF-8 bytes.
@@ -383,268 +226,254 @@ public struct CSVParser: Sequence {
     fileprivate static let cr: UInt8 = 0x0D // \r
     fileprivate static let lf: UInt8 = 0x0A // \n
 
-    // Returns: (contentStart, contentLength, isQuoted, nextOffset, isRowEnd, isUnterminatedQuote, hasQuoteInUnquoted)
+    /// Parses a single field starting at the given offset.
     @inline(__always)
     fileprivate func parseField(from startOffset: Int) -> FieldResult {
-        var cursor = startOffset
         let count = buffer.count
-        guard cursor < count else {
-            return FieldResult(
-                start: cursor,
-                length: 0,
-                quoted: false,
-                nextOffset: cursor,
-                isRowEnd: true,
-                unterminated: false,
-                hasQuoteInUnquoted: false,
-                hasEscapedQuote: false,
-            )
+        guard startOffset < count else {
+            return makeEmptyFieldResult(at: startOffset)
         }
 
-        let c = buffer[cursor]
-
-        if c == CSVParser.quote {
-            // Quoted Field
-            let contentStart = cursor + 1
-            cursor += 1 // Skip opening quote
-            var hasEscapedQuote = false
-
-            while cursor < count {
-                // Use SIMD to find the next quote
-                // If the field is long, this skips checking every byte
-
-                if let baseAddress = buffer.baseAddress {
-                    // findNextQuote searches from 0, we need to offset buffer pointer
-                    let relativeQuote = SIMDScanner.findNextQuote(
-                        buffer: baseAddress.advanced(by: cursor),
-                        count: count - cursor,
-                    )
-                    cursor += relativeQuote
-                } else {
-                    // Fallback if buffer base is nil (should not happen)
-                    while cursor < count, buffer[cursor] != CSVParser.quote {
-                        cursor += 1
-                    }
-                }
-
-                if cursor >= count {
-                    // EOF inside quote
-                    return FieldResult(
-                        start: contentStart,
-                        length: cursor - contentStart,
-                        quoted: true,
-                        nextOffset: cursor,
-                        isRowEnd: true,
-                        unterminated: true,
-                        hasQuoteInUnquoted: false,
-                        hasEscapedQuote: hasEscapedQuote,
-                    )
-                }
-
-                // Found a quote at `cursor`
-                // Check if it is escaped ""
-                if cursor + 1 < count, buffer[cursor + 1] == CSVParser.quote {
-                    cursor += 2 // Skip ""
-                    hasEscapedQuote = true
-                } else {
-                    // End of quoted field
-                    let contentEnd = cursor
-                    cursor += 1 // Skip closing quote
-
-                    // Expect delimiter or newline or EOF
-                    if cursor < count {
-                        let next = buffer[cursor]
-                        if next == delimiter {
-                            return FieldResult(
-                                start: contentStart,
-                                length: contentEnd - contentStart,
-                                quoted: true,
-                                nextOffset: cursor + 1,
-                                isRowEnd: false,
-                                unterminated: false,
-                                hasQuoteInUnquoted: false,
-                                hasEscapedQuote: hasEscapedQuote,
-                            )
-                        } else if next == CSVParser.lf {
-                            return FieldResult(
-                                start: contentStart,
-                                length: contentEnd - contentStart,
-                                quoted: true,
-                                nextOffset: cursor + 1,
-                                isRowEnd: true,
-                                unterminated: false,
-                                hasQuoteInUnquoted: false,
-                                hasEscapedQuote: hasEscapedQuote,
-                            )
-                        } else if next == CSVParser.cr {
-                            if cursor + 1 < count, buffer[cursor + 1] == CSVParser.lf {
-                                return FieldResult(
-                                    start: contentStart,
-                                    length: contentEnd - contentStart,
-                                    quoted: true,
-                                    nextOffset: cursor + 2,
-                                    isRowEnd: true,
-                                    unterminated: false,
-                                    hasQuoteInUnquoted: false,
-                                    hasEscapedQuote: hasEscapedQuote,
-                                )
-                            } else {
-                                return FieldResult(
-                                    start: contentStart,
-                                    length: contentEnd - contentStart,
-                                    quoted: true,
-                                    nextOffset: cursor + 1,
-                                    isRowEnd: true,
-                                    unterminated: false,
-                                    hasQuoteInUnquoted: false,
-                                    hasEscapedQuote: hasEscapedQuote,
-                                )
-                            }
-                        } else {
-                            // Lenient: treat garbage after quote as end of field
-                            return FieldResult(
-                                start: contentStart,
-                                length: contentEnd - contentStart,
-                                quoted: true,
-                                nextOffset: cursor,
-                                isRowEnd: false,
-                                unterminated: false,
-                                hasQuoteInUnquoted: false,
-                                hasEscapedQuote: hasEscapedQuote,
-                            )
-                        }
-                    } else {
-                        // EOF
-                        return FieldResult(
-                            start: contentStart,
-                            length: contentEnd - contentStart,
-                            quoted: true,
-                            nextOffset: cursor,
-                            isRowEnd: true,
-                            unterminated: false,
-                            hasQuoteInUnquoted: false,
-                            hasEscapedQuote: hasEscapedQuote,
-                        )
-                    }
-                }
-            }
-
-            // Unterminated quote - return what we have and flag it
-            return FieldResult(
-                start: contentStart,
-                length: cursor - contentStart,
-                quoted: true,
-                nextOffset: cursor,
-                isRowEnd: true,
-                unterminated: true,
-                hasQuoteInUnquoted: false,
-                hasEscapedQuote: hasEscapedQuote,
-            )
+        if buffer[startOffset] == CSVParser.quote {
+            return parseQuotedField(from: startOffset, count: count)
         } else {
-            // Unquoted Field - use SIMD for long fields
-            let contentStart = cursor
-            let remaining = count - cursor
-            var hasQuoteInField = false
+            return parseUnquotedField(from: startOffset, count: count)
+        }
+    }
 
-            // Use SIMD for fields >= 64 bytes
-            if remaining >= 64, let basePtr = buffer.baseAddress {
-                let simdOffset = SIMDScanner.findNextStructural(
-                    buffer: basePtr.advanced(by: cursor),
-                    count: remaining,
-                    delimiter: delimiter,
+    /// Creates an empty field result for EOF conditions.
+    @inline(__always)
+    private func makeEmptyFieldResult(at offset: Int) -> FieldResult {
+        FieldResult(
+            start: offset,
+            length: 0,
+            quoted: false,
+            nextOffset: offset,
+            isRowEnd: true,
+            unterminated: false,
+            hasQuoteInUnquoted: false,
+            hasEscapedQuote: false,
+        )
+    }
+
+    /// Determines the next offset and row-end status based on the terminator byte.
+    @inline(__always)
+    private func resolveTerminator(
+        at cursor: Int,
+        count: Int,
+    ) -> (nextOffset: Int, isRowEnd: Bool) {
+        let byte = buffer[cursor]
+        if byte == delimiter {
+            return (cursor + 1, false)
+        } else if byte == CSVParser.lf {
+            return (cursor + 1, true)
+        } else if byte == CSVParser.cr {
+            let isCRLF = cursor + 1 < count && buffer[cursor + 1] == CSVParser.lf
+            return (isCRLF ? cursor + 2 : cursor + 1, true)
+        }
+        // Garbage after quote - treat as field boundary without advancing
+        return (cursor, false)
+    }
+
+    /// Parses a quoted field starting at the given offset.
+    private func parseQuotedField(from startOffset: Int, count: Int) -> FieldResult {
+        let contentStart = startOffset + 1
+        var cursor = contentStart
+        var hasEscapedQuote = false
+
+        while cursor < count {
+            cursor = advanceToNextQuote(from: cursor, count: count)
+
+            if cursor >= count {
+                return makeQuotedFieldResult(
+                    contentStart: contentStart,
+                    contentEnd: cursor,
+                    nextOffset: cursor,
+                    isRowEnd: true,
+                    unterminated: true,
+                    hasEscapedQuote: hasEscapedQuote,
                 )
-                cursor += simdOffset
-
-                if cursor >= count {
-                    // EOF - check for quotes in the field we just scanned
-                    for i in contentStart ..< cursor {
-                        if buffer[i] == CSVParser.quote {
-                            hasQuoteInField = true
-                            break
-                        }
-                    }
-                    return FieldResult(
-                        start: contentStart,
-                        length: cursor - contentStart,
-                        quoted: false,
-                        nextOffset: cursor,
-                        isRowEnd: true,
-                        unterminated: false,
-                        hasQuoteInUnquoted: hasQuoteInField,
-                        hasEscapedQuote: false,
-                    )
-                }
             }
 
-            // Scalar handling for short fields or post-SIMD
-            while cursor < count {
-                let byte = buffer[cursor]
-
-                if byte == CSVParser.quote {
-                    hasQuoteInField = true
-                }
-
-                if byte == delimiter {
-                    return FieldResult(
-                        start: contentStart,
-                        length: cursor - contentStart,
-                        quoted: false,
-                        nextOffset: cursor + 1,
-                        isRowEnd: false,
-                        unterminated: false,
-                        hasQuoteInUnquoted: hasQuoteInField,
-                        hasEscapedQuote: false,
-                    )
-                } else if byte == CSVParser.lf {
-                    return FieldResult(
-                        start: contentStart,
-                        length: cursor - contentStart,
-                        quoted: false,
-                        nextOffset: cursor + 1,
-                        isRowEnd: true,
-                        unterminated: false,
-                        hasQuoteInUnquoted: hasQuoteInField,
-                        hasEscapedQuote: false,
-                    )
-                } else if byte == CSVParser.cr {
-                    if cursor + 1 < count, buffer[cursor + 1] == CSVParser.lf {
-                        return FieldResult(
-                            start: contentStart,
-                            length: cursor - contentStart,
-                            quoted: false,
-                            nextOffset: cursor + 2,
-                            isRowEnd: true,
-                            unterminated: false,
-                            hasQuoteInUnquoted: hasQuoteInField,
-                            hasEscapedQuote: false,
-                        )
-                    } else {
-                        return FieldResult(
-                            start: contentStart,
-                            length: cursor - contentStart,
-                            quoted: false,
-                            nextOffset: cursor + 1,
-                            isRowEnd: true,
-                            unterminated: false,
-                            hasQuoteInUnquoted: hasQuoteInField,
-                            hasEscapedQuote: false,
-                        )
-                    }
-                }
-                cursor += 1
+            // Check for escaped quote ""
+            if cursor + 1 < count, buffer[cursor + 1] == CSVParser.quote {
+                cursor += 2
+                hasEscapedQuote = true
+                continue
             }
 
-            // EOF
-            return FieldResult(
-                start: contentStart,
-                length: cursor - contentStart,
-                quoted: false,
+            // End of quoted field - closing quote found
+            let contentEnd = cursor
+            cursor += 1
+
+            if cursor < count {
+                let (nextOffset, isRowEnd) = resolveTerminator(at: cursor, count: count)
+                return makeQuotedFieldResult(
+                    contentStart: contentStart,
+                    contentEnd: contentEnd,
+                    nextOffset: nextOffset,
+                    isRowEnd: isRowEnd,
+                    unterminated: false,
+                    hasEscapedQuote: hasEscapedQuote,
+                )
+            } else {
+                return makeQuotedFieldResult(
+                    contentStart: contentStart,
+                    contentEnd: contentEnd,
+                    nextOffset: cursor,
+                    isRowEnd: true,
+                    unterminated: false,
+                    hasEscapedQuote: hasEscapedQuote,
+                )
+            }
+        }
+
+        // Unterminated quote
+        return makeQuotedFieldResult(
+            contentStart: contentStart,
+            contentEnd: cursor,
+            nextOffset: cursor,
+            isRowEnd: true,
+            unterminated: true,
+            hasEscapedQuote: hasEscapedQuote,
+        )
+    }
+
+    /// Advances cursor to the next quote character using SIMD when available.
+    @inline(__always)
+    private func advanceToNextQuote(from cursor: Int, count: Int) -> Int {
+        if let baseAddress = buffer.baseAddress {
+            let relativeQuote = SIMDScanner.findNextQuote(
+                buffer: baseAddress.advanced(by: cursor),
+                count: count - cursor,
+            )
+            return cursor + relativeQuote
+        } else {
+            var pos = cursor
+            while pos < count, buffer[pos] != CSVParser.quote {
+                pos += 1
+            }
+            return pos
+        }
+    }
+
+    /// Creates a FieldResult for a quoted field.
+    @inline(__always)
+    private func makeQuotedFieldResult(
+        contentStart: Int,
+        contentEnd: Int,
+        nextOffset: Int,
+        isRowEnd: Bool,
+        unterminated: Bool,
+        hasEscapedQuote: Bool,
+    ) -> FieldResult {
+        FieldResult(
+            start: contentStart,
+            length: contentEnd - contentStart,
+            quoted: true,
+            nextOffset: nextOffset,
+            isRowEnd: isRowEnd,
+            unterminated: unterminated,
+            hasQuoteInUnquoted: false,
+            hasEscapedQuote: hasEscapedQuote,
+        )
+    }
+
+    /// Parses an unquoted field starting at the given offset.
+    private func parseUnquotedField(from startOffset: Int, count: Int) -> FieldResult {
+        var cursor = startOffset
+        var hasQuoteInField = false
+
+        // Use SIMD for fields >= 64 bytes
+        cursor = trySIMDAdvance(from: cursor, count: count)
+
+        if cursor >= count {
+            // EOF reached via SIMD - check for quotes in scanned region
+            hasQuoteInField = checkForQuotes(from: startOffset, to: cursor)
+            return makeUnquotedFieldResult(
+                contentStart: startOffset,
+                contentEnd: cursor,
                 nextOffset: cursor,
                 isRowEnd: true,
-                unterminated: false,
                 hasQuoteInUnquoted: hasQuoteInField,
-                hasEscapedQuote: false,
             )
         }
+
+        // Scalar handling for short fields or post-SIMD
+        while cursor < count {
+            let byte = buffer[cursor]
+
+            if byte == CSVParser.quote {
+                hasQuoteInField = true
+            }
+
+            if byte == delimiter || byte == CSVParser.lf || byte == CSVParser.cr {
+                let (nextOffset, isRowEnd) = resolveTerminator(at: cursor, count: count)
+                return makeUnquotedFieldResult(
+                    contentStart: startOffset,
+                    contentEnd: cursor,
+                    nextOffset: nextOffset,
+                    isRowEnd: isRowEnd,
+                    hasQuoteInUnquoted: hasQuoteInField,
+                )
+            }
+            cursor += 1
+        }
+
+        // EOF
+        return makeUnquotedFieldResult(
+            contentStart: startOffset,
+            contentEnd: cursor,
+            nextOffset: cursor,
+            isRowEnd: true,
+            hasQuoteInUnquoted: hasQuoteInField,
+        )
+    }
+
+    /// Attempts SIMD-accelerated advance for unquoted fields.
+    /// Returns the new cursor position after SIMD scanning.
+    @inline(__always)
+    private func trySIMDAdvance(from startOffset: Int, count: Int) -> Int {
+        let remaining = count - startOffset
+        guard remaining >= 64, let basePtr = buffer.baseAddress else {
+            return startOffset
+        }
+
+        let simdOffset = SIMDScanner.findNextStructural(
+            buffer: basePtr.advanced(by: startOffset),
+            count: remaining,
+            delimiter: delimiter,
+        )
+        return startOffset + simdOffset
+    }
+
+    /// Checks if there are any quote characters in the specified range.
+    @inline(__always)
+    private func checkForQuotes(from start: Int, to end: Int) -> Bool {
+        for i in start ..< end where buffer[i] == CSVParser.quote {
+            return true
+        }
+        return false
+    }
+
+    /// Creates a FieldResult for an unquoted field.
+    @inline(__always)
+    private func makeUnquotedFieldResult(
+        contentStart: Int,
+        contentEnd: Int,
+        nextOffset: Int,
+        isRowEnd: Bool,
+        hasQuoteInUnquoted: Bool,
+    ) -> FieldResult {
+        FieldResult(
+            start: contentStart,
+            length: contentEnd - contentStart,
+            quoted: false,
+            nextOffset: nextOffset,
+            isRowEnd: isRowEnd,
+            unterminated: false,
+            hasQuoteInUnquoted: hasQuoteInUnquoted,
+            hasEscapedQuote: false,
+        )
     }
 }

@@ -202,7 +202,26 @@ nonisolated func generateOrderCSV(rows: Int) -> String {
         let hasDiscount = i % 3 == 0
         let hasNotes = i % 5 == 0
         let hasShipDate = i % 2 == 0
-        csv += "ORD-\(String(format: "%08d", i)),\(1000 + i % 500),\"Customer \(i)\",customer\(i)@example.com,\(i % 1000),\"Product \(i % 100)\",\(1 + i % 10),\(Double(10 + i % 100)),\(hasDiscount ? "0.1" : ""),0.08,5.99,\(Double(10 + i % 100) * Double(1 + i % 10)),USD,\(payments[i % payments.count]),2024-\(String(format: "%02d", 1 + i % 12))-\(String(format: "%02d", 1 + i % 28)),\(hasShipDate ? "2024-\(String(format: "%02d", 1 + (i + 3) % 12))-\(String(format: "%02d", 1 + (i + 3) % 28))" : ""),\(statuses[i % statuses.count]),\(hasNotes ? "\"Rush order, handle with care\"" : "")\n"
+        let orderId = "ORD-\(String(format: "%08d", i))"
+        let customerId = "\(1000 + i % 500)"
+        let customerName = "\"Customer \(i)\""
+        let email = "customer\(i)@example.com"
+        let productId = "\(i % 1000)"
+        let productName = "\"Product \(i % 100)\""
+        let quantity = "\(1 + i % 10)"
+        let unitPrice = "\(Double(10 + i % 100))"
+        let discount = hasDiscount ? "0.1" : ""
+        let totalAmount = "\(Double(10 + i % 100) * Double(1 + i % 10))"
+        let payment = payments[i % payments.count]
+        let orderDate = "2024-\(String(format: "%02d", 1 + i % 12))-\(String(format: "%02d", 1 + i % 28))"
+        let shipDate = hasShipDate
+            ? "2024-\(String(format: "%02d", 1 + (i + 3) % 12))-\(String(format: "%02d", 1 + (i + 3) % 28))"
+            : ""
+        let status = statuses[i % statuses.count]
+        let notes = hasNotes ? "\"Rush order, handle with care\"" : ""
+        csv += "\(orderId),\(customerId),\(customerName),\(email),\(productId),\(productName),"
+        csv += "\(quantity),\(unitPrice),\(discount),0.08,5.99,\(totalAmount),USD,\(payment),"
+        csv += "\(orderDate),\(shipDate),\(status),\(notes)\n"
     }
     return csv
 }
@@ -215,7 +234,24 @@ nonisolated func generateTransactionCSV(rows: Int) -> String {
         let hasExchange = i % 4 == 0
         let hasRef = i % 3 == 0
         let hasProcessor = i % 2 == 0
-        csv += "TXN\(String(format: "%012d", i)),ACC\(String(format: "%08d", i % 10000)),ACC\(String(format: "%08d", (i + 5000) % 10000)),\(Double(100 + i % 10000)),\(currencies[i % currencies.count]),\(hasExchange ? "1.12" : ""),\(Double(i % 50) * 0.01),2024-\(String(format: "%02d", 1 + i % 12))-\(String(format: "%02d", 1 + i % 28))T\(String(format: "%02d", i % 24)):\(String(format: "%02d", i % 60)):00Z,\(categories[i % categories.count]),\"Transaction \(i) description\",\(hasRef ? "REF\(i)" : ""),completed,\(hasProcessor ? "PROC\(i % 100)" : "")\n"
+        let txnId = "TXN\(String(format: "%012d", i))"
+        let accountFrom = "ACC\(String(format: "%08d", i % 10000))"
+        let accountTo = "ACC\(String(format: "%08d", (i + 5000) % 10000))"
+        let amount = "\(Double(100 + i % 10000))"
+        let currency = currencies[i % currencies.count]
+        let exchangeRate = hasExchange ? "1.12" : ""
+        let fee = "\(Double(i % 50) * 0.01)"
+        let month = String(format: "%02d", 1 + i % 12)
+        let day = String(format: "%02d", 1 + i % 28)
+        let hour = String(format: "%02d", i % 24)
+        let minute = String(format: "%02d", i % 60)
+        let timestamp = "2024-\(month)-\(day)T\(hour):\(minute):00Z"
+        let category = categories[i % categories.count]
+        let description = "\"Transaction \(i) description\""
+        let reference = hasRef ? "REF\(i)" : ""
+        let processor = hasProcessor ? "PROC\(i % 100)" : ""
+        csv += "\(txnId),\(accountFrom),\(accountTo),\(amount),\(currency),\(exchangeRate),\(fee),"
+        csv += "\(timestamp),\(category),\(description),\(reference),completed,\(processor)\n"
     }
     return csv
 }
@@ -230,7 +266,26 @@ nonisolated func generateLogCSV(rows: Int) -> String {
         let hasUserId = i % 3 == 0
         let hasDuration = i % 2 == 0
         let hasMetadata = i % 5 == 0
-        csv += "2024-\(String(format: "%02d", 1 + i % 12))-\(String(format: "%02d", 1 + i % 28))T\(String(format: "%02d", i % 24)):\(String(format: "%02d", i % 60)):\(String(format: "%02d", i % 60)).\(String(format: "%03d", i % 1000))Z,\(levels[i % levels.count]),\(services[i % services.count]),host-\(i % 10).cluster.local,\(hasRequestId ? "req-\(UUID().uuidString.prefix(8))" : ""),\(hasUserId ? "user-\(i % 1000)" : ""),\(actions[i % actions.count]),/api/v1/resource/\(i % 100),\(hasDuration ? "\(50 + i % 500)" : ""),\(200 + (i % 5) * 100),\"Request processed successfully for item \(i)\",\(hasMetadata ? "\"{\"\"key\"\":\"\"value\"\"}\"" : "")\n"
+        let month = String(format: "%02d", 1 + i % 12)
+        let day = String(format: "%02d", 1 + i % 28)
+        let hour = String(format: "%02d", i % 24)
+        let minute = String(format: "%02d", i % 60)
+        let second = String(format: "%02d", i % 60)
+        let millis = String(format: "%03d", i % 1000)
+        let timestamp = "2024-\(month)-\(day)T\(hour):\(minute):\(second).\(millis)Z"
+        let level = levels[i % levels.count]
+        let service = services[i % services.count]
+        let host = "host-\(i % 10).cluster.local"
+        let requestId = hasRequestId ? "req-\(UUID().uuidString.prefix(8))" : ""
+        let userId = hasUserId ? "user-\(i % 1000)" : ""
+        let action = actions[i % actions.count]
+        let resource = "/api/v1/resource/\(i % 100)"
+        let duration = hasDuration ? "\(50 + i % 500)" : ""
+        let statusCode = "\(200 + (i % 5) * 100)"
+        let message = "\"Request processed successfully for item \(i)\""
+        let metadata = hasMetadata ? "\"{\"\"key\"\":\"\"value\"\"}\"" : ""
+        csv += "\(timestamp),\(level),\(service),\(host),\(requestId),\(userId),"
+        csv += "\(action),\(resource),\(duration),\(statusCode),\(message),\(metadata)\n"
     }
     return csv
 }
@@ -341,6 +396,7 @@ let simpleRecords100K = (0 ..< 100_000).map { SimpleRecord(
     score: Double($0) * 0.1,
 )
 }
+
 let simpleRecords1M = (0 ..< 1_000_000).map { SimpleRecord(
     name: "Person\($0)",
     age: 20 + $0 % 50,

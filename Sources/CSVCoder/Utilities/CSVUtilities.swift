@@ -118,6 +118,7 @@ enum CSVUtilities {
              .windowsCP1253,
              .windowsCP1254:
             true
+
         case .unicode,
              .utf16,
              .utf16BigEndian,
