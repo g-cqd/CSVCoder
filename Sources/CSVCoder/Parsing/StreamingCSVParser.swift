@@ -101,21 +101,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                 let byte = bytes[offset]
 
                 if inQuotes {
-                    if byte == StreamingCSVParser.quote {
-                        // Check for escaped quote ""
-                        if offset + 1 < count, bytes[offset + 1] == StreamingCSVParser.quote {
-                            fieldBytes.append(StreamingCSVParser.quote)
-                            offset += 2
-                            columnNumber += 2
-                            continue
-                        } else {
-                            // End of quoted field
-                            inQuotes = false
-                            offset += 1
-                            columnNumber += 1
-                            continue
-                        }
-                    } else {
+                    guard byte == StreamingCSVParser.quote else {
                         // Character inside quoted field (including newlines)
                         if byte == StreamingCSVParser.lf {
                             lineNumber += 1
@@ -132,19 +118,23 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                         columnNumber += 1
                         continue
                     }
+                    // Check for escaped quote ""
+                    guard offset + 1 < count, bytes[offset + 1] == StreamingCSVParser.quote else {
+                        // End of quoted field
+                        inQuotes = false
+                        offset += 1
+                        columnNumber += 1
+                        continue
+                    }
+                    fieldBytes.append(StreamingCSVParser.quote)
+                    offset += 2
+                    columnNumber += 2
+                    continue
                 }
 
                 // Not in quotes
                 if byte == StreamingCSVParser.quote {
-                    if fieldBytes.isEmpty {
-                        // Start of quoted field
-                        inQuotes = true
-                        fieldStartLine = lineNumber
-                        fieldStartColumn = columnNumber
-                        offset += 1
-                        columnNumber += 1
-                        continue
-                    } else {
+                    guard fieldBytes.isEmpty else {
                         // Quote in middle of unquoted field - RFC 4180 violation
                         if isStrict {
                             throw CSVDecodingError.parsingError(
@@ -159,6 +149,13 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                         columnNumber += 1
                         continue
                     }
+                    // Start of quoted field
+                    inQuotes = true
+                    fieldStartLine = lineNumber
+                    fieldStartColumn = columnNumber
+                    offset += 1
+                    columnNumber += 1
+                    continue
                 }
 
                 if byte == delimiterByte {
@@ -172,15 +169,7 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                 // Handle line endings
                 if byte == StreamingCSVParser.cr {
                     // Check for CRLF
-                    if offset + 1 < count, bytes[offset + 1] == StreamingCSVParser.lf {
-                        // CRLF
-                        fields.append(processField(fieldBytes))
-                        offset += 2
-                        lineNumber += 1
-                        columnNumber = 1
-                        try validateRowIfStrict(fields, rowLine: rowStartLine)
-                        return fields.isEmpty ? nil : fields
-                    } else {
+                    guard offset + 1 < count, bytes[offset + 1] == StreamingCSVParser.lf else {
                         // Lone CR (old Mac style)
                         fields.append(processField(fieldBytes))
                         offset += 1
@@ -189,6 +178,13 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
                         try validateRowIfStrict(fields, rowLine: rowStartLine)
                         return fields.isEmpty ? nil : fields
                     }
+                    // CRLF
+                    fields.append(processField(fieldBytes))
+                    offset += 2
+                    lineNumber += 1
+                    columnNumber = 1
+                    try validateRowIfStrict(fields, rowLine: rowStartLine)
+                    return fields.isEmpty ? nil : fields
                 }
 
                 if byte == StreamingCSVParser.lf {
@@ -253,10 +249,10 @@ struct StreamingCSVParser: AsyncSequence, Sendable {
     // MARK: Private
 
     // UTF-8 byte constants (ASCII subset) - shared with CSVParser
-    private static let quote: UInt8 = 0x22 // "
-    private static let comma: UInt8 = 0x2C // ,
-    private static let cr: UInt8 = 0x0D // \r
-    private static let lf: UInt8 = 0x0A // \n
+    private static let quote: UInt8 = 0x22  // "
+    private static let comma: UInt8 = 0x2C  // ,
+    private static let cr: UInt8 = 0x0D  // \r
+    private static let lf: UInt8 = 0x0A  // \n
 
     private let reader: MemoryMappedReader
     private let configuration: CSVDecoder.Configuration

@@ -53,16 +53,16 @@ public enum CSVEncodingError: Error, LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case let .invalidValue(message):
+        case .invalidValue(let message):
             "Invalid value: \(message)"
 
-        case let .unsupportedType(message):
+        case .unsupportedType(let message):
             "Unsupported operation: \(message)"
 
-        case let .missingKey(key):
+        case .missingKey(let key):
             "Missing key '\(key)' during encoding"
 
-        case let .invalidOutput(message):
+        case .invalidOutput(let message):
             "Invalid output: \(message)"
         }
     }

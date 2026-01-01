@@ -5,9 +5,10 @@
 //  Tests for RFC 4180 compliance: quoted fields, line endings, strict/lenient mode, nil decoding.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder RFC 4180 Tests")
 struct CSVDecoderRFC4180Tests {
@@ -21,11 +22,11 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle quoted fields with embedded newlines")
     func handleQuotedFieldsWithNewlines() throws {
         let csv = """
-        name,value
-        Test,"Line1
-        Line2
-        Line3"
-        """
+            name,value
+            Test,"Line1
+            Line2
+            Line3"
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([TextRecord].self, from: csv)
@@ -38,9 +39,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle escaped quotes within quoted fields")
     func handleEscapedQuotes() throws {
         let csv = """
-        name,value
-        Test,"Say ""Hello"" World"
-        """
+            name,value
+            Test,"Say ""Hello"" World"
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([TextRecord].self, from: csv)
@@ -52,9 +53,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle empty quoted field")
     func handleEmptyQuotedField() throws {
         let csv = """
-        name,value
-        Test,""
-        """
+            name,value
+            Test,""
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([TextRecord].self, from: csv)
@@ -66,9 +67,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle quoted field with only quotes")
     func handleQuotedFieldWithOnlyQuotes() throws {
         let csv = """
-        name,value
-        Test,"\"\""
-        """
+            name,value
+            Test,"\"\""
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([TextRecord].self, from: csv)
@@ -119,9 +120,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Throw error for unterminated quoted field")
     func throwErrorForUnterminatedQuote() throws {
         let csv = """
-        name,value
-        Test,"Unterminated
-        """
+            name,value
+            Test,"Unterminated
+            """
 
         let decoder = CSVDecoder()
 
@@ -133,9 +134,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle quote in middle of unquoted field (lenient)")
     func handleQuoteInMiddleOfField() throws {
         let csv = """
-        name,value
-        Test,Hello"World
-        """
+            name,value
+            Test,Hello"World
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([TextRecord].self, from: csv)
@@ -149,11 +150,11 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle multiple consecutive delimiters (empty fields)")
     func handleConsecutiveDelimiters() throws {
         let csv = """
-        a,b,c
-        1,,3
-        ,2,
-        ,,
-        """
+            a,b,c
+            1,,3
+            ,2,
+            ,,
+            """
 
         struct ThreeFields: Codable {
             let a: String?
@@ -179,9 +180,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle whitespace preservation in quoted fields")
     func handleWhitespaceInQuotedFields() throws {
         let csv = """
-        name,value
-        Test,"  spaces  "
-        """
+            name,value
+            Test,"  spaces  "
+            """
 
         let config = CSVDecoder.Configuration(trimWhitespace: false)
         let decoder = CSVDecoder(configuration: config)
@@ -201,9 +202,9 @@ struct CSVDecoderRFC4180Tests {
 
         // CSV with whitespace around string and numeric fields
         let csv = """
-        make,year,price
-         Toyota , 2024 , 45000.50
-        """
+            make,year,price
+             Toyota , 2024 , 45000.50
+            """
 
         // Default: trimWhitespace = true should trim all fields
         let decoder = CSVDecoder()
@@ -224,9 +225,9 @@ struct CSVDecoderRFC4180Tests {
 
         // Use explicit quotes to preserve trailing whitespace
         let csv = """
-        name,value
-        " padded "," text "
-        """
+            name,value
+            " padded "," text "
+            """
 
         let config = CSVDecoder.Configuration(trimWhitespace: false)
         let decoder = CSVDecoder(configuration: config)
@@ -240,10 +241,10 @@ struct CSVDecoderRFC4180Tests {
     @Test("Handle complex quoted field with all special characters")
     func handleComplexQuotedField() throws {
         let csv = """
-        name,value
-        Complex,"Has, commas, ""quotes"", and
-        newlines"
-        """
+            name,value
+            Complex,"Has, commas, ""quotes"", and
+            newlines"
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([TextRecord].self, from: csv)
@@ -275,9 +276,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Strict mode rejects quotes in unquoted fields")
     func strictModeRejectsQuotesInUnquoted() throws {
         let csv = """
-        name,value
-        Test,Hello"World
-        """
+            name,value
+            Test,Hello"World
+            """
 
         let config = CSVDecoder.Configuration(parsingMode: .strict)
         let decoder = CSVDecoder(configuration: config)
@@ -290,10 +291,10 @@ struct CSVDecoderRFC4180Tests {
     @Test("Strict mode validates field count")
     func strictModeValidatesFieldCount() throws {
         let csv = """
-        name,value
-        A,B
-        X,Y,Z
-        """
+            name,value
+            A,B
+            X,Y,Z
+            """
 
         let config = CSVDecoder.Configuration(
             parsingMode: .strict,
@@ -309,9 +310,9 @@ struct CSVDecoderRFC4180Tests {
     @Test("Lenient mode allows quotes in unquoted fields")
     func lenientModeAllowsQuotesInUnquoted() throws {
         let csv = """
-        name,value
-        Test,Hello"World
-        """
+            name,value
+            Test,Hello"World
+            """
 
         let config = CSVDecoder.Configuration(parsingMode: .lenient)
         let decoder = CSVDecoder(configuration: config)
@@ -331,10 +332,10 @@ struct CSVDecoderRFC4180Tests {
         }
 
         let csv = """
-        name,value
-        A,present
-        B,
-        """
+            name,value
+            A,present
+            B,
+            """
 
         let config = CSVDecoder.Configuration(nilDecodingStrategy: .emptyString)
         let decoder = CSVDecoder(configuration: config)
@@ -352,11 +353,11 @@ struct CSVDecoderRFC4180Tests {
         }
 
         let csv = """
-        name,value
-        A,present
-        B,null
-        C,NULL
-        """
+            name,value
+            A,present
+            B,null
+            C,NULL
+            """
 
         let config = CSVDecoder.Configuration(nilDecodingStrategy: .nullLiteral)
         let decoder = CSVDecoder(configuration: config)
@@ -375,11 +376,11 @@ struct CSVDecoderRFC4180Tests {
         }
 
         let csv = """
-        name,value
-        A,present
-        B,N/A
-        C,-
-        """
+            name,value
+            A,present
+            B,N/A
+            C,-
+            """
 
         let config = CSVDecoder.Configuration(
             nilDecodingStrategy: .custom(["N/A", "-", "n/a"]),
@@ -397,17 +398,17 @@ struct CSVDecoderRFC4180Tests {
     @Test("Safe parser wrapper prevents escaping")
     func safeParserWrapper() throws {
         let csv = """
-        name,age
-        Alice,30
-        Bob,25
-        """
+            name,age
+            Alice,30
+            Bob,25
+            """
         let data = Data(csv.utf8)
 
         // Count rows safely
         let rowCount = try CSVParser.parse(data: data) { parser in
             parser.reduce(0) { count, _ in count + 1 }
         }
-        #expect(rowCount == 3) // header + 2 rows
+        #expect(rowCount == 3)  // header + 2 rows
 
         // Extract values safely
         let names = try CSVParser.parse(data: data) { parser -> [String] in

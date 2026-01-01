@@ -70,9 +70,7 @@ public struct CSVLocation: Sendable, Equatable, CustomStringConvertible {
     }
 
     public static func == (lhs: CSVLocation, rhs: CSVLocation) -> Bool {
-        lhs.row == rhs.row &&
-            lhs.column == rhs.column &&
-            lhs.codingPath == rhs.codingPath
+        lhs.row == rhs.row && lhs.column == rhs.column && lhs.codingPath == rhs.codingPath
         // Note: availableKeys intentionally excluded from equality
     }
 }
@@ -132,16 +130,16 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
     public var location: CSVLocation? {
         switch self {
         case .invalidEncoding,
-             .unsupportedType:
+            .unsupportedType:
             nil
 
-        case let .keyNotFound(_, location):
+        case .keyNotFound(_, let location):
             location
 
-        case let .typeMismatch(_, _, location):
+        case .typeMismatch(_, _, let location):
             location
 
-        case let .parsingError(_, line, column):
+        case .parsingError(_, let line, let column):
             CSVLocation(row: line, column: column.map { "character \($0)" })
         }
     }
@@ -151,7 +149,7 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
         case .invalidEncoding:
             return "The data could not be decoded with the specified encoding"
 
-        case let .keyNotFound(key, location):
+        case .keyNotFound(let key, let location):
             let loc = location.row != nil ? " at \(location)" : ""
             var message = "Key '\(key)' not found in CSV row\(loc)"
             if let suggestion = suggestion {
@@ -159,7 +157,7 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
             }
             return message
 
-        case let .typeMismatch(expected, actual, location):
+        case .typeMismatch(let expected, let actual, let location):
             let loc = location.row != nil ? " at \(location)" : ""
             var message = "Type mismatch: expected \(expected), found '\(actual)'\(loc)"
             if let suggestion = suggestion {
@@ -167,10 +165,10 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
             }
             return message
 
-        case let .unsupportedType(message):
+        case .unsupportedType(let message):
             return "Unsupported operation: \(message)"
 
-        case let .parsingError(message, line, column):
+        case .parsingError(let message, let line, let column):
             var loc = ""
             if let line = line {
                 loc = " at line \(line)"
@@ -187,16 +185,16 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
     /// Returns a helpful suggestion for fixing the error.
     public var suggestion: String? {
         switch self {
-        case let .keyNotFound(key, location):
+        case .keyNotFound(let key, let location):
             suggestSimilarKey(key, from: location.availableKeys)
 
-        case let .typeMismatch(expected, actual, _):
+        case .typeMismatch(let expected, let actual, _):
             suggestTypeFix(expected: expected, actual: actual)
 
         case .invalidEncoding:
             "Try using a different encoding (e.g., .utf8, .isoLatin1, .windowsCP1252)"
 
-        case let .parsingError(message, _, _):
+        case .parsingError(let message, _, _):
             suggestParsingFix(message)
 
         case .unsupportedType:
@@ -224,9 +222,9 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
             for j in 1 ... n {
                 let cost = a[i - 1] == b[j - 1] ? 0 : 1
                 curr[j] = min(
-                    prev[j] + 1, // deletion
-                    curr[j - 1] + 1, // insertion
-                    prev[j - 1] + cost, // substitution
+                    prev[j] + 1,  // deletion
+                    curr[j - 1] + 1,  // insertion
+                    prev[j - 1] + cost,  // substitution
                 )
             }
             swap(&prev, &curr)
@@ -240,9 +238,10 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
         guard let keys = availableKeys, !keys.isEmpty else { return nil }
 
         // Find the closest match
-        let matches = keys
+        let matches =
+            keys
             .map { (key: $0, distance: Self.editDistance($0.lowercased(), key.lowercased())) }
-            .filter { $0.distance <= max(3, key.count / 2) } // Allow up to half the key length or 3 edits
+            .filter { $0.distance <= max(3, key.count / 2) }  // Allow up to half the key length or 3 edits
             .sorted { $0.distance < $1.distance }
 
         if let best = matches.first {
@@ -269,27 +268,29 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
 
         switch expected {
         case "Int",
-             "Int8",
-             "Int16",
-             "Int32",
-             "Int64",
-             "UInt",
-             "UInt8",
-             "UInt16",
-             "UInt32",
-             "UInt64":
+            "Int8",
+            "Int16",
+            "Int32",
+            "Int64",
+            "UInt",
+            "UInt8",
+            "UInt16",
+            "UInt32",
+            "UInt64":
             if actual.contains(".") || actual.contains(",") {
-                return "Value appears to be a decimal. Use Double or Decimal type, or check for locale-specific formatting"
+                return
+                    "Value appears to be a decimal. Use Double or Decimal type, or check for locale-specific formatting"
             }
             if actual.contains("$") || actual.contains("€") || actual.contains("£") {
                 return "Value contains currency symbol. Use numberDecodingStrategy: .flexible to strip currency symbols"
             }
 
         case "Decimal",
-             "Double",
-             "Float":
+            "Double",
+            "Float":
             if actual.contains(",") && actual.contains(".") {
-                return "Value may use European number format (1.234,56). Use numberDecodingStrategy: .flexible or .locale(Locale)"
+                return
+                    "Value may use European number format (1.234,56). Use numberDecodingStrategy: .flexible or .locale(Locale)"
             }
             if actual.contains("$") || actual.contains("€") || actual.contains("£") {
                 return "Value contains currency symbol. Use numberDecodingStrategy: .flexible to strip currency symbols"
@@ -298,15 +299,18 @@ public enum CSVDecodingError: Error, LocalizedError, Sendable {
         case "Bool":
             let boolLike = ["yes", "no", "true", "false", "1", "0", "oui", "non", "ja", "nein", "да", "нет"]
             if boolLike.contains(lowercaseActual) {
-                return "Value '\(actual)' is boolean-like. Use boolDecodingStrategy: .flexible for extended boolean values"
+                return
+                    "Value '\(actual)' is boolean-like. Use boolDecodingStrategy: .flexible for extended boolean values"
             }
 
         case "Date":
             if actual.contains("/") || actual.contains("-") || actual.contains(".") {
-                return "Value appears to be a date. Use dateDecodingStrategy: .flexible for auto-detection, or .formatted(\"yyyy-MM-dd\") for specific format"
+                return
+                    "Value appears to be a date. Use dateDecodingStrategy: .flexible for auto-detection, or .formatted(\"yyyy-MM-dd\") for specific format"
             }
             if Double(actual) != nil {
-                return "Value appears to be a timestamp. Use dateDecodingStrategy: .secondsSince1970 or .millisecondsSince1970"
+                return
+                    "Value appears to be a timestamp. Use dateDecodingStrategy: .secondsSince1970 or .millisecondsSince1970"
             }
 
         default:

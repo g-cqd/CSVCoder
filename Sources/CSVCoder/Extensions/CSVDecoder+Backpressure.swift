@@ -10,21 +10,21 @@ import Foundation
 
 // MARK: - CSVDecoder.MemoryLimitConfiguration
 
-public extension CSVDecoder {
+extension CSVDecoder {
     /// Configuration for memory-limited streaming operations.
-    struct MemoryLimitConfiguration: Sendable {
+    public struct MemoryLimitConfiguration: Sendable {
         // MARK: Lifecycle
 
         /// Creates a memory limit configuration with sensible defaults.
         public init(
-            memoryBudget: Int = 50 * 1024 * 1024, // 50MB
+            memoryBudget: Int = 50 * 1024 * 1024,  // 50MB
             estimatedRowSize: Int = 256,
             batchSize: Int = 1000,
             useWatermarks: Bool = true,
             highWaterMark: Double = 0.8,
             lowWaterMark: Double = 0.4,
         ) {
-            self.memoryBudget = max(1024 * 1024, memoryBudget) // Minimum 1MB
+            self.memoryBudget = max(1024 * 1024, memoryBudget)  // Minimum 1MB
             self.estimatedRowSize = max(64, estimatedRowSize)
             self.batchSize = max(1, batchSize)
             self.useWatermarks = useWatermarks
@@ -117,11 +117,12 @@ actor BackpressureController {
     func recordConsumed(_ count: Int) {
         bufferedCount = max(0, bufferedCount - count)
 
-        let shouldResume: Bool = if config.useWatermarks {
-            isPaused && bufferedCount <= config.lowWaterRows
-        } else {
-            isPaused && bufferedCount < config.maxBufferedRows
-        }
+        let shouldResume: Bool =
+            if config.useWatermarks {
+                isPaused && bufferedCount <= config.lowWaterRows
+            } else {
+                isPaused && bufferedCount < config.maxBufferedRows
+            }
 
         if shouldResume {
             isPaused = false
@@ -152,7 +153,7 @@ actor BackpressureController {
 
 // MARK: - Memory-Aware Streaming Extension
 
-public extension CSVDecoder {
+extension CSVDecoder {
     /// Decodes CSV with memory-aware backpressure.
     /// Automatically pauses production when memory limits are approached.
     ///
@@ -165,7 +166,7 @@ public extension CSVDecoder {
     /// - Note: The stream applies backpressure when buffered rows exceed
     ///         the configured memory budget, pausing production until
     ///         the consumer catches up.
-    func decodeWithBackpressure<T: Decodable & Sendable>(
+    public func decodeWithBackpressure<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
         memoryConfig: MemoryLimitConfiguration = MemoryLimitConfiguration(),
@@ -177,38 +178,12 @@ public extension CSVDecoder {
                 do {
                     let parser = try StreamingCSVParser(url: url, configuration: configuration)
                     var iterator = parser.makeAsyncIterator()
-                    var headers: [String]?
+                    var processor = StreamingRowProcessor<T>(configuration: configuration)
                     var batchBuffer: [T] = []
                     batchBuffer.reserveCapacity(memoryConfig.batchSize)
 
                     while let row = try await iterator.next() {
-                        if headers == nil {
-                            if configuration.hasHeaders {
-                                headers = row
-                                continue
-                            } else {
-                                headers = (0 ..< row.count).map { "column\($0)" }
-                            }
-                        }
-
-                        guard let headerRow = headers else { continue }
-
-                        // Build dictionary for row
-                        var dictionary: [String: String] = [:]
-                        dictionary.reserveCapacity(headerRow.count)
-                        for (index, header) in headerRow.enumerated() {
-                            if index < row.count {
-                                dictionary[header] = row[index]
-                            }
-                        }
-
-                        // Decode row
-                        let decoder = CSVRowDecoder(
-                            row: dictionary,
-                            configuration: configuration,
-                            codingPath: [],
-                        )
-                        let value = try T(from: decoder)
+                        guard let value = try processor.process(row) else { continue }
                         batchBuffer.append(value)
 
                         // Flush batch when full
@@ -242,7 +217,7 @@ public extension CSVDecoder {
             // Set up consumption tracking
             continuation.onTermination = { @Sendable _ in
                 Task {
-                    await controller.recordConsumed(Int.max) // Signal completion
+                    await controller.recordConsumed(Int.max)  // Signal completion
                 }
             }
         }
@@ -256,7 +231,7 @@ public extension CSVDecoder {
     ///   - url: The file URL to read CSV data from.
     ///   - memoryConfig: Configuration for memory limits.
     /// - Returns: An AsyncThrowingStream yielding batches of decoded values.
-    func decodeBatchedWithBackpressure<T: Decodable & Sendable>(
+    public func decodeBatchedWithBackpressure<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
         memoryConfig: MemoryLimitConfiguration = MemoryLimitConfiguration(),
@@ -266,36 +241,12 @@ public extension CSVDecoder {
                 do {
                     let parser = try StreamingCSVParser(url: url, configuration: configuration)
                     var iterator = parser.makeAsyncIterator()
-                    var headers: [String]?
+                    var processor = StreamingRowProcessor<T>(configuration: configuration)
                     var batch: [T] = []
                     batch.reserveCapacity(memoryConfig.batchSize)
 
                     while let row = try await iterator.next() {
-                        if headers == nil {
-                            if configuration.hasHeaders {
-                                headers = row
-                                continue
-                            } else {
-                                headers = (0 ..< row.count).map { "column\($0)" }
-                            }
-                        }
-
-                        guard let headerRow = headers else { continue }
-
-                        var dictionary: [String: String] = [:]
-                        dictionary.reserveCapacity(headerRow.count)
-                        for (index, header) in headerRow.enumerated() {
-                            if index < row.count {
-                                dictionary[header] = row[index]
-                            }
-                        }
-
-                        let decoder = CSVRowDecoder(
-                            row: dictionary,
-                            configuration: configuration,
-                            codingPath: [],
-                        )
-                        let value = try T(from: decoder)
+                        guard let value = try processor.process(row) else { continue }
                         batch.append(value)
 
                         if batch.count >= memoryConfig.batchSize {
@@ -319,9 +270,9 @@ public extension CSVDecoder {
 
 // MARK: - Progress Tracking
 
-public extension CSVDecoder {
+extension CSVDecoder {
     /// Progress information during decoding.
-    struct DecodingProgress: Sendable {
+    public struct DecodingProgress: Sendable {
         /// Number of rows decoded so far.
         public let rowsDecoded: Int
         /// Estimated total rows (if known).
@@ -345,7 +296,7 @@ public extension CSVDecoder {
     ///   - url: The file URL to read CSV data from.
     ///   - progressHandler: Called periodically with progress updates.
     /// - Returns: An AsyncThrowingStream yielding decoded values.
-    func decodeWithProgress<T: Decodable & Sendable>(
+    public func decodeWithProgress<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
         progressHandler: @escaping @Sendable (DecodingProgress) -> Void,
@@ -365,60 +316,40 @@ public extension CSVDecoder {
 
                     let parser = try StreamingCSVParser(url: url, configuration: configuration)
                     var iterator = parser.makeAsyncIterator()
-                    var headers: [String]?
+                    var processor = StreamingRowProcessor<T>(configuration: configuration)
                     var rowsDecoded = 0
                     var lastReportedRow = 0
-                    let reportInterval = max(1, estimatedRows / 100) // Report ~100 times
+                    let reportInterval = max(1, estimatedRows / 100)  // Report ~100 times
 
                     while let row = try await iterator.next() {
-                        if headers == nil {
-                            if configuration.hasHeaders {
-                                headers = row
-                                continue
-                            } else {
-                                headers = (0 ..< row.count).map { "column\($0)" }
-                            }
-                        }
-
-                        guard let headerRow = headers else { continue }
-
-                        var dictionary: [String: String] = [:]
-                        dictionary.reserveCapacity(headerRow.count)
-                        for (index, header) in headerRow.enumerated() {
-                            if index < row.count {
-                                dictionary[header] = row[index]
-                            }
-                        }
-
-                        let decoder = CSVRowDecoder(
-                            row: dictionary,
-                            configuration: configuration,
-                            codingPath: [],
-                        )
-                        let value = try T(from: decoder)
+                        guard let value = try processor.process(row) else { continue }
                         continuation.yield(value)
                         rowsDecoded += 1
 
                         // Report progress periodically
                         if rowsDecoded - lastReportedRow >= reportInterval {
                             let bytesEstimate = totalBytes * rowsDecoded / max(1, estimatedRows)
-                            progressHandler(DecodingProgress(
-                                rowsDecoded: rowsDecoded,
-                                estimatedTotal: estimatedRows,
-                                bytesProcessed: min(bytesEstimate, totalBytes),
-                                totalBytes: totalBytes,
-                            ))
+                            progressHandler(
+                                DecodingProgress(
+                                    rowsDecoded: rowsDecoded,
+                                    estimatedTotal: estimatedRows,
+                                    bytesProcessed: min(bytesEstimate, totalBytes),
+                                    totalBytes: totalBytes,
+                                )
+                            )
                             lastReportedRow = rowsDecoded
                         }
                     }
 
                     // Final progress report
-                    progressHandler(DecodingProgress(
-                        rowsDecoded: rowsDecoded,
-                        estimatedTotal: rowsDecoded,
-                        bytesProcessed: totalBytes,
-                        totalBytes: totalBytes,
-                    ))
+                    progressHandler(
+                        DecodingProgress(
+                            rowsDecoded: rowsDecoded,
+                            estimatedTotal: rowsDecoded,
+                            bytesProcessed: totalBytes,
+                            totalBytes: totalBytes,
+                        )
+                    )
 
                     continuation.finish()
                 } catch {

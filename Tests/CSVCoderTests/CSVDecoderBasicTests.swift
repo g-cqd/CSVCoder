@@ -5,9 +5,10 @@
 //  Basic decoding tests: simple records, delimiters, types.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Basic Tests")
 struct CSVDecoderBasicTests {
@@ -37,10 +38,10 @@ struct CSVDecoderBasicTests {
     @Test("Decode simple records")
     func decodeSimpleRecords() throws {
         let csv = """
-        name,age,score
-        Alice,30,95.5
-        Bob,25,88.0
-        """
+            name,age,score
+            Alice,30,95.5
+            Bob,25,88.0
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([SimpleRecord].self, from: csv)
@@ -53,9 +54,9 @@ struct CSVDecoderBasicTests {
     @Test("Decode with semicolon delimiter")
     func decodeWithSemicolonDelimiter() throws {
         let csv = """
-        name;age
-        Charlie;35
-        """
+            name;age
+            Charlie;35
+            """
 
         let config = CSVDecoder.Configuration(delimiter: ";")
         let decoder = CSVDecoder(configuration: config)
@@ -69,9 +70,9 @@ struct CSVDecoderBasicTests {
     @Test("Decode dates with format")
     func decodeDatesWithFormat() throws {
         let csv = """
-        event,date
-        Meeting,25/12/2024
-        """
+            event,date
+            Meeting,25/12/2024
+            """
 
         let config = CSVDecoder.Configuration(
             dateDecodingStrategy: .formatted("dd/MM/yyyy"),
@@ -98,9 +99,9 @@ struct CSVDecoderBasicTests {
     @Test("Handle quoted fields with delimiters")
     func handleQuotedFields() throws {
         let csv = """
-        name,description
-        Test,"Value,with,commas"
-        """
+            name,description
+            Test,"Value,with,commas"
+            """
 
         let decoder = CSVDecoder()
 
@@ -118,9 +119,9 @@ struct CSVDecoderBasicTests {
     @Test("Handle empty values")
     func handleEmptyValues() throws {
         let csv = """
-        name,value
-        Test,
-        """
+            name,value
+            Test,
+            """
 
         struct OptionalRecord: Codable {
             let name: String
@@ -137,10 +138,10 @@ struct CSVDecoderBasicTests {
     @Test("Decode UInt8 values")
     func decodeUInt8Values() throws {
         let csv = """
-        id,value
-        1,42
-        2,255
-        """
+            id,value
+            1,42
+            2,255
+            """
 
         struct ByteRecord: Codable {
             let id: Int
@@ -158,10 +159,10 @@ struct CSVDecoderBasicTests {
     @Test("Decode Decimal values")
     func decodeDecimalValues() throws {
         let csv = """
-        price,quantity
-        19.99,100
-        0.001,999999
-        """
+            price,quantity
+            19.99,100
+            0.001,999999
+            """
 
         struct PriceRecord: Codable, Equatable {
             let price: Decimal
@@ -181,10 +182,10 @@ struct CSVDecoderBasicTests {
         let uuid1 = UUID()
         let uuid2 = UUID()
         let csv = """
-        id,name
-        \(uuid1.uuidString),Item1
-        \(uuid2.uuidString),Item2
-        """
+            id,name
+            \(uuid1.uuidString),Item1
+            \(uuid2.uuidString),Item2
+            """
 
         struct UUIDRecord: Codable {
             let id: UUID
@@ -202,10 +203,10 @@ struct CSVDecoderBasicTests {
     @Test("Decode URL values")
     func decodeURLValues() throws {
         let csv = """
-        name,website
-        Example,https://example.com
-        Test,https://test.com/path?query=1
-        """
+            name,website
+            Example,https://example.com
+            Test,https://test.com/path?query=1
+            """
 
         struct URLRecord: Codable {
             let name: String
@@ -225,9 +226,9 @@ struct CSVDecoderBasicTests {
     @Test("Type inference decode from string")
     func typeInferenceFromString() throws {
         let csv = """
-        name,age,score
-        Alice,30,95.5
-        """
+            name,age,score
+            Alice,30,95.5
+            """
 
         let decoder = CSVDecoder()
         let records: [SimpleRecord] = try decoder.decode(from: csv)
@@ -239,9 +240,9 @@ struct CSVDecoderBasicTests {
     @Test("Type inference decode from Data")
     func typeInferenceFromData() throws {
         let csv = """
-        name,age,score
-        Bob,25,88.0
-        """
+            name,age,score
+            Bob,25,88.0
+            """
         let data = csv.data(using: .utf8)!
 
         let decoder = CSVDecoder()

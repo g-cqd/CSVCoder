@@ -129,7 +129,8 @@ public struct CSVParser: Sequence {
 
             // Handle trailing empty line (EOF after newline)
             if fieldStarts
-                .isEmpty || (fieldStarts.count == 1 && fieldLengths[0] == 0 && offset >= parser.buffer.count) {
+                .isEmpty || (fieldStarts.count == 1 && fieldLengths[0] == 0 && offset >= parser.buffer.count)
+            {
                 if offset >= parser.buffer.count, fieldStarts.isEmpty {
                     return nil
                 }
@@ -222,9 +223,9 @@ public struct CSVParser: Sequence {
     // MARK: Fileprivate
 
     // ASCII constants
-    fileprivate static let quote: UInt8 = 0x22 // "
-    fileprivate static let cr: UInt8 = 0x0D // \r
-    fileprivate static let lf: UInt8 = 0x0A // \n
+    fileprivate static let quote: UInt8 = 0x22  // "
+    fileprivate static let cr: UInt8 = 0x0D  // \r
+    fileprivate static let lf: UInt8 = 0x0A  // \n
 
     /// Parses a single field starting at the given offset.
     @inline(__always)
@@ -234,11 +235,10 @@ public struct CSVParser: Sequence {
             return makeEmptyFieldResult(at: startOffset)
         }
 
-        if buffer[startOffset] == CSVParser.quote {
-            return parseQuotedField(from: startOffset, count: count)
-        } else {
+        guard buffer[startOffset] == CSVParser.quote else {
             return parseUnquotedField(from: startOffset, count: count)
         }
+        return parseQuotedField(from: startOffset, count: count)
     }
 
     // MARK: Private
@@ -308,17 +308,7 @@ public struct CSVParser: Sequence {
             let contentEnd = cursor
             cursor += 1
 
-            if cursor < count {
-                let (nextOffset, isRowEnd) = resolveTerminator(at: cursor, count: count)
-                return makeQuotedFieldResult(
-                    contentStart: contentStart,
-                    contentEnd: contentEnd,
-                    nextOffset: nextOffset,
-                    isRowEnd: isRowEnd,
-                    unterminated: false,
-                    hasEscapedQuote: hasEscapedQuote,
-                )
-            } else {
+            guard cursor < count else {
                 return makeQuotedFieldResult(
                     contentStart: contentStart,
                     contentEnd: contentEnd,
@@ -328,6 +318,15 @@ public struct CSVParser: Sequence {
                     hasEscapedQuote: hasEscapedQuote,
                 )
             }
+            let (nextOffset, isRowEnd) = resolveTerminator(at: cursor, count: count)
+            return makeQuotedFieldResult(
+                contentStart: contentStart,
+                contentEnd: contentEnd,
+                nextOffset: nextOffset,
+                isRowEnd: isRowEnd,
+                unterminated: false,
+                hasEscapedQuote: hasEscapedQuote,
+            )
         }
 
         // Unterminated quote
@@ -344,19 +343,18 @@ public struct CSVParser: Sequence {
     /// Advances cursor to the next quote character using SIMD when available.
     @inline(__always)
     private func advanceToNextQuote(from cursor: Int, count: Int) -> Int {
-        if let baseAddress = buffer.baseAddress {
-            let relativeQuote = SIMDScanner.findNextQuote(
-                buffer: baseAddress.advanced(by: cursor),
-                count: count - cursor,
-            )
-            return cursor + relativeQuote
-        } else {
+        guard let baseAddress = buffer.baseAddress else {
             var pos = cursor
             while pos < count, buffer[pos] != CSVParser.quote {
                 pos += 1
             }
             return pos
         }
+        let relativeQuote = SIMDScanner.findNextQuote(
+            buffer: baseAddress.advanced(by: cursor),
+            count: count - cursor,
+        )
+        return cursor + relativeQuote
     }
 
     /// Creates a FieldResult for a quoted field.

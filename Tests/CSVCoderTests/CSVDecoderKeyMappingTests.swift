@@ -5,9 +5,10 @@
 //  Tests for key strategies, column mapping, index mapping, and CSVIndexedDecodable.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Key Mapping Tests")
 struct CSVDecoderKeyMappingTests {
@@ -43,7 +44,7 @@ struct CSVDecoderKeyMappingTests {
         enum CodingKeys: String, CodingKey, CaseIterable {
             case third
             case first
-            case second // Different order than properties
+            case second  // Different order than properties
         }
 
         typealias CSVCodingKeys = CodingKeys
@@ -58,10 +59,10 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode with snake_case to camelCase conversion")
     func decodeSnakeCaseToCamelCase() throws {
         let csv = """
-        first_name,last_name,email_address
-        John,Doe,john@example.com
-        Jane,Smith,jane@example.com
-        """
+            first_name,last_name,email_address
+            John,Doe,john@example.com
+            Jane,Smith,jane@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .convertFromSnakeCase,
@@ -77,9 +78,9 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode with kebab-case to camelCase conversion")
     func decodeKebabCaseToCamelCase() throws {
         let csv = """
-        first-name,last-name,email-address
-        Alice,Johnson,alice@example.com
-        """
+            first-name,last-name,email-address
+            Alice,Johnson,alice@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .convertFromKebabCase,
@@ -95,9 +96,9 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode with SCREAMING_SNAKE_CASE to camelCase conversion")
     func decodeScreamingSnakeCaseToCamelCase() throws {
         let csv = """
-        FIRST_NAME,LAST_NAME,EMAIL_ADDRESS
-        Bob,Wilson,bob@example.com
-        """
+            FIRST_NAME,LAST_NAME,EMAIL_ADDRESS
+            Bob,Wilson,bob@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .convertFromScreamingSnakeCase,
@@ -112,9 +113,9 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode with PascalCase to camelCase conversion")
     func decodePascalCaseToCamelCase() throws {
         let csv = """
-        FirstName,LastName,EmailAddress
-        Carol,Brown,carol@example.com
-        """
+            FirstName,LastName,EmailAddress
+            Carol,Brown,carol@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .convertFromPascalCase,
@@ -129,9 +130,9 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode with custom key transformation")
     func decodeWithCustomKeyTransformation() throws {
         let csv = """
-        fn,ln,email
-        David,Lee,david@example.com
-        """
+            fn,ln,email
+            David,Lee,david@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .custom { key in
@@ -156,9 +157,9 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode with explicit column mapping")
     func decodeWithColumnMapping() throws {
         let csv = """
-        First Name,Last Name,E-mail
-        Emily,Davis,emily@example.com
-        """
+            First Name,Last Name,E-mail
+            Emily,Davis,emily@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             columnMapping: [
@@ -179,14 +180,14 @@ struct CSVDecoderKeyMappingTests {
     @Test("Column mapping takes precedence over key strategy")
     func columnMappingTakesPrecedence() throws {
         let csv = """
-        first_name,surname,email_address
-        Frank,Miller,frank@example.com
-        """
+            first_name,surname,email_address
+            Frank,Miller,frank@example.com
+            """
 
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .convertFromSnakeCase,
             columnMapping: [
-                "surname": "lastName", // Override snake_case conversion for this column
+                "surname": "lastName"  // Override snake_case conversion for this column
             ],
         )
         let decoder = CSVDecoder(configuration: config)
@@ -202,10 +203,10 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode headerless CSV with index mapping")
     func decodeHeaderlessWithIndexMapping() throws {
         let csv = """
-        Alice,30,95.5
-        Bob,25,88.0
-        Carol,35,92.0
-        """
+            Alice,30,95.5
+            Bob,25,88.0
+            Carol,35,92.0
+            """
 
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
@@ -224,9 +225,9 @@ struct CSVDecoderKeyMappingTests {
     func indexMappingWithSparseIndices() throws {
         // CSV with extra columns we want to skip
         let csv = """
-        ignore,Alice,skip,30,extra,95.5
-        ignore,Bob,skip,25,extra,88.0
-        """
+            ignore,Alice,skip,30,extra,95.5
+            ignore,Bob,skip,25,extra,88.0
+            """
 
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
@@ -245,9 +246,9 @@ struct CSVDecoderKeyMappingTests {
     func indexMappingOverridesHeaders() throws {
         // CSV has headers but we want to use different property names
         let csv = """
-        col1,col2,col3
-        David,40,77.5
-        """
+            col1,col2,col3
+            David,40,77.5
+            """
 
         let config = CSVDecoder.Configuration(
             hasHeaders: true,
@@ -269,9 +270,9 @@ struct CSVDecoderKeyMappingTests {
         }
 
         let csv = """
-        a,b,c
-        value1,value2,value3
-        """
+            a,b,c
+            value1,value2,value3
+            """
 
         let config = CSVDecoder.Configuration(
             hasHeaders: false,
@@ -280,7 +281,7 @@ struct CSVDecoderKeyMappingTests {
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PartialRecord].self, from: csv)
 
-        #expect(records.count == 2) // Header row is treated as data
+        #expect(records.count == 2)  // Header row is treated as data
         #expect(records[0].first == "a")
         #expect(records[0].third == "c")
     }
@@ -288,10 +289,10 @@ struct CSVDecoderKeyMappingTests {
     @Test("Decode headerless CSV with CSVIndexedDecodable")
     func decodeHeaderlessWithCSVIndexedDecodable() throws {
         let csv = """
-        Alice,30,95.5
-        Bob,25,88.0
-        Carol,35,92.0
-        """
+            Alice,30,95.5
+            Bob,25,88.0
+            Carol,35,92.0
+            """
 
         // No indexMapping needed - uses CodingKeys order
         let config = CSVDecoder.Configuration(hasHeaders: false)
@@ -307,9 +308,9 @@ struct CSVDecoderKeyMappingTests {
     @Test("CSVIndexedDecodable with headers still works")
     func csvIndexedDecodableWithHeaders() throws {
         let csv = """
-        name,age,score
-        Alice,30,95.5
-        """
+            name,age,score
+            Alice,30,95.5
+            """
 
         let decoder = CSVDecoder()
         let records = try decoder.decode([IndexedRecord].self, from: csv)
@@ -327,8 +328,8 @@ struct CSVDecoderKeyMappingTests {
     @Test("Explicit indexMapping overrides CSVIndexedDecodable")
     func explicitIndexMappingOverridesCSVIndexed() throws {
         let csv = """
-        95.5,30,Alice
-        """
+            95.5,30,Alice
+            """
 
         // Explicit indexMapping should take precedence
         let config = CSVDecoder.Configuration(
@@ -348,8 +349,8 @@ struct CSVDecoderKeyMappingTests {
     func csvIndexedDecodableRespectsOrder() throws {
         // CSV columns match CodingKeys order: third, first, second
         let csv = """
-        99.9,hello,42
-        """
+            99.9,hello,42
+            """
 
         let config = CSVDecoder.Configuration(hasHeaders: false)
         let decoder = CSVDecoder(configuration: config)

@@ -5,9 +5,10 @@
 //  Tests for locale-aware decoding strategies.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("Locale-Aware Decoding Tests")
 struct LocaleAwareDecodingTests {
@@ -34,10 +35,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func parseStrategyUSFormat() throws {
         let csv = """
-        item,price
-        Widget,1234.56
-        Gadget,999.99
-        """
+            item,price
+            Widget,1234.56
+            Gadget,999.99
+            """
 
         let config = CSVDecoder.Configuration(
             numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US")),
@@ -54,10 +55,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func parseStrategyGermanFormat() throws {
         let csv = """
-        item,price
-        Widget,"1.234,56"
-        Gadget,"999,99"
-        """
+            item,price
+            Widget,"1.234,56"
+            Gadget,"999,99"
+            """
 
         let config = CSVDecoder.Configuration(
             numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "de_DE")),
@@ -74,11 +75,11 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func parseStrategyStripsCurrency() throws {
         let csv = """
-        item,price
-        Widget,$45.99
-        Gadget,€29.99
-        Gizmo,£19.99
-        """
+            item,price
+            Widget,$45.99
+            Gadget,€29.99
+            Gizmo,£19.99
+            """
 
         let config = CSVDecoder.Configuration(
             numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US")),
@@ -96,10 +97,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func parseStrategyStripsUnits() throws {
         let csv = """
-        item,price
-        Distance,100 km
-        Fuel,45.5 L
-        """
+            item,price
+            Distance,100 km
+            Fuel,45.5 L
+            """
 
         let config = CSVDecoder.Configuration(
             numberDecodingStrategy: .parseStrategy(locale: Locale(identifier: "en_US")),
@@ -118,10 +119,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func currencyStrategyWithSymbols() throws {
         let csv = """
-        item,amount
-        Sale,$1234.56
-        Refund,-$50.00
-        """
+            item,amount
+            Sale,$1234.56
+            Refund,-$50.00
+            """
 
         let config = CSVDecoder.Configuration(
             numberDecodingStrategy: .currency(code: "USD", locale: Locale(identifier: "en_US")),
@@ -138,10 +139,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func currencyStrategyEuropeanFormat() throws {
         let csv = """
-        item,amount
-        Sale,"1.234,56 €"
-        Tax,"99,99 €"
-        """
+            item,amount
+            Sale,"1.234,56 €"
+            Tax,"99,99 €"
+            """
 
         let config = CSVDecoder.Configuration(
             numberDecodingStrategy: .currency(code: "EUR", locale: Locale(identifier: "de_DE")),
@@ -160,10 +161,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func localeAwareUSDateFormat() throws {
         let csv = """
-        event,date
-        Birthday,12/25/2024
-        Anniversary,01/15/2025
-        """
+            event,date
+            Birthday,12/25/2024
+            Anniversary,01/15/2025
+            """
 
         let config = CSVDecoder.Configuration(
             dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_US"), style: .numeric),
@@ -184,10 +185,10 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func localeAwareUKDateFormat() throws {
         let csv = """
-        event,date
-        Birthday,25/12/2024
-        Anniversary,15/01/2025
-        """
+            event,date
+            Birthday,25/12/2024
+            Anniversary,15/01/2025
+            """
 
         let config = CSVDecoder.Configuration(
             dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_GB"), style: .numeric),
@@ -208,9 +209,9 @@ struct LocaleAwareDecodingTests {
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     func localeAwareFallback() throws {
         let csv = """
-        event,date
-        Birthday,2024-12-25
-        """
+            event,date
+            Birthday,2024-12-25
+            """
 
         let config = CSVDecoder.Configuration(
             dateDecodingStrategy: .localeAware(locale: Locale(identifier: "en_US"), style: .numeric),

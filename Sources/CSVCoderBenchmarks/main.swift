@@ -1,5 +1,6 @@
 import Benchmark
 import CSVCoder
+import CSVCoderTestFixtures
 import Foundation
 
 // MARK: - Print Hardware Info
@@ -82,66 +83,7 @@ struct FlexibleNumberRecord: Codable, Sendable {
     let value: Double
 }
 
-// MARK: - Order
-
-// Real-world model: E-commerce order
-struct Order: Codable, Sendable {
-    let orderId: String
-    let customerId: Int
-    let customerName: String
-    let email: String
-    let productId: Int
-    let productName: String
-    let quantity: Int
-    let unitPrice: Double
-    let discount: Double?
-    let taxRate: Double
-    let shippingCost: Double
-    let totalAmount: Double
-    let currency: String
-    let paymentMethod: String
-    let orderDate: String
-    let shipDate: String?
-    let status: String
-    let notes: String?
-}
-
-// MARK: - Transaction
-
-// Real-world model: Financial transaction
-struct Transaction: Codable, Sendable {
-    let transactionId: String
-    let accountFrom: String
-    let accountTo: String
-    let amount: Double
-    let currency: String
-    let exchangeRate: Double?
-    let fee: Double
-    let timestamp: String
-    let category: String
-    let description: String
-    let reference: String?
-    let status: String
-    let processedBy: String?
-}
-
-// MARK: - LogEntry
-
-// Real-world model: Log entry
-struct LogEntry: Codable, Sendable {
-    let timestamp: String
-    let level: String
-    let service: String
-    let host: String
-    let requestId: String?
-    let userId: String?
-    let action: String
-    let resource: String
-    let duration: Int?
-    let statusCode: Int?
-    let message: String
-    let metadata: String?
-}
+// Order, Transaction, and LogEntry are imported from CSVCoderTestFixtures
 
 // MARK: - CSV Generators
 
@@ -156,7 +98,8 @@ nonisolated func generateSimpleCSV(rows: Int) -> String {
 nonisolated func generateComplexCSV(rows: Int) -> String {
     var csv = "id,firstName,lastName,email,age,salary,isActive,notes\n"
     for i in 0 ..< rows {
-        csv += "\(i),John,Doe\(i),john\(i)@example.com,\(25 + i % 40),\(50000.0 + Double(i) * 100),\(i % 2 == 0),\"Some notes here with text\"\n"
+        csv +=
+            "\(i),John,Doe\(i),john\(i)@example.com,\(25 + i % 40),\(50000.0 + Double(i) * 100),\(i % 2 == 0),\"Some notes here with text\"\n"
     }
     return csv
 }
@@ -195,7 +138,8 @@ nonisolated func generateNumericCSV(rows: Int) -> String {
 }
 
 nonisolated func generateOrderCSV(rows: Int) -> String {
-    var csv = "orderId,customerId,customerName,email,productId,productName,quantity,unitPrice,discount,taxRate,shippingCost,totalAmount,currency,paymentMethod,orderDate,shipDate,status,notes\n"
+    var csv =
+        "orderId,customerId,customerName,email,productId,productName,quantity,unitPrice,discount,taxRate,shippingCost,totalAmount,currency,paymentMethod,orderDate,shipDate,status,notes\n"
     let statuses = ["pending", "processing", "shipped", "delivered", "cancelled"]
     let payments = ["credit_card", "paypal", "bank_transfer", "crypto"]
     for i in 0 ..< rows {
@@ -214,7 +158,8 @@ nonisolated func generateOrderCSV(rows: Int) -> String {
         let totalAmount = "\(Double(10 + i % 100) * Double(1 + i % 10))"
         let payment = payments[i % payments.count]
         let orderDate = "2024-\(String(format: "%02d", 1 + i % 12))-\(String(format: "%02d", 1 + i % 28))"
-        let shipDate = hasShipDate
+        let shipDate =
+            hasShipDate
             ? "2024-\(String(format: "%02d", 1 + (i + 3) % 12))-\(String(format: "%02d", 1 + (i + 3) % 28))"
             : ""
         let status = statuses[i % statuses.count]
@@ -227,7 +172,8 @@ nonisolated func generateOrderCSV(rows: Int) -> String {
 }
 
 nonisolated func generateTransactionCSV(rows: Int) -> String {
-    var csv = "transactionId,accountFrom,accountTo,amount,currency,exchangeRate,fee,timestamp,category,description,reference,status,processedBy\n"
+    var csv =
+        "transactionId,accountFrom,accountTo,amount,currency,exchangeRate,fee,timestamp,category,description,reference,status,processedBy\n"
     let categories = ["transfer", "payment", "refund", "withdrawal", "deposit"]
     let currencies = ["USD", "EUR", "GBP", "JPY", "CHF"]
     for i in 0 ..< rows {
@@ -390,18 +336,20 @@ let veryWide200Col1KData = Data(veryWide200Col1K.utf8)
 let simpleRecords1K = (0 ..< 1000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
 let simpleRecords10K = (0 ..< 10000)
     .map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-let simpleRecords100K = (0 ..< 100_000).map { SimpleRecord(
-    name: "Person\($0)",
-    age: 20 + $0 % 50,
-    score: Double($0) * 0.1,
-)
+let simpleRecords100K = (0 ..< 100_000).map {
+    SimpleRecord(
+        name: "Person\($0)",
+        age: 20 + $0 % 50,
+        score: Double($0) * 0.1,
+    )
 }
 
-let simpleRecords1M = (0 ..< 1_000_000).map { SimpleRecord(
-    name: "Person\($0)",
-    age: 20 + $0 % 50,
-    score: Double($0) * 0.1,
-)
+let simpleRecords1M = (0 ..< 1_000_000).map {
+    SimpleRecord(
+        name: "Person\($0)",
+        age: 20 + $0 % 50,
+        score: Double($0) * 0.1,
+    )
 }
 
 let quotedRecords10K = (0 ..< 10000).map { i in
@@ -493,7 +441,10 @@ nonisolated func runAsync<T: Sendable>(_ operation: @Sendable @escaping () async
         semaphore.signal()
     }
     semaphore.wait()
-    return try box.value!.get()
+    guard let result = box.value else {
+        fatalError("Async operation completed without setting result")
+    }
+    return try result.get()
 }
 
 // MARK: - Raw Parser Benchmarks

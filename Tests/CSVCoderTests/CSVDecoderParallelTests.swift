@@ -5,9 +5,10 @@
 //  Tests for SIMD scanner, parallel decoding, backpressure, and memory configuration.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Parallel Tests")
 struct CSVDecoderParallelTests {
@@ -93,7 +94,7 @@ struct CSVDecoderParallelTests {
         let decoder = CSVDecoder()
         let config = CSVDecoder.ParallelConfiguration(
             parallelism: 4,
-            chunkSize: 256, // Small chunks to test parallel behavior
+            chunkSize: 256,  // Small chunks to test parallel behavior
         )
 
         let records = try await decoder.decodeParallel([SimpleRecord].self, from: data, parallelConfig: config)
@@ -232,13 +233,15 @@ struct CSVDecoderParallelTests {
         // On multi-core machines, parallel should be faster
         let coreCount = ProcessInfo.processInfo.activeProcessorCount
         if coreCount > 1 {
-            let seqNanos = Double(sequentialDuration.components.seconds) * 1e9 +
-                Double(sequentialDuration.components.attoseconds) / 1e9
-            let parNanos = Double(parallelDuration.components.seconds) * 1e9 +
-                Double(parallelDuration.components.attoseconds) / 1e9
+            let seqNanos =
+                Double(sequentialDuration.components.seconds) * 1e9 + Double(sequentialDuration.components.attoseconds)
+                / 1e9
+            let parNanos =
+                Double(parallelDuration.components.seconds) * 1e9 + Double(parallelDuration.components.attoseconds)
+                / 1e9
             let speedup = seqNanos / parNanos
             #expect(parallelResult.count == 10000, "Parallel decode should complete successfully")
-            _ = speedup // Suppress unused warning
+            _ = speedup  // Suppress unused warning
         }
     }
 
@@ -258,7 +261,7 @@ struct CSVDecoderParallelTests {
 
         let decoder = CSVDecoder()
         let memoryConfig = CSVDecoder.MemoryLimitConfiguration(
-            memoryBudget: 1024 * 1024, // 1MB
+            memoryBudget: 1024 * 1024,  // 1MB
             estimatedRowSize: 256,
             batchSize: 25,
         )
@@ -299,7 +302,7 @@ struct CSVDecoderParallelTests {
             batches.append(batch)
         }
 
-        #expect(batches.count == 4) // 100 records / 25 per batch
+        #expect(batches.count == 4)  // 100 records / 25 per batch
         #expect(batches.flatMap(\.self).count == 100)
     }
 
@@ -350,7 +353,7 @@ struct CSVDecoderParallelTests {
     func memoryLimitConfigDefaults() {
         let config = CSVDecoder.MemoryLimitConfiguration()
 
-        #expect(config.memoryBudget == 50 * 1024 * 1024) // 50MB
+        #expect(config.memoryBudget == 50 * 1024 * 1024)  // 50MB
         #expect(config.batchSize == 1000)
         #expect(config.highWaterMark == 0.8)
         #expect(config.lowWaterMark == 0.4)
@@ -362,7 +365,7 @@ struct CSVDecoderParallelTests {
         let config = CSVDecoder.ParallelConfiguration()
 
         #expect(config.parallelism == ProcessInfo.processInfo.activeProcessorCount)
-        #expect(config.chunkSize == 1024 * 1024) // 1MB
+        #expect(config.chunkSize == 1024 * 1024)  // 1MB
         #expect(config.preserveOrder == true)
     }
 }

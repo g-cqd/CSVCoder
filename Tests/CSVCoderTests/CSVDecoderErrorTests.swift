@@ -5,9 +5,10 @@
 //  Tests for error locations, error suggestions, and diagnostics.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Error Tests")
 struct CSVDecoderErrorTests {
@@ -22,11 +23,11 @@ struct CSVDecoderErrorTests {
     @Test("Error includes row and column location")
     func errorIncludesLocation() throws {
         let csv = """
-        name,age,score
-        Alice,30,95.5
-        Bob,invalid,88.0
-        Carol,40,77.5
-        """
+            name,age,score
+            Alice,30,95.5
+            Bob,invalid,88.0
+            Carol,40,77.5
+            """
 
         let decoder = CSVDecoder()
 
@@ -35,7 +36,7 @@ struct CSVDecoderErrorTests {
             Issue.record("Expected error to be thrown")
         } catch let error as CSVDecodingError {
             let location = error.location
-            #expect(location?.row == 3) // Row 3 (1-based, after header)
+            #expect(location?.row == 3)  // Row 3 (1-based, after header)
             #expect(location?.column == "age")
 
             let description = error.errorDescription ?? ""
@@ -52,9 +53,9 @@ struct CSVDecoderErrorTests {
         }
 
         let csv = """
-        name,otherField
-        Alice,value
-        """
+            name,otherField
+            Alice,value
+            """
 
         let decoder = CSVDecoder()
 
@@ -98,9 +99,9 @@ struct CSVDecoderErrorTests {
     @Test("Error suggests similar key for typo")
     func errorSuggestsSimilarKey() throws {
         let csv = """
-        naame,age,score
-        Alice,30,95.5
-        """
+            naame,age,score
+            Alice,30,95.5
+            """
 
         let decoder = CSVDecoder()
         do {
@@ -121,9 +122,9 @@ struct CSVDecoderErrorTests {
         }
 
         let csv = """
-        foo,bar
-        1,2
-        """
+            foo,bar
+            1,2
+            """
 
         let decoder = CSVDecoder()
         do {
@@ -132,8 +133,11 @@ struct CSVDecoderErrorTests {
         } catch let error as CSVDecodingError {
             let description = error.errorDescription ?? ""
             // Should list available columns when no close match exists
-            #expect(description.contains("Available columns") || description.contains("foo") || description
-                .contains("bar"))
+            #expect(
+                description.contains("Available columns") || description.contains("foo")
+                    || description
+                        .contains("bar")
+            )
         }
     }
 
@@ -144,9 +148,9 @@ struct CSVDecoderErrorTests {
         }
 
         let csv = """
-        price
-        $1,234.56
-        """
+            price
+            $1,234.56
+            """
 
         let decoder = CSVDecoder()
         do {
@@ -165,9 +169,9 @@ struct CSVDecoderErrorTests {
         }
 
         let csv = """
-        date
-        2024-12-25
-        """
+            date
+            2024-12-25
+            """
 
         // Default strategy is deferredToDate which will fail
         let decoder = CSVDecoder()
@@ -183,14 +187,15 @@ struct CSVDecoderErrorTests {
 
     @Test("Error suggestion for case mismatch")
     func errorSuggestionForCaseMismatch() throws {
+        // swift-format-ignore: AlwaysUseLowerCamelCase
         struct CaseSensitive: Codable {
-            let Name: String // uppercase N
+            let Name: String  // uppercase N - intentional for testing case mismatch
         }
 
         let csv = """
-        name
-        Alice
-        """
+            name
+            Alice
+            """
 
         let decoder = CSVDecoder()
         do {

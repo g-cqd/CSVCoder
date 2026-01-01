@@ -5,9 +5,10 @@
 //  Tests for date, number, and boolean decoding strategies.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Strategy Tests")
 struct CSVDecoderStrategyTests {
@@ -35,9 +36,9 @@ struct CSVDecoderStrategyTests {
     @Test("Decode dates with flexible strategy - ISO format")
     func decodeDatesFlexibleISO() throws {
         let csv = """
-        event,date
-        Meeting,2024-12-25
-        """
+            event,date
+            Meeting,2024-12-25
+            """
 
         let config = CSVDecoder.Configuration(dateDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -54,9 +55,9 @@ struct CSVDecoderStrategyTests {
     @Test("Decode dates with flexible strategy - European format")
     func decodeDatesFlexibleEuropean() throws {
         let csv = """
-        event,date
-        Conference,25/12/2024
-        """
+            event,date
+            Conference,25/12/2024
+            """
 
         let config = CSVDecoder.Configuration(dateDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -68,11 +69,11 @@ struct CSVDecoderStrategyTests {
     @Test("Decode dates with flexible strategy - multiple formats in same file")
     func decodeDatesFlexibleMixed() throws {
         let csv = """
-        event,date
-        ISO,2024-12-25
-        European,25.12.2024
-        USFormat,12/25/2024
-        """
+            event,date
+            ISO,2024-12-25
+            European,25.12.2024
+            USFormat,12/25/2024
+            """
 
         let config = CSVDecoder.Configuration(dateDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -84,9 +85,9 @@ struct CSVDecoderStrategyTests {
     @Test("Decode dates with flexibleWithHint strategy")
     func decodeDatesFlexibleWithHint() throws {
         let csv = """
-        event,date
-        Meeting,25-Dec-2024
-        """
+            event,date
+            Meeting,25-Dec-2024
+            """
 
         let config = CSVDecoder.Configuration(
             dateDecodingStrategy: .flexibleWithHint(preferred: "dd-MMM-yyyy"),
@@ -100,10 +101,10 @@ struct CSVDecoderStrategyTests {
     @Test("Decode numbers with flexible strategy - US format")
     func decodeNumbersFlexibleUS() throws {
         let csv = """
-        item,price
-        Widget,1234.56
-        Gadget,"1,234.56"
-        """
+            item,price
+            Widget,1234.56
+            Gadget,"1,234.56"
+            """
 
         let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -117,10 +118,10 @@ struct CSVDecoderStrategyTests {
     @Test("Decode numbers with flexible strategy - European format")
     func decodeNumbersFlexibleEuropean() throws {
         let csv = """
-        item,price
-        Widget,"1.234,56"
-        Simple,"45,50"
-        """
+            item,price
+            Widget,"1.234,56"
+            Simple,"45,50"
+            """
 
         let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -134,11 +135,11 @@ struct CSVDecoderStrategyTests {
     @Test("Decode numbers with flexible strategy - currency symbols")
     func decodeNumbersFlexibleCurrency() throws {
         let csv = """
-        item,price
-        US,$45.00
-        EU,45€
-        UK,£45.00
-        """
+            item,price
+            US,$45.00
+            EU,45€
+            UK,£45.00
+            """
 
         let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -153,9 +154,9 @@ struct CSVDecoderStrategyTests {
     @Test("Decode Decimal with flexible strategy preserves precision")
     func decodeDecimalFlexible() throws {
         let csv = """
-        item,price
-        Widget,"1.234,56"
-        """
+            item,price
+            Widget,"1.234,56"
+            """
 
         struct DecimalRecord: Codable {
             let item: String
@@ -173,14 +174,14 @@ struct CSVDecoderStrategyTests {
     @Test("Decode booleans with flexible strategy - standard values")
     func decodeBoolFlexibleStandard() throws {
         let csv = """
-        name,active
-        A,true
-        B,yes
-        C,1
-        D,false
-        E,no
-        F,0
-        """
+            name,active
+            A,true
+            B,yes
+            C,1
+            D,false
+            E,no
+            F,0
+            """
 
         let config = CSVDecoder.Configuration(boolDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -198,13 +199,13 @@ struct CSVDecoderStrategyTests {
     @Test("Decode booleans with flexible strategy - international values")
     func decodeBoolFlexibleInternational() throws {
         let csv = """
-        name,active
-        French,oui
-        German,ja
-        Spanish,si
-        FrenchNo,non
-        GermanNo,nein
-        """
+            name,active
+            French,oui
+            German,ja
+            Spanish,si
+            FrenchNo,non
+            GermanNo,nein
+            """
 
         let config = CSVDecoder.Configuration(boolDecodingStrategy: .flexible)
         let decoder = CSVDecoder(configuration: config)
@@ -221,10 +222,10 @@ struct CSVDecoderStrategyTests {
     @Test("Decode booleans with custom strategy")
     func decodeBoolCustom() throws {
         let csv = """
-        name,active
-        A,enabled
-        B,disabled
-        """
+            name,active
+            A,enabled
+            B,disabled
+            """
 
         let config = CSVDecoder.Configuration(
             boolDecodingStrategy: .custom(

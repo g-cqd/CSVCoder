@@ -5,9 +5,10 @@
 //  Tests for CSVEncoder encoding strategies.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVEncoder Strategy Tests")
 struct CSVEncoderStrategyTests {

@@ -1,7 +1,7 @@
 // swift-tools-version: 6.2
 
-import PackageDescription
 import CompilerPluginSupport
+import PackageDescription
 
 let package = Package(
     name: "CSVCoder",
@@ -10,7 +10,7 @@ let package = Package(
         .macOS(.v15),
         .watchOS(.v11),
         .tvOS(.v18),
-        .visionOS(.v2)
+        .visionOS(.v2),
     ],
     products: [
         .library(
@@ -21,7 +21,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
         .package(url: "https://github.com/google/swift-benchmark", from: "0.1.2"),
-        .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.1"..<"700.0.0")
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.1" ..< "700.0.0"),
     ],
     targets: [
         // Main library
@@ -37,20 +37,26 @@ let package = Package(
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
-                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
             ]
+        ),
+
+        // Shared test fixtures
+        .target(
+            name: "CSVCoderTestFixtures",
+            dependencies: []
         ),
 
         // Tests
         .testTarget(
             name: "CSVCoderTests",
-            dependencies: ["CSVCoder"]
+            dependencies: ["CSVCoder", "CSVCoderTestFixtures"]
         ),
         .testTarget(
             name: "CSVCoderMacrosTests",
             dependencies: [
                 "CSVCoderMacros",
-                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax")
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
             ]
         ),
 
@@ -59,8 +65,9 @@ let package = Package(
             name: "CSVCoderBenchmarks",
             dependencies: [
                 "CSVCoder",
-                .product(name: "Benchmark", package: "swift-benchmark")
+                "CSVCoderTestFixtures",
+                .product(name: "Benchmark", package: "swift-benchmark"),
             ]
-        )
+        ),
     ]
 )

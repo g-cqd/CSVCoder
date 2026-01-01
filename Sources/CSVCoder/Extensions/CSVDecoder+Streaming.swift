@@ -104,21 +104,10 @@ extension CSVDecoder {
         continuation: AsyncThrowingStream<T, Error>.Continuation,
     ) throws {
         reader.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else {
+            guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else {
                 continuation.finish()
                 return
             }
-
-            // Handle UTF-8 BOM
-            let rawBytes = UnsafeBufferPointer(
-                start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                count: buffer.count,
-            )
-            let startOffset = CSVUtilities.bomOffset(in: rawBytes)
-
-            let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
-            let adjustedCount = buffer.count - startOffset
-            let bytes = UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
 
             let parser = CSVParser(buffer: bytes, delimiter: delimiter)
@@ -133,31 +122,37 @@ extension CSVDecoder {
             while let rowView = iterator.next() {
                 // Check for unterminated quotes (always an error)
                 if rowView.hasUnterminatedQuote {
-                    continuation.finish(throwing: CSVDecodingError.parsingError(
-                        "Unterminated quoted field",
-                        line: rowIndex + 1,
-                        column: nil,
-                    ))
+                    continuation.finish(
+                        throwing: CSVDecodingError.parsingError(
+                            "Unterminated quoted field",
+                            line: rowIndex + 1,
+                            column: nil,
+                        )
+                    )
                     return
                 }
 
                 // Strict mode: reject quotes in unquoted fields
                 if isStrict, rowView.hasQuoteInUnquotedField {
-                    continuation.finish(throwing: CSVDecodingError.parsingError(
-                        "Quote character in unquoted field (RFC 4180 violation)",
-                        line: rowIndex + 1,
-                        column: nil,
-                    ))
+                    continuation.finish(
+                        throwing: CSVDecodingError.parsingError(
+                            "Quote character in unquoted field (RFC 4180 violation)",
+                            line: rowIndex + 1,
+                            column: nil,
+                        )
+                    )
                     return
                 }
 
                 // Strict mode: validate field count
                 if isStrict, let expected = expectedFieldCount, rowView.count != expected {
-                    continuation.finish(throwing: CSVDecodingError.parsingError(
-                        "Expected \(expected) fields but found \(rowView.count)",
-                        line: rowIndex + 1,
-                        column: nil,
-                    ))
+                    continuation.finish(
+                        throwing: CSVDecodingError.parsingError(
+                            "Expected \(expected) fields but found \(rowView.count)",
+                            line: rowIndex + 1,
+                            column: nil,
+                        )
+                    )
                     return
                 }
 

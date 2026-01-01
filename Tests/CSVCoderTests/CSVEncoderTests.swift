@@ -5,9 +5,10 @@
 //  Tests for CSVEncoder.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVEncoder Tests")
 struct CSVEncoderTests {
@@ -127,7 +128,7 @@ struct CSVEncoderTests {
 
     @Test("Encode dates with custom format")
     func encodeDatesCustomFormat() throws {
-        let date = Date(timeIntervalSince1970: 1_735_084_800) // 2024-12-25
+        let date = Date(timeIntervalSince1970: 1_735_084_800)  // 2024-12-25
         let records = [DateRecord(event: "Christmas", date: date)]
 
         let config = CSVEncoder.Configuration(dateEncodingStrategy: .formatted("dd/MM/yyyy"))
@@ -245,7 +246,7 @@ struct CSVEncoderTests {
         let encoder = CSVEncoder()
         let row = try encoder.encodeRow(record)
 
-        #expect(!row.contains("name")) // No header
+        #expect(!row.contains("name"))  // No header
         #expect(row.contains("Single"))
         #expect(row.contains("30"))
     }
@@ -281,7 +282,7 @@ struct CSVEncoderTests {
     @Test("Roundtrip with special characters")
     func roundtripWithSpecialCharacters() throws {
         let original = [
-            QuotedRecord(name: "Special", description: "Has, commas and \"quotes\""),
+            QuotedRecord(name: "Special", description: "Has, commas and \"quotes\"")
         ]
 
         let encoder = CSVEncoder()
@@ -296,7 +297,7 @@ struct CSVEncoderTests {
     @Test("Roundtrip Decimal preserves precision")
     func roundtripDecimalPreservesPrecision() throws {
         let original = [
-            DecimalRecord(price: Decimal(string: "123.456789")!, quantity: 1),
+            DecimalRecord(price: Decimal(string: "123.456789")!, quantity: 1)
         ]
 
         let encoder = CSVEncoder()
@@ -334,7 +335,7 @@ struct CSVEncoderTests {
                 uint64: 64,
                 float: 3.14,
                 double: 2.718281828,
-            ),
+            )
         ]
 
         let encoder = CSVEncoder()

@@ -33,24 +33,24 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct Person: Codable {
-                    let name: String
-                    let age: Int
+                    struct Person: Codable {
+                        let name: String
+                        let age: Int
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case name
-                        case age
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name
+                            case age
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension Person: CSVIndexedDecodable {
+                    }
 
-                extension Person: CSVIndexedDecodable {
-                }
-
-                extension Person: CSVIndexedEncodable {
-                }
-                """,
+                    extension Person: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -67,26 +67,26 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct User: Codable {
-                    let id: Int
-                    let name: String
-                    let email: String?
+                    struct User: Codable {
+                        let id: Int
+                        let name: String
+                        let email: String?
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case id
-                        case name
-                        case email
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case id
+                            case name
+                            case email
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension User: CSVIndexedDecodable {
+                    }
 
-                extension User: CSVIndexedDecodable {
-                }
-
-                extension User: CSVIndexedEncodable {
-                }
-                """,
+                    extension User: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -109,28 +109,28 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct Product: Codable {
-                    let id: Int
+                    struct Product: Codable {
+                        let id: Int
 
-                    let name: String
+                        let name: String
 
-                    let price: Double
+                        let price: Double
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case id
-                        case name = "product_name"
-                        case price = "unit_price"
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case id
+                            case name = "product_name"
+                            case price = "unit_price"
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension Product: CSVIndexedDecodable {
+                    }
 
-                extension Product: CSVIndexedDecodable {
-                }
-
-                extension Product: CSVIndexedEncodable {
-                }
-                """,
+                    extension Product: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -149,26 +149,26 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct Record: Codable {
-                    let third: Double
-                    let first: String
-                    let second: Int
+                    struct Record: Codable {
+                        let third: Double
+                        let first: String
+                        let second: Int
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case third
-                        case first
-                        case second
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case third
+                            case first
+                            case second
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension Record: CSVIndexedDecodable {
+                    }
 
-                extension Record: CSVIndexedDecodable {
-                }
-
-                extension Record: CSVIndexedEncodable {
-                }
-                """,
+                    extension Record: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -185,12 +185,12 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                class NotAStruct: Codable {
-                    let value: Int
-                }
-                """,
+                    class NotAStruct: Codable {
+                        let value: Int
+                    }
+                    """,
                 diagnostics: [
-                    DiagnosticSpec(message: "@CSVIndexed can only be applied to structs", line: 1, column: 1),
+                    DiagnosticSpec(message: "@CSVIndexed can only be applied to structs", line: 1, column: 1)
                 ],
                 macros: testMacros,
             )
@@ -212,26 +212,26 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct WithComputed: Codable {
-                    let stored: Int
+                    struct WithComputed: Codable {
+                        let stored: Int
 
-                    var computed: String {
-                        "value"
+                        var computed: String {
+                            "value"
+                        }
+
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case stored
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case stored
+                    extension WithComputed: CSVIndexedDecodable {
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
-
-                extension WithComputed: CSVIndexedDecodable {
-                }
-
-                extension WithComputed: CSVIndexedEncodable {
-                }
-                """,
+                    extension WithComputed: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -248,10 +248,10 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct Standalone {
-                    let field: String
-                }
-                """,
+                    struct Standalone {
+                        let field: String
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -272,30 +272,30 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct LargeRecord: Codable {
-                    let a: String
-                    let b: Int
-                    let c: Double
-                    let d: Bool
-                    let e: Date
+                    struct LargeRecord: Codable {
+                        let a: String
+                        let b: Int
+                        let c: Double
+                        let d: Bool
+                        let e: Date
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case a
-                        case b
-                        case c
-                        case d
-                        case e
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case a
+                            case b
+                            case c
+                            case d
+                            case e
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension LargeRecord: CSVIndexedDecodable {
+                    }
 
-                extension LargeRecord: CSVIndexedDecodable {
-                }
-
-                extension LargeRecord: CSVIndexedEncodable {
-                }
-                """,
+                    extension LargeRecord: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -313,24 +313,24 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                public struct PublicRecord: Codable {
-                    public let name: String
-                    public let value: Int
+                    public struct PublicRecord: Codable {
+                        public let name: String
+                        public let value: Int
 
-                    public enum CodingKeys: String, CodingKey, CaseIterable {
-                        case name
-                        case value
+                        public enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name
+                            case value
+                        }
+
+                        public typealias CSVCodingKeys = CodingKeys
                     }
 
-                    public typealias CSVCodingKeys = CodingKeys
-                }
+                    extension PublicRecord: CSVIndexedDecodable {
+                    }
 
-                extension PublicRecord: CSVIndexedDecodable {
-                }
-
-                extension PublicRecord: CSVIndexedEncodable {
-                }
-                """,
+                    extension PublicRecord: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -349,25 +349,25 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                public struct PublicProduct: Codable, Sendable {
-                    public let name: String
+                    public struct PublicProduct: Codable, Sendable {
+                        public let name: String
 
-                    public let price: Double
+                        public let price: Double
 
-                    public enum CodingKeys: String, CodingKey, CaseIterable {
-                        case name = "Product Name"
-                        case price = "Unit Price"
+                        public enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name = "Product Name"
+                            case price = "Unit Price"
+                        }
+
+                        public typealias CSVCodingKeys = CodingKeys
                     }
 
-                    public typealias CSVCodingKeys = CodingKeys
-                }
+                    extension PublicProduct: CSVIndexedDecodable {
+                    }
 
-                extension PublicProduct: CSVIndexedDecodable {
-                }
-
-                extension PublicProduct: CSVIndexedEncodable {
-                }
-                """,
+                    extension PublicProduct: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -382,22 +382,22 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                internal struct InternalRecord: Codable {
-                    let name: String
+                    internal struct InternalRecord: Codable {
+                        let name: String
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case name
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension InternalRecord: CSVIndexedDecodable {
+                    }
 
-                extension InternalRecord: CSVIndexedDecodable {
-                }
-
-                extension InternalRecord: CSVIndexedEncodable {
-                }
-                """,
+                    extension InternalRecord: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -412,22 +412,22 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                fileprivate struct FileprivateRecord: Codable {
-                    let name: String
+                    fileprivate struct FileprivateRecord: Codable {
+                        let name: String
 
-                    fileprivate enum CodingKeys: String, CodingKey, CaseIterable {
-                        case name
+                        fileprivate enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name
+                        }
+
+                        fileprivate typealias CSVCodingKeys = CodingKeys
                     }
 
-                    fileprivate typealias CSVCodingKeys = CodingKeys
-                }
+                    extension FileprivateRecord: CSVIndexedDecodable {
+                    }
 
-                extension FileprivateRecord: CSVIndexedDecodable {
-                }
-
-                extension FileprivateRecord: CSVIndexedEncodable {
-                }
-                """,
+                    extension FileprivateRecord: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -442,22 +442,22 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                private struct PrivateRecord: Codable {
-                    let name: String
+                    private struct PrivateRecord: Codable {
+                        let name: String
 
-                    private enum CodingKeys: String, CodingKey, CaseIterable {
-                        case name
+                        private enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name
+                        }
+
+                        private typealias CSVCodingKeys = CodingKeys
                     }
 
-                    private typealias CSVCodingKeys = CodingKeys
-                }
+                    extension PrivateRecord: CSVIndexedDecodable {
+                    }
 
-                extension PrivateRecord: CSVIndexedDecodable {
-                }
-
-                extension PrivateRecord: CSVIndexedEncodable {
-                }
-                """,
+                    extension PrivateRecord: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }
@@ -474,22 +474,22 @@ import Testing
                 }
                 """,
                 expandedSource: """
-                struct DefaultRecord: Codable {
-                    let value: Int
+                    struct DefaultRecord: Codable {
+                        let value: Int
 
-                    enum CodingKeys: String, CodingKey, CaseIterable {
-                        case value
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case value
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
                     }
 
-                    typealias CSVCodingKeys = CodingKeys
-                }
+                    extension DefaultRecord: CSVIndexedDecodable {
+                    }
 
-                extension DefaultRecord: CSVIndexedDecodable {
-                }
-
-                extension DefaultRecord: CSVIndexedEncodable {
-                }
-                """,
+                    extension DefaultRecord: CSVIndexedEncodable {
+                    }
+                    """,
                 macros: testMacros,
             )
         }

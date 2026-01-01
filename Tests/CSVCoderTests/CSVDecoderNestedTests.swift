@@ -5,9 +5,10 @@
 //  Tests for nested type decoding strategies (flatten, JSON, codable).
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Nested Tests")
 struct CSVDecoderNestedTests {
@@ -28,10 +29,10 @@ struct CSVDecoderNestedTests {
     @Test("Nested decoding with flatten strategy")
     func nestedDecodingFlatten() throws {
         let csv = """
-        name,age,address_street,address_city,address_zipCode
-        Alice,30,123 Main St,Springfield,12345
-        Bob,25,456 Oak Ave,Shelbyville,67890
-        """
+            name,age,address_street,address_city,address_zipCode
+            Alice,30,123 Main St,Springfield,12345
+            Bob,25,456 Oak Ave,Shelbyville,67890
+            """
 
         let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .flatten(separator: "_"))
         let decoder = CSVDecoder(configuration: config)
@@ -49,9 +50,9 @@ struct CSVDecoderNestedTests {
     @Test("Nested decoding with custom separator")
     func nestedDecodingCustomSeparator() throws {
         let csv = """
-        name,age,address.street,address.city,address.zipCode
-        Grace,45,999 Dot St,Dotville,55555
-        """
+            name,age,address.street,address.city,address.zipCode
+            Grace,45,999 Dot St,Dotville,55555
+            """
 
         let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .flatten(separator: "."))
         let decoder = CSVDecoder(configuration: config)
@@ -76,9 +77,9 @@ struct CSVDecoderNestedTests {
         }
 
         let csv = """
-        name,address_street,address_city,address_zipCode,contact_email,contact_phone
-        Frank,100 Work St,Office City,44444,frank@example.com,555-1234
-        """
+            name,address_street,address_city,address_zipCode,contact_email,contact_phone
+            Frank,100 Work St,Office City,44444,frank@example.com,555-1234
+            """
 
         let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .flatten(separator: "_"))
         let decoder = CSVDecoder(configuration: config)
@@ -94,7 +95,8 @@ struct CSVDecoderNestedTests {
     @Test("Nested decoding with special characters in values")
     func nestedDecodingSpecialCharacters() throws {
         // Build CSV with embedded newline
-        let csv = "name,age,address_street,address_city,address_zipCode\nHenry,50,\"123 \"\"Quoted\"\" St, Apt 5\",\"New\nYork\",66666"
+        let csv =
+            "name,age,address_street,address_city,address_zipCode\nHenry,50,\"123 \"\"Quoted\"\" St, Apt 5\",\"New\nYork\",66666"
 
         let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .flatten(separator: "_"))
         let decoder = CSVDecoder(configuration: config)
@@ -145,9 +147,9 @@ struct CSVDecoderNestedTests {
     @Test("Nested decoding error strategy throws for nested types")
     func nestedDecodingErrorStrategy() throws {
         let csv = """
-        name,age,address_street,address_city,address_zipCode
-        Eve,28,555 Maple Dr,Riverdale,33333
-        """
+            name,age,address_street,address_city,address_zipCode
+            Eve,28,555 Maple Dr,Riverdale,33333
+            """
 
         let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .error)
         let decoder = CSVDecoder(configuration: config)

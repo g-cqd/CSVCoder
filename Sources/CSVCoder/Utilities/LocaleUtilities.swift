@@ -86,7 +86,7 @@ enum LocaleUtilities {
             if lowercased.hasSuffix(" " + suffix.lowercased()) {
                 let endIndex = cleaned.index(cleaned.endIndex, offsetBy: -(suffix.count + 1))
                 cleaned = String(cleaned[..<endIndex])
-                break // Only strip one suffix
+                break  // Only strip one suffix
             } else if lowercased.hasSuffix(suffix.lowercased()), suffix.count > 1 {
                 // For suffixes without space, only match multi-char ones to avoid false positives
                 let endIndex = cleaned.index(cleaned.endIndex, offsetBy: -suffix.count)
@@ -177,16 +177,17 @@ enum LocaleUtilities {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let dateStyle: Date.FormatStyle.DateStyle = switch style {
-        case .numeric:
-            .numeric
+        let dateStyle: Date.FormatStyle.DateStyle =
+            switch style {
+            case .numeric:
+                .numeric
 
-        case .abbreviated:
-            .abbreviated
+            case .abbreviated:
+                .abbreviated
 
-        case .long:
-            .long
-        }
+            case .long:
+                .long
+            }
 
         // Try strict parsing first
         do {
@@ -212,41 +213,13 @@ enum LocaleUtilities {
     // MARK: - Fallback Parsing (Pre-iOS 15 compatible)
 
     /// Normalizes a number string by detecting and converting decimal/grouping separators.
+    /// Delegates to CSVValueParser for the actual normalization logic.
     private static func parseNormalizedDouble(_ value: String) -> Double? {
-        var cleaned = value
-
-        let hasComma = cleaned.contains(",")
-        let hasDot = cleaned.contains(".")
-
-        if hasComma, hasDot {
-            if let lastComma = cleaned.lastIndex(of: ","),
-               let lastDot = cleaned.lastIndex(of: ".") {
-                if lastComma > lastDot {
-                    // European: 1.234,56
-                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
-                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-                } else {
-                    // US: 1,234.56
-                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
-                }
-            }
-        } else if hasComma, !hasDot {
-            let parts = cleaned.split(separator: ",")
-            if parts.count == 2, parts[1].count <= 2 {
-                // Likely decimal: 45,50
-                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-            } else {
-                // Likely thousands: 1,234,567
-                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
-            }
-        }
-
-        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
-        return Double(cleaned)
+        CSVValueParser.parseFlexibleDouble(value)
     }
 
     private static func parseNormalizedDecimal(_ value: String) -> Decimal? {
-        guard let double = parseNormalizedDouble(value) else { return nil }
-        return Decimal(double)
+        guard let normalized = CSVValueParser.normalizeNumberString(value) else { return nil }
+        return Decimal(string: normalized)
     }
 }

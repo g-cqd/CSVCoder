@@ -13,13 +13,17 @@ import Foundation
 struct CSVRowDecoder: Decoder {
     // MARK: Lifecycle
 
-    init(row: [String: String], configuration: CSVDecoder.Configuration, codingPath: [CodingKey],
-         rowIndex: Int? = nil) {
+    init(
+        row: [String: String],
+        configuration: CSVDecoder.Configuration,
+        codingPath: [CodingKey],
+        rowIndex: Int? = nil
+    ) {
         source = .dictionary(row)
         self.configuration = configuration
         self.codingPath = codingPath
         self.rowIndex = rowIndex
-        encoding = .utf8 // Dictionary source uses pre-decoded strings
+        encoding = .utf8  // Dictionary source uses pre-decoded strings
     }
 
     init(
@@ -54,13 +58,15 @@ struct CSVRowDecoder: Decoder {
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        KeyedDecodingContainer(CSVKeyedDecodingContainer(
-            source: source,
-            configuration: configuration,
-            codingPath: codingPath,
-            rowIndex: rowIndex,
-            encoding: encoding,
-        ))
+        KeyedDecodingContainer(
+            CSVKeyedDecodingContainer(
+                source: source,
+                configuration: configuration,
+                codingPath: codingPath,
+                rowIndex: rowIndex,
+                encoding: encoding,
+            )
+        )
     }
 
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
@@ -106,20 +112,20 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     var allKeys: [Key] {
         switch source {
-        case let .dictionary(row):
+        case .dictionary(let row):
             row.keys.compactMap { Key(stringValue: $0) }
 
-        case let .view(_, headerMap):
+        case .view(_, let headerMap):
             headerMap.keys.compactMap { Key(stringValue: $0) }
         }
     }
 
     func contains(_ key: Key) -> Bool {
         switch source {
-        case let .dictionary(row):
+        case .dictionary(let row):
             return row[key.stringValue] != nil
 
-        case let .view(view, headerMap):
+        case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue] else { return false }
             return index < view.count
         }
@@ -128,11 +134,11 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     func decodeNil(forKey key: Key) throws -> Bool {
         let value: String?
         switch source {
-        case let .dictionary(row):
+        case .dictionary(let row):
             guard let v = row[key.stringValue] else { return true }
             value = v
 
-        case let .view(view, headerMap):
+        case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue] else { return true }
             if index >= view.count { return true }
             guard let v = view.string(at: index) else { return true }
@@ -150,39 +156,25 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             let lowered = value.lowercased()
             return value.isEmpty || lowered == "null"
 
-        case let .custom(nilValues):
+        case .custom(let nilValues):
             return value.isEmpty || nilValues.contains(value)
         }
     }
 
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        let value = try getValue(for: key).lowercased()
+        let value = try getValue(for: key)
         let location = makeLocation(for: key)
 
-        switch configuration.boolDecodingStrategy {
-        case .standard:
-            switch value {
-            case "1",
-                 "true",
-                 "yes": return true
-            case "0",
-                 "false",
-                 "no": return false
-            default: throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
-            }
-
-        case .flexible:
-            if flexibleTrueValues.contains(value) { return true }
-            if flexibleFalseValues.contains(value) { return false }
-            // Try numeric: any non-zero is true
-            if let num = Int(value) { return num != 0 }
-            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
-
-        case let .custom(trueValues, falseValues):
-            if trueValues.contains(value) { return true }
-            if falseValues.contains(value) { return false }
-            throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
+        if let result = CSVValueParser.parseBoolean(value, strategy: configuration.boolDecodingStrategy) {
+            return result
         }
+
+        // For flexible strategy, also try numeric: any non-zero is true
+        if case .flexible = configuration.boolDecodingStrategy {
+            if let num = Int(value) { return num != 0 }
+        }
+
+        throw CSVDecodingError.typeMismatch(expected: "Bool", actual: value, location: location)
     }
 
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
@@ -191,7 +183,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
         let value = try getValue(for: key)
-        guard let result = parseDouble(value) else {
+        guard let result = CSVValueParser.parseDouble(value, strategy: configuration.numberDecodingStrategy) else {
             throw CSVDecodingError.typeMismatch(expected: "Double", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -199,7 +191,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Float.Type, forKey key: Key) throws -> Float {
         let value = try getValue(for: key)
-        guard let result = parseDouble(value) else {
+        guard let result = CSVValueParser.parseDouble(value, strategy: configuration.numberDecodingStrategy) else {
             throw CSVDecodingError.typeMismatch(expected: "Float", actual: value, location: makeLocation(for: key))
         }
         return Float(result)
@@ -287,30 +279,32 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
         // Check if key exists - if not, check for nested type strategies
-        let keyExists: Bool = switch source {
-        case let .dictionary(row):
-            row[key.stringValue] != nil
+        let keyExists: Bool =
+            switch source {
+            case .dictionary(let row):
+                row[key.stringValue] != nil
 
-        case let .view(view, headerMap):
-            if let index = headerMap[key.stringValue] {
-                index < view.count
-            } else {
-                false
+            case .view(let view, let headerMap):
+                if let index = headerMap[key.stringValue] {
+                    index < view.count
+                } else {
+                    false
+                }
             }
-        }
 
         // Handle nested types based on strategy
         switch configuration.nestedTypeDecodingStrategy {
-        case let .flatten(separator):
+        case .flatten(let separator):
             // Check if this is a nested type by looking for prefixed keys
             let prefix = key.stringValue + separator
-            let hasPrefixedKeys: Bool = switch source {
-            case let .dictionary(row):
-                row.keys.contains { $0.hasPrefix(prefix) }
+            let hasPrefixedKeys: Bool =
+                switch source {
+                case .dictionary(let row):
+                    row.keys.contains { $0.hasPrefix(prefix) }
 
-            case let .view(_, headerMap):
-                headerMap.keys.contains { $0.hasPrefix(prefix) }
-            }
+                case .view(_, let headerMap):
+                    headerMap.keys.contains { $0.hasPrefix(prefix) }
+                }
 
             if hasPrefixedKeys, !keyExists {
                 // Decode as nested type with prefixed keys
@@ -325,7 +319,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
 
         case .codable,
-             .json:
+            .json:
             // For JSON/codable, the value should exist and be a JSON string
             if keyExists {
                 let value = try getValue(for: key)
@@ -348,16 +342,17 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
         let location = makeLocation(for: key)
 
         // Handle Date specially
-        if type == Date.self {
-            return try decodeDate(from: value, key: key) as! T
+        if type == Date.self, let result = try decodeDate(from: value, key: key) as? T {
+            return result
         }
 
         // Handle Decimal specially
         if type == Decimal.self {
-            guard let decimal = parseDecimal(value) else {
+            guard let decimal = CSVValueParser.parseDecimal(value, strategy: configuration.numberDecodingStrategy)
+            else {
                 throw CSVDecodingError.typeMismatch(expected: "Decimal", actual: value, location: location)
             }
-            return decimal as! T
+            if let result = decimal as? T { return result }
         }
 
         // Handle UUID specially
@@ -365,7 +360,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             guard let uuid = UUID(uuidString: value) else {
                 throw CSVDecodingError.typeMismatch(expected: "UUID", actual: value, location: location)
             }
-            return uuid as! T
+            if let result = uuid as? T { return result }
         }
 
         // Handle URL specially
@@ -373,13 +368,13 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             guard let url = URL(string: value) else {
                 throw CSVDecodingError.typeMismatch(expected: "URL", actual: value, location: location)
             }
-            return url as! T
+            if let result = url as? T { return result }
         }
 
         // Handle Optional types
         if let optionalType = T.self as? OptionalDecodable.Type {
-            if value.isEmpty {
-                return optionalType.nilValue as! T
+            if value.isEmpty, let result = optionalType.nilValue as? T {
+                return result
             }
         }
 
@@ -392,16 +387,19 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
         return try T(from: singleValueDecoder)
     }
 
-    func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type,
-                                               forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> {
+    func nestedContainer<NestedKey: CodingKey>(
+        keyedBy type: NestedKey.Type,
+        forKey key: Key
+    ) throws -> KeyedDecodingContainer<NestedKey> {
         switch configuration.nestedTypeDecodingStrategy {
         case .error:
-            throw CSVDecodingError
+            throw
+                CSVDecodingError
                 .unsupportedType(
                     "Nested containers are not supported in CSV. Configure nestedTypeDecodingStrategy to enable.",
                 )
 
-        case let .flatten(separator):
+        case .flatten(let separator):
             // Create a container that reads keys with prefix "key<separator>"
             let prefix = key.stringValue + separator
             let nestedSource = createPrefixedSource(prefix: prefix)
@@ -470,66 +468,12 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     // MARK: Private
 
-    // MARK: - Flexible Boolean Values (i18n)
-
-    private var flexibleTrueValues: Set<String> {
-        ["true", "yes", "1", "y", "t", "on", "full", "fulltank",
-         "oui", "si", "ja", "да", "是", "満", "voll", "真", "sí"]
-    }
-
-    private var flexibleFalseValues: Set<String> {
-        ["false", "no", "0", "n", "f", "off", "partial", "partialtank",
-         "non", "nein", "нет", "否", "部分", "假"]
-    }
-
-    // MARK: - Flexible Date Parsing
-
-    /// Common date formats to try, in order of prevalence.
-    private var dateFormats: [String] { [
-        // ISO 8601
-        "yyyy-MM-dd",
-        "yyyy-MM-dd'T'HH:mm:ss",
-        "yyyy-MM-dd'T'HH:mm:ssZ",
-        "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-        "yyyy-MM-dd HH:mm:ss",
-        "yyyy-MM-dd HH:mm",
-
-        // European (day first)
-        "dd/MM/yyyy",
-        "dd-MM-yyyy",
-        "dd.MM.yyyy",
-        "dd/MM/yy",
-        "dd-MM-yy",
-        "dd.MM.yy",
-
-        // US (month first)
-        "MM/dd/yyyy",
-        "MM-dd-yyyy",
-        "MM/dd/yy",
-        "MM-dd-yy",
-
-        // With time
-        "dd/MM/yyyy HH:mm",
-        "dd/MM/yyyy HH:mm:ss",
-        "MM/dd/yyyy HH:mm",
-        "MM/dd/yyyy HH:mm:ss",
-
-        // Compact
-        "yyyyMMdd",
-        "ddMMyyyy",
-
-        // Verbose
-        "MMMM d, yyyy",
-        "d MMMM yyyy",
-        "MMM d, yyyy",
-        "d MMM yyyy",
-    ] }
-
     private func makeLocation(for key: Key, includeAvailableKeys: Bool = false) -> CSVLocation {
-        let keys: [String]? = switch source {
-        case let .dictionary(row): includeAvailableKeys ? Array(row.keys) : nil
-        case let .view(_, headerMap): includeAvailableKeys ? Array(headerMap.keys) : nil
-        }
+        let keys: [String]? =
+            switch source {
+            case .dictionary(let row): includeAvailableKeys ? Array(row.keys) : nil
+            case .view(_, let headerMap): includeAvailableKeys ? Array(headerMap.keys) : nil
+            }
 
         return CSVLocation(
             row: rowIndex,
@@ -542,7 +486,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     private func getValue(for key: Key) throws -> String {
         let rawValue: String
         switch source {
-        case let .dictionary(row):
+        case .dictionary(let row):
             guard let value = row[key.stringValue] else {
                 throw CSVDecodingError.keyNotFound(
                     key.stringValue,
@@ -551,7 +495,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
             rawValue = value
 
-        case let .view(view, headerMap):
+        case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue], index < view.count else {
                 throw CSVDecodingError.keyNotFound(
                     key.stringValue,
@@ -575,156 +519,13 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     /// Returns the string value for a key, or nil if not present.
     private func stringValue(forKey key: Key) -> String? {
         switch source {
-        case let .dictionary(row):
+        case .dictionary(let row):
             return row[key.stringValue]
 
-        case let .view(view, headerMap):
+        case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue], index < view.count else { return nil }
             return view.string(at: index)
         }
-    }
-
-    // MARK: - Flexible Number Parsing
-
-    private func parseDouble(_ value: String) -> Double? {
-        switch configuration.numberDecodingStrategy {
-        case .standard:
-            return Double(value)
-
-        case .flexible:
-            return parseFlexibleDouble(value)
-
-        case let .locale(locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            return formatter.number(from: value)?.doubleValue
-
-        case let .parseStrategy(locale):
-            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                return LocaleUtilities.parseDouble(value, locale: locale)
-            } else {
-                return parseFlexibleDouble(value)
-            }
-
-        case let .currency(_, locale):
-            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                return LocaleUtilities.parseDecimal(value, locale: locale)
-                    .flatMap { Double(truncating: $0 as NSDecimalNumber) }
-            } else {
-                return parseFlexibleDouble(value)
-            }
-        }
-    }
-
-    /// Parses a Decimal value using the configured strategy.
-    private func parseDecimal(_ value: String) -> Decimal? {
-        switch configuration.numberDecodingStrategy {
-        case .standard:
-            return Decimal(string: value)
-
-        case .flexible:
-            // Normalize the string first, then parse as Decimal
-            guard let cleaned = normalizeNumberString(value) else { return nil }
-            return Decimal(string: cleaned)
-
-        case let .locale(locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            return formatter.number(from: value)?.decimalValue
-
-        case let .parseStrategy(locale):
-            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                return LocaleUtilities.parseDecimal(value, locale: locale)
-            } else {
-                guard let cleaned = normalizeNumberString(value) else { return nil }
-                return Decimal(string: cleaned)
-            }
-
-        case let .currency(code, locale):
-            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                return LocaleUtilities.parseCurrency(value, code: code, locale: locale)
-            } else {
-                guard let cleaned = normalizeNumberString(value) else { return nil }
-                return Decimal(string: cleaned)
-            }
-        }
-    }
-
-    /// Normalizes a number string by removing currency and fixing decimal separators.
-    private func normalizeNumberString(_ value: String) -> String? {
-        // Use LocaleUtilities to strip currency symbols and units
-        var cleaned = LocaleUtilities.stripCurrencyAndUnits(value)
-        guard !cleaned.isEmpty else { return nil }
-
-        let hasComma = cleaned.contains(",")
-        let hasDot = cleaned.contains(".")
-
-        if hasComma, hasDot {
-            if let lastComma = cleaned.lastIndex(of: ","),
-               let lastDot = cleaned.lastIndex(of: ".") {
-                if lastComma > lastDot {
-                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
-                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-                } else {
-                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
-                }
-            }
-        } else if hasComma, !hasDot {
-            let parts = cleaned.split(separator: ",")
-            if parts.count == 2, parts[1].count <= 2 {
-                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-            } else {
-                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
-            }
-        }
-
-        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
-        return cleaned.isEmpty ? nil : cleaned
-    }
-
-    /// Parses a numeric value handling various decimal separators and currency symbols.
-    /// Supports both US (1,234.56) and EU (1.234,56) formats.
-    private func parseFlexibleDouble(_ value: String) -> Double? {
-        // Use LocaleUtilities to strip currency symbols and units
-        var cleaned = LocaleUtilities.stripCurrencyAndUnits(value)
-        guard !cleaned.isEmpty else { return nil }
-
-        // Detect format: if both . and , exist, the last one is decimal separator
-        let hasComma = cleaned.contains(",")
-        let hasDot = cleaned.contains(".")
-
-        if hasComma, hasDot {
-            // Both exist: last occurrence is decimal separator
-            if let lastComma = cleaned.lastIndex(of: ","),
-               let lastDot = cleaned.lastIndex(of: ".") {
-                if lastComma > lastDot {
-                    // Comma is decimal (European: 1.234,56)
-                    cleaned = cleaned.replacingOccurrences(of: ".", with: "")
-                    cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-                } else {
-                    // Dot is decimal (US: 1,234.56)
-                    cleaned = cleaned.replacingOccurrences(of: ",", with: "")
-                }
-            }
-        } else if hasComma, !hasDot {
-            // Only comma: check if it's thousands or decimal
-            let parts = cleaned.split(separator: ",")
-            if parts.count == 2, parts[1].count <= 2 {
-                // Likely decimal (45,50 = 45.50)
-                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-            } else {
-                // Likely thousands separator (1,234 = 1234)
-                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
-            }
-        }
-        // If only dot, it's already in the right format
-
-        // Remove any remaining non-numeric characters except . and -
-        cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
-
-        return Double(cleaned)
     }
 
     private func decodeDate(from value: String, key: some CodingKey) throws -> Date {
@@ -757,7 +558,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
             return date
 
-        case let .formatted(format):
+        case .formatted(let format):
             let formatter = DateFormatter()
             formatter.dateFormat = format
             formatter.locale = Locale.autoupdatingCurrent
@@ -771,11 +572,11 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
             return date
 
-        case let .custom(closure):
+        case .custom(let closure):
             return try closure(value)
 
         case .flexible:
-            guard let date = parseFlexibleDate(value, hint: nil) else {
+            guard let date = CSVValueParser.parseFlexibleDate(value, hint: nil) else {
                 throw CSVDecodingError.typeMismatch(
                     expected: "Date (no matching format found)",
                     actual: value,
@@ -784,8 +585,8 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
             return date
 
-        case let .flexibleWithHint(preferred):
-            guard let date = parseFlexibleDate(value, hint: preferred) else {
+        case .flexibleWithHint(let preferred):
+            guard let date = CSVValueParser.parseFlexibleDate(value, hint: preferred) else {
                 throw CSVDecodingError.typeMismatch(
                     expected: "Date (no matching format found)",
                     actual: value,
@@ -794,75 +595,29 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
             return date
 
-        case let .localeAware(locale, style):
-            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                if let date = LocaleUtilities.parseDate(value, locale: locale, style: style) {
-                    return date
-                }
-                // Fall back to flexible parsing if locale-aware fails
-                if let date = parseFlexibleDate(value, hint: nil) {
-                    return date
-                }
-                throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: value, location: location)
-            } else {
+        case .localeAware(let locale, let style):
+            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
                 // Pre-iOS 15: use flexible parsing
-                guard let date = parseFlexibleDate(value, hint: nil) else {
+                guard let date = CSVValueParser.parseFlexibleDate(value, hint: nil) else {
                     throw CSVDecodingError.typeMismatch(expected: "Date", actual: value, location: location)
                 }
                 return date
             }
-        }
-    }
-
-    /// Attempts to parse a date string using multiple formats.
-    private func parseFlexibleDate(_ value: String, hint: String?) -> Date? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-
-        // Try hint first if provided
-        if let hint = hint {
-            formatter.dateFormat = hint
-            if let date = formatter.date(from: trimmed) {
+            if let date = LocaleUtilities.parseDate(value, locale: locale, style: style) {
                 return date
             }
-        }
-
-        // Try all known formats
-        for format in dateFormats {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: trimmed) {
+            // Fall back to flexible parsing if locale-aware fails
+            if let date = CSVValueParser.parseFlexibleDate(value, hint: nil) {
                 return date
             }
-        }
-
-        // Try relative date expressions
-        return parseRelativeDate(trimmed)
-    }
-
-    /// Parses relative date expressions like "today", "yesterday".
-    private func parseRelativeDate(_ value: String) -> Date? {
-        let lower = value.lowercased()
-        let calendar = Calendar.current
-
-        switch lower {
-        case "today":
-            return calendar.startOfDay(for: Date())
-
-        case "yesterday":
-            return calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))
-
-        default:
-            return nil
+            throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: value, location: location)
         }
     }
 
     /// Creates a source filtered to keys with the given prefix, stripping the prefix.
     private func createPrefixedSource(prefix: String) -> CSVRowDecoder.RowSource {
         switch source {
-        case let .dictionary(row):
+        case .dictionary(let row):
             var filtered: [String: String] = [:]
             for (key, value) in row where key.hasPrefix(prefix) {
                 let strippedKey = String(key.dropFirst(prefix.count))
@@ -870,7 +625,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             }
             return .dictionary(filtered)
 
-        case let .view(view, headerMap):
+        case .view(let view, let headerMap):
             var filtered: [String: Int] = [:]
             for (key, index) in headerMap where key.hasPrefix(prefix) {
                 let strippedKey = String(key.dropFirst(prefix.count))
@@ -943,8 +698,10 @@ private struct JSONKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContaine
     func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 { try wrapped.decode(type, forKey: key) }
     func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T { try wrapped.decode(type, forKey: key) }
 
-    func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type,
-                                               forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> {
+    func nestedContainer<NestedKey: CodingKey>(
+        keyedBy type: NestedKey.Type,
+        forKey key: Key
+    ) throws -> KeyedDecodingContainer<NestedKey> {
         try wrapped.nestedContainer(keyedBy: type, forKey: key)
     }
 
@@ -972,12 +729,14 @@ struct CSVNestedRowDecoder: Decoder {
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        KeyedDecodingContainer(CSVKeyedDecodingContainer(
-            source: source,
-            configuration: configuration,
-            codingPath: codingPath,
-            rowIndex: rowIndex,
-        ))
+        KeyedDecodingContainer(
+            CSVKeyedDecodingContainer(
+                source: source,
+                configuration: configuration,
+                codingPath: codingPath,
+                rowIndex: rowIndex,
+            )
+        )
     }
 
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {

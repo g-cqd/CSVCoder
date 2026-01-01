@@ -8,9 +8,9 @@
 
 import Foundation
 
-public extension CSVEncoder {
+extension CSVEncoder {
     /// Configuration for parallel encoding.
-    struct ParallelEncodingConfiguration: Sendable {
+    public struct ParallelEncodingConfiguration: Sendable {
         // MARK: Lifecycle
 
         /// Creates a parallel encoding configuration.
@@ -55,7 +55,7 @@ public extension CSVEncoder {
     /// try await encoder.encodeParallel(records, to: fileURL,
     ///     parallelConfig: .init(parallelism: 8, chunkSize: 5_000))
     /// ```
-    func encodeParallel(
+    public func encodeParallel(
         _ values: [some Encodable & Sendable],
         to url: URL,
         parallelConfig: ParallelEncodingConfiguration = .default,
@@ -68,7 +68,7 @@ public extension CSVEncoder {
     }
 
     /// Encodes an array in parallel and writes to a file handle.
-    func encodeParallel(
+    public func encodeParallel(
         _ values: [some Encodable & Sendable],
         to handle: FileHandle,
         parallelConfig: ParallelEncodingConfiguration = .default,
@@ -117,7 +117,7 @@ public extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: The encoded CSV data.
-    func encodeParallel(
+    public func encodeParallel(
         _ values: [some Encodable & Sendable],
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> Data {
@@ -130,7 +130,7 @@ public extension CSVEncoder {
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
 
         // Estimate output size
-        let estimatedRowSize = orderedKeys.count * 20 // ~20 bytes per field average
+        let estimatedRowSize = orderedKeys.count * 20  // ~20 bytes per field average
         var output: [UInt8] = []
         output.reserveCapacity(values.count * estimatedRowSize + estimatedRowSize)
 
@@ -156,7 +156,7 @@ public extension CSVEncoder {
     }
 
     /// Encodes an array in parallel and returns a String.
-    func encodeParallelToString(
+    public func encodeParallelToString(
         _ values: [some Encodable & Sendable],
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> String {
@@ -176,7 +176,7 @@ public extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: An async stream of encoded row batches.
-    func encodeParallelBatched(
+    public func encodeParallelBatched(
         _ values: [some Encodable & Sendable],
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) -> AsyncThrowingStream<[String], Error> {
@@ -276,7 +276,8 @@ public extension CSVEncoder {
             }
 
             // Sort by offset and flatten
-            return results
+            return
+                results
                 .sorted { $0.0 < $1.0 }
                 .flatMap(\.1)
         }

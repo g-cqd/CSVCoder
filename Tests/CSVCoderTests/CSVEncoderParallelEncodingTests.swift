@@ -5,9 +5,10 @@
 //  Tests for CSVEncoder parallel encoding.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVEncoder Parallel Encoding Tests")
 struct CSVEncoderParallelEncodingTests {
@@ -138,11 +139,13 @@ struct CSVEncoderParallelEncodingTests {
 
         let coreCount = ProcessInfo.processInfo.activeProcessorCount
         if coreCount > 1 {
-            let seqNanos = Double(sequentialDuration.components.seconds) * 1e9 +
-                Double(sequentialDuration.components.attoseconds) / 1e9
-            let parNanos = Double(parallelDuration.components.seconds) * 1e9 +
-                Double(parallelDuration.components.attoseconds) / 1e9
-            _ = seqNanos / parNanos // speedup - suppress unused warning
+            let seqNanos =
+                Double(sequentialDuration.components.seconds) * 1e9 + Double(sequentialDuration.components.attoseconds)
+                / 1e9
+            let parNanos =
+                Double(parallelDuration.components.seconds) * 1e9 + Double(parallelDuration.components.attoseconds)
+                / 1e9
+            _ = seqNanos / parNanos  // speedup - suppress unused warning
             #expect(!parallelResult.isEmpty, "Parallel encode should complete successfully")
         }
     }

@@ -233,9 +233,9 @@ public final class CSVDecoder: Sendable {
 
         /// Date styles for localeAware parsing.
         public enum DateStyle: Sendable {
-            case numeric // 12/31/2024 or 31/12/2024 depending on locale
-            case abbreviated // Dec 31, 2024 or 31 Dec 2024
-            case long // December 31, 2024
+            case numeric  // 12/31/2024 or 31/12/2024 depending on locale
+            case abbreviated  // Dec 31, 2024 or 31 Dec 2024
+            case long  // December 31, 2024
         }
     }
 
@@ -426,7 +426,7 @@ public final class CSVDecoder: Sendable {
         case .convertFromPascalCase:
             return convertFromPascalCase(key)
 
-        case let .custom(transform):
+        case .custom(let transform):
             return transform(key)
         }
     }
@@ -504,25 +504,14 @@ public final class CSVDecoder: Sendable {
                 )
             }
             effectiveData = transcoded
-            effectiveEncoding = .utf8 // After transcoding, we're working with UTF-8
+            effectiveEncoding = .utf8  // After transcoding, we're working with UTF-8
         } else {
             effectiveData = data
             effectiveEncoding = encoding
         }
 
         return try effectiveData.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else { return [] }
-
-            // Handle BOM (UTF-8 BOM for transcoded data, original BOM was handled during transcode)
-            let rawBytes = UnsafeBufferPointer(
-                start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                count: buffer.count,
-            )
-            let startOffset = CSVUtilities.bomOffset(in: rawBytes)
-
-            let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
-            let adjustedCount = buffer.count - startOffset
-            let bytes = UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
+            guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else { return [] }
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
 
             let parser = CSVParser(buffer: bytes, delimiter: delimiter)

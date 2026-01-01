@@ -323,7 +323,7 @@ nonisolated public final class CSVEncoder: Sendable {
         case .convertToScreamingSnakeCase:
             convertToScreamingSnakeCase(key)
 
-        case let .custom(transform):
+        case .custom(let transform):
             transform(key)
         }
     }
@@ -348,13 +348,11 @@ nonisolated public final class CSVEncoder: Sendable {
         let lineEndingBytes = Array(configuration.lineEnding.rawValue.utf8)
 
         for (index, value) in values.enumerated() {
-            let storage = CSVEncodingStorage()
-            let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
-            try value.encode(to: encoder)
+            let (rowData, orderedKeys) = try encodeValue(value)
 
             // Handle Header on first row
             if headers == nil {
-                let resolvedHeaders = storage.allKeys().map { transformKey($0) }
+                let resolvedHeaders = orderedKeys.map { transformKey($0) }
                 headers = resolvedHeaders
                 if configuration.hasHeaders {
                     for (i, key) in resolvedHeaders.enumerated() {
@@ -366,7 +364,6 @@ nonisolated public final class CSVEncoder: Sendable {
             }
 
             guard let keys = headers else { continue }
-            let rowData = storage.allValues()
 
             // Write Row
             for (i, key) in keys.enumerated() {
@@ -392,12 +389,10 @@ nonisolated public final class CSVEncoder: Sendable {
         let lineEnding = configuration.lineEnding.rawValue
 
         for (index, value) in values.enumerated() {
-            let storage = CSVEncodingStorage()
-            let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
-            try value.encode(to: encoder)
+            let (rowData, orderedKeys) = try encodeValue(value)
 
             if headers == nil {
-                let resolvedHeaders = storage.allKeys().map { transformKey($0) }
+                let resolvedHeaders = orderedKeys.map { transformKey($0) }
                 headers = resolvedHeaders
                 if configuration.hasHeaders {
                     for (i, key) in resolvedHeaders.enumerated() {
@@ -409,7 +404,6 @@ nonisolated public final class CSVEncoder: Sendable {
             }
 
             guard let keys = headers else { continue }
-            let rowData = storage.allValues()
 
             for (i, key) in keys.enumerated() {
                 if i > 0 { try writer.write(delimiter) }

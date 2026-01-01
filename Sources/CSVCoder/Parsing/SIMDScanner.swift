@@ -34,10 +34,8 @@ enum SWARUtils: Sendable {
     /// Checks if any byte in the word matches any of the four targets.
     @inline(__always)
     static func hasAnyByte(_ word: UInt64, _ t1: UInt8, _ t2: UInt8, _ t3: UInt8, _ t4: UInt8) -> Bool {
-        findByte(word, target: t1) != 0 ||
-            findByte(word, target: t2) != 0 ||
-            findByte(word, target: t3) != 0 ||
-            findByte(word, target: t4) != 0
+        findByte(word, target: t1) != 0 || findByte(word, target: t2) != 0 || findByte(word, target: t3) != 0
+            || findByte(word, target: t4) != 0
     }
 
     /// Finds the byte index (0-7) of the first match, or nil if none.
@@ -68,22 +66,70 @@ enum SWARUtils: Sendable {
 @inline(__always)
 func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
     SIMD64<UInt8>(
-        buffer[0], buffer[1], buffer[2], buffer[3],
-        buffer[4], buffer[5], buffer[6], buffer[7],
-        buffer[8], buffer[9], buffer[10], buffer[11],
-        buffer[12], buffer[13], buffer[14], buffer[15],
-        buffer[16], buffer[17], buffer[18], buffer[19],
-        buffer[20], buffer[21], buffer[22], buffer[23],
-        buffer[24], buffer[25], buffer[26], buffer[27],
-        buffer[28], buffer[29], buffer[30], buffer[31],
-        buffer[32], buffer[33], buffer[34], buffer[35],
-        buffer[36], buffer[37], buffer[38], buffer[39],
-        buffer[40], buffer[41], buffer[42], buffer[43],
-        buffer[44], buffer[45], buffer[46], buffer[47],
-        buffer[48], buffer[49], buffer[50], buffer[51],
-        buffer[52], buffer[53], buffer[54], buffer[55],
-        buffer[56], buffer[57], buffer[58], buffer[59],
-        buffer[60], buffer[61], buffer[62], buffer[63],
+        buffer[0],
+        buffer[1],
+        buffer[2],
+        buffer[3],
+        buffer[4],
+        buffer[5],
+        buffer[6],
+        buffer[7],
+        buffer[8],
+        buffer[9],
+        buffer[10],
+        buffer[11],
+        buffer[12],
+        buffer[13],
+        buffer[14],
+        buffer[15],
+        buffer[16],
+        buffer[17],
+        buffer[18],
+        buffer[19],
+        buffer[20],
+        buffer[21],
+        buffer[22],
+        buffer[23],
+        buffer[24],
+        buffer[25],
+        buffer[26],
+        buffer[27],
+        buffer[28],
+        buffer[29],
+        buffer[30],
+        buffer[31],
+        buffer[32],
+        buffer[33],
+        buffer[34],
+        buffer[35],
+        buffer[36],
+        buffer[37],
+        buffer[38],
+        buffer[39],
+        buffer[40],
+        buffer[41],
+        buffer[42],
+        buffer[43],
+        buffer[44],
+        buffer[45],
+        buffer[46],
+        buffer[47],
+        buffer[48],
+        buffer[49],
+        buffer[50],
+        buffer[51],
+        buffer[52],
+        buffer[53],
+        buffer[54],
+        buffer[55],
+        buffer[56],
+        buffer[57],
+        buffer[58],
+        buffer[59],
+        buffer[60],
+        buffer[61],
+        buffer[62],
+        buffer[63],
     )
 }
 
@@ -131,7 +177,7 @@ struct SIMDScanner: Sendable {
         delimiter: UInt8 = comma,
     ) -> [StructuralPosition] {
         var positions: [StructuralPosition] = []
-        positions.reserveCapacity(count / 8) // Estimate ~1 structural per 8 bytes
+        positions.reserveCapacity(count / 8)  // Estimate ~1 structural per 8 bytes
 
         var offset = 0
 
@@ -392,9 +438,9 @@ struct SIMDScanner: Sendable {
     // MARK: Private
 
     // CSV structural bytes (ASCII)
-    private static let quote: UInt8 = 0x22 // "
-    private static let comma: UInt8 = 0x2C // ,
-    private static let cr: UInt8 = 0x0D // \r
-    private static let lf: UInt8 = 0x0A // \n
-    private static let tab: UInt8 = 0x09 // \t
+    private static let quote: UInt8 = 0x22  // "
+    private static let comma: UInt8 = 0x2C  // ,
+    private static let cr: UInt8 = 0x0D  // \r
+    private static let lf: UInt8 = 0x0A  // \n
+    private static let tab: UInt8 = 0x09  // \t
 }

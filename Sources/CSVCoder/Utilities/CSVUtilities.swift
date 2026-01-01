@@ -33,9 +33,9 @@ enum CSVUtilities {
     @inline(__always)
     static func bomOffset(in bytes: UnsafeBufferPointer<UInt8>) -> Int {
         guard bytes.count >= 3,
-              bytes[0] == utf8BOM.0,
-              bytes[1] == utf8BOM.1,
-              bytes[2] == utf8BOM.2
+            bytes[0] == utf8BOM.0,
+            bytes[1] == utf8BOM.1,
+            bytes[2] == utf8BOM.2
         else {
             return 0
         }
@@ -50,9 +50,9 @@ enum CSVUtilities {
     @inline(__always)
     static func bomOffset(baseAddress: UnsafePointer<UInt8>, count: Int) -> Int {
         guard count >= 3,
-              baseAddress[0] == utf8BOM.0,
-              baseAddress[1] == utf8BOM.1,
-              baseAddress[2] == utf8BOM.2
+            baseAddress[0] == utf8BOM.0,
+            baseAddress[1] == utf8BOM.1,
+            baseAddress[2] == utf8BOM.2
         else {
             return 0
         }
@@ -68,11 +68,13 @@ enum CSVUtilities {
         // Check UTF-32 first (4-byte BOM, but first 2 bytes overlap with UTF-16 LE)
         if data.count >= 4 {
             if data[0] == utf32LEBOM.0, data[1] == utf32LEBOM.1,
-               data[2] == utf32LEBOM.2, data[3] == utf32LEBOM.3 {
+                data[2] == utf32LEBOM.2, data[3] == utf32LEBOM.3
+            {
                 return (.utf32LittleEndian, 4)
             }
             if data[0] == utf32BEBOM.0, data[1] == utf32BEBOM.1,
-               data[2] == utf32BEBOM.2, data[3] == utf32BEBOM.3 {
+                data[2] == utf32BEBOM.2, data[3] == utf32BEBOM.3
+            {
                 return (.utf32BigEndian, 4)
             }
         }
@@ -107,25 +109,25 @@ enum CSVUtilities {
     static func isASCIICompatible(_ encoding: String.Encoding) -> Bool {
         switch encoding {
         case .ascii,
-             .isoLatin1,
-             .isoLatin2,
-             .macOSRoman,
-             .nextstep,
-             .utf8,
-             .windowsCP1250,
-             .windowsCP1251,
-             .windowsCP1252,
-             .windowsCP1253,
-             .windowsCP1254:
+            .isoLatin1,
+            .isoLatin2,
+            .macOSRoman,
+            .nextstep,
+            .utf8,
+            .windowsCP1250,
+            .windowsCP1251,
+            .windowsCP1252,
+            .windowsCP1253,
+            .windowsCP1254:
             true
 
         case .unicode,
-             .utf16,
-             .utf16BigEndian,
-             .utf16LittleEndian,
-             .utf32,
-             .utf32BigEndian,
-             .utf32LittleEndian:
+            .utf16,
+            .utf16BigEndian,
+            .utf16LittleEndian,
+            .utf32,
+            .utf32BigEndian,
+            .utf32LittleEndian:
             false
 
         default:
@@ -153,6 +155,25 @@ enum CSVUtilities {
             return nil
         }
         return string.data(using: .utf8)
+    }
+
+    /// Returns an adjusted buffer that skips the UTF-8 BOM if present.
+    ///
+    /// - Parameter buffer: The raw bytes buffer.
+    /// - Returns: A buffer pointer adjusted to skip BOM, or nil if baseAddress is nil.
+    @inline(__always)
+    static func adjustedBuffer(from buffer: UnsafeRawBufferPointer) -> UnsafeBufferPointer<UInt8>? {
+        guard let baseAddress = buffer.baseAddress else { return nil }
+
+        let rawBytes = UnsafeBufferPointer(
+            start: baseAddress.assumingMemoryBound(to: UInt8.self),
+            count: buffer.count
+        )
+        let startOffset = bomOffset(in: rawBytes)
+
+        let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
+        let adjustedCount = buffer.count - startOffset
+        return UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
     }
 }
 
@@ -226,7 +247,7 @@ enum CSVUnescaper: Sendable {
         }
 
         // Slow path: build unescaped result
-        var result = [UInt8]()
+        var result: [UInt8] = []
         result.reserveCapacity(count)
 
         var i = 0
@@ -279,7 +300,7 @@ enum CSVUnescaper: Sendable {
 
     // MARK: Private
 
-    private static let quote: UInt8 = 0x22 // "
+    private static let quote: UInt8 = 0x22  // "
 }
 
 // MARK: - CSVFieldEscaper
@@ -362,7 +383,7 @@ enum CSVFieldEscaper: Sendable {
         var mutableValue = value
         let handled = mutableValue.withUTF8 { utf8 -> Bool in
             guard let baseAddress = utf8.baseAddress else {
-                return true // Empty string - handled
+                return true  // Empty string - handled
             }
 
             let count = utf8.count
@@ -373,7 +394,7 @@ enum CSVFieldEscaper: Sendable {
                 for i in 0 ..< count {
                     let byte = baseAddress[i]
                     if byte == quote {
-                        buffer.append(quote) // Escape quote by doubling
+                        buffer.append(quote)  // Escape quote by doubling
                     }
                     buffer.append(byte)
                 }
@@ -412,10 +433,8 @@ enum CSVFieldEscaper: Sendable {
     static func escapeField(_ value: String, delimiter: Character) -> String {
         let delimString = String(delimiter)
 
-        let needsQuoting = value.contains(delimString) ||
-            value.contains("\"") ||
-            value.contains("\n") ||
-            value.contains("\r")
+        let needsQuoting =
+            value.contains(delimString) || value.contains("\"") || value.contains("\n") || value.contains("\r")
 
         if needsQuoting {
             let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
@@ -428,9 +447,9 @@ enum CSVFieldEscaper: Sendable {
     // MARK: Private
 
     // ASCII constants
-    private static let quote: UInt8 = 0x22 // "
-    private static let lf: UInt8 = 0x0A // \n
-    private static let cr: UInt8 = 0x0D // \r
+    private static let quote: UInt8 = 0x22  // "
+    private static let lf: UInt8 = 0x0A  // \n
+    private static let cr: UInt8 = 0x0D  // \r
 }
 
 // MARK: - CSVRowBuilder

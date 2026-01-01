@@ -1,0 +1,104 @@
+{
+  "version": "1.0",
+  "swiftVersion": "6.2",
+  "project": {
+    "version": "0.0.4"
+  },
+  "platforms": {
+    "macOS": "15.0",
+    "watchOS": "11.0",
+    "tvOS": "18.0",
+    "iOS": "18.0",
+    "visionOS": "2.0"
+  },
+  "hooks": {
+    "fixMode": "safe",
+    "restageFixed": true,
+    "failFast": false,
+    "preCommit": {
+      "enabled": true,
+      "scope": "staged",
+      "parallel": true,
+      "tasks": [
+        "versionSync:fix",
+        "format:fix",
+        {"id": "unused", "mode": "check", "dependsOn": ["versionSync", "format"], "continueOnError": true},
+        {"id": "duplicates", "mode": "check", "dependsOn": ["versionSync", "format"], "continueOnError": true}
+      ]
+    },
+    "prePush": {
+      "enabled": true,
+      "scope": "changed",
+      "baseBranch": "main",
+      "parallel": true,
+      "tasks": [
+        "versionSync:check",
+        "format:check",
+        {"id": "test", "mode": "check", "dependsOn": ["versionSync", "format"]}
+      ]
+    },
+    "ci": {
+      "enabled": true,
+      "scope": "all",
+      "parallel": true,
+      "tasks": [
+        "versionSync:check",
+        "format:check",
+        {"id": "unused", "mode": "check", "dependsOn": ["format"], "continueOnError": true},
+        {"id": "duplicates", "mode": "check", "dependsOn": ["format"], "continueOnError": true},
+        {"id": "test", "mode": "check", "dependsOn": ["versionSync", "format"], "options": {"coverage": true, "parallel": true}}
+      ]
+    },
+    "tasks": {
+      "format": {
+        "enabled": true,
+        "blocking": true,
+        "paths": ["Sources/", "Tests/", "Plugins/"]
+      },
+      "versionSync": {
+        "enabled": true,
+        "blocking": true,
+        "options": {
+          "syncTargets": []
+        }
+      },
+      "build": {
+        "enabled": true,
+        "blocking": true
+      },
+      "test": {
+        "enabled": true,
+        "blocking": true,
+        "options": {
+          "parallel": true
+        }
+      },
+      "unused": {
+        "enabled": true,
+        "blocking": false,
+        "paths": ["Sources/"],
+        "options": {
+          "mode": "reachability",
+          "sensibleDefaults": true
+        }
+      },
+      "duplicates": {
+        "enabled": true,
+        "blocking": false,
+        "paths": ["Sources/"],
+        "options": {
+          "minTokens": 100
+        }
+      }
+    }
+  },
+  "swiftformat": {
+    "enabled": true,
+    "configPath": ".swift-format"
+  },
+  "workflows": {
+    "ci": true,
+    "release": true,
+    "docs": true
+  }
+}

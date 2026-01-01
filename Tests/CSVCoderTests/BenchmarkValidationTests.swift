@@ -1,4 +1,5 @@
 import CSVCoder
+import CSVCoderTestFixtures
 import Foundation
 import Testing
 
@@ -31,57 +32,7 @@ struct BenchmarkValidationTests {
         let value: Int
     }
 
-    struct Order: Codable, Sendable {
-        let orderId: String
-        let customerId: Int
-        let customerName: String
-        let email: String
-        let productId: Int
-        let productName: String
-        let quantity: Int
-        let unitPrice: Double
-        let discount: Double?
-        let taxRate: Double
-        let shippingCost: Double
-        let totalAmount: Double
-        let currency: String
-        let paymentMethod: String
-        let orderDate: String
-        let shipDate: String?
-        let status: String
-        let notes: String?
-    }
-
-    struct Transaction: Codable, Sendable {
-        let transactionId: String
-        let accountFrom: String
-        let accountTo: String
-        let amount: Double
-        let currency: String
-        let exchangeRate: Double?
-        let fee: Double
-        let timestamp: String
-        let category: String
-        let description: String
-        let reference: String?
-        let status: String
-        let processedBy: String?
-    }
-
-    struct LogEntry: Codable, Sendable {
-        let timestamp: String
-        let level: String
-        let service: String
-        let host: String
-        let requestId: String?
-        let userId: String?
-        let action: String
-        let resource: String
-        let duration: Int?
-        let statusCode: Int?
-        let message: String
-        let metadata: String?
-    }
+    // Order, Transaction, and LogEntry are imported from CSVCoderTestFixtures
 
     // MARK: - Generator Functions
 
@@ -96,7 +47,8 @@ struct BenchmarkValidationTests {
     func generateComplexCSV(rows: Int) -> String {
         var csv = "id,firstName,lastName,email,age,salary,isActive,notes\n"
         for i in 0 ..< rows {
-            csv += "\(i),John,Doe\(i),john\(i)@example.com,\(25 + i % 40),\(50000.0 + Double(i) * 100),\(i % 2 == 0),\"Some notes here with text\"\n"
+            csv +=
+                "\(i),John,Doe\(i),john\(i)@example.com,\(25 + i % 40),\(50000.0 + Double(i) * 100),\(i % 2 == 0),\"Some notes here with text\"\n"
         }
         return csv
     }
@@ -182,7 +134,7 @@ struct BenchmarkValidationTests {
             for row in parser {
                 rowCount += 1
                 // Verify we can extract strings
-                if rowCount > 1 { // Skip header
+                if rowCount > 1 {  // Skip header
                     let name = row.string(at: 0)
                     #expect(name != nil)
                     #expect(name?.hasPrefix("Person") == true)
@@ -190,7 +142,7 @@ struct BenchmarkValidationTests {
             }
         }
 
-        #expect(rowCount == 1001) // 1000 data rows + 1 header
+        #expect(rowCount == 1001)  // 1000 data rows + 1 header
     }
 
     @Test("Parallel decoding validation")

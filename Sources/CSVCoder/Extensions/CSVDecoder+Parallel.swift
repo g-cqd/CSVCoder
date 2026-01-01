@@ -10,20 +10,20 @@ import Foundation
 
 // MARK: - CSVDecoder.ParallelConfiguration
 
-public extension CSVDecoder {
+extension CSVDecoder {
     /// Configuration for parallel decoding operations.
-    struct ParallelConfiguration: Sendable {
+    public struct ParallelConfiguration: Sendable {
         // MARK: Lifecycle
 
         /// Creates a parallel configuration with default values.
         public init(
             parallelism: Int = ProcessInfo.processInfo.activeProcessorCount,
-            chunkSize: Int = 1024 * 1024, // 1MB chunks
+            chunkSize: Int = 1024 * 1024,  // 1MB chunks
             maxBufferedRows: Int = 10000,
             preserveOrder: Bool = true,
         ) {
             self.parallelism = max(1, parallelism)
-            self.chunkSize = max(64 * 1024, chunkSize) // Minimum 64KB
+            self.chunkSize = max(64 * 1024, chunkSize)  // Minimum 64KB
             self.maxBufferedRows = max(100, maxBufferedRows)
             self.preserveOrder = preserveOrder
         }
@@ -97,12 +97,14 @@ struct ChunkBoundaryFinder: Sendable {
                 }
             }
 
-            chunks.append(CSVChunk(
-                index: chunkIndex,
-                startOffset: currentOffset,
-                endOffset: targetEnd,
-                isFirstChunk: isFirst,
-            ))
+            chunks.append(
+                CSVChunk(
+                    index: chunkIndex,
+                    startOffset: currentOffset,
+                    endOffset: targetEnd,
+                    isFirstChunk: isFirst,
+                )
+            )
 
             currentOffset = targetEnd
             chunkIndex += 1
@@ -162,7 +164,7 @@ struct ChunkBoundaryFinder: Sendable {
         // Use SIMD to quickly count quotes up to target
         let structuralPositions = SIMDScanner.scanStructural(
             buffer: bytes,
-            count: min(target + 4096, count), // Scan slightly past target
+            count: min(target + 4096, count),  // Scan slightly past target
             delimiter: 0x2C,
         )
 
@@ -257,16 +259,7 @@ extension CSVDecoder {
         // Decode chunks in parallel
         let config = configuration
 
-        if parallelConfig.preserveOrder {
-            return try await decodeChunksOrdered(
-                chunks: chunks,
-                reader: reader,
-                headers: headers,
-                headerMap: headerMap,
-                config: config,
-                parallelism: parallelConfig.parallelism,
-            )
-        } else {
+        guard parallelConfig.preserveOrder else {
             return try await decodeChunksUnordered(
                 chunks: chunks,
                 reader: reader,
@@ -276,6 +269,14 @@ extension CSVDecoder {
                 parallelism: parallelConfig.parallelism,
             )
         }
+        return try await decodeChunksOrdered(
+            chunks: chunks,
+            reader: reader,
+            headers: headers,
+            headerMap: headerMap,
+            config: config,
+            parallelism: parallelConfig.parallelism,
+        )
     }
 
     private func extractHeaders(from reader: MemoryMappedReader) throws -> [String] {
@@ -458,7 +459,7 @@ extension CSVDecoder {
                     headerMap: headerMap,
                     configuration: config,
                     codingPath: [],
-                    rowIndex: chunk.index * 1000 + index, // Approximate row index
+                    rowIndex: chunk.index * 1000 + index,  // Approximate row index
                 )
                 try results.append(T(from: decoder))
             }
@@ -469,7 +470,7 @@ extension CSVDecoder {
 
 // MARK: - Parallel Streaming Extension
 
-public extension CSVDecoder {
+extension CSVDecoder {
     /// Decodes CSV data in parallel, yielding batches of decoded values.
     /// Provides backpressure through AsyncThrowingStream buffering.
     ///
@@ -478,7 +479,7 @@ public extension CSVDecoder {
     ///   - url: The file URL to read CSV data from.
     ///   - parallelConfig: Configuration for parallel processing.
     /// - Returns: An AsyncThrowingStream yielding arrays of decoded values (batches).
-    func decodeParallelBatched<T: Decodable & Sendable>(
+    public func decodeParallelBatched<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
         parallelConfig: ParallelConfiguration = ParallelConfiguration(),
@@ -510,7 +511,8 @@ public extension CSVDecoder {
 
                         // Add initial tasks
                         while activeTasks < parallelConfig.parallelism,
-                              let chunk = chunkIterator.next() {
+                            let chunk = chunkIterator.next()
+                        {
                             group.addTask {
                                 let values: [T] = try Self.decodeChunk(
                                     chunk: chunk,

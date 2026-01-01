@@ -29,11 +29,13 @@ nonisolated struct CSVRowEncoder: Encoder {
     nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     nonisolated func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        KeyedEncodingContainer(CSVKeyedEncodingContainer(
-            configuration: configuration,
-            codingPath: codingPath,
-            storage: storage,
-        ))
+        KeyedEncodingContainer(
+            CSVKeyedEncodingContainer(
+                configuration: configuration,
+                codingPath: codingPath,
+                storage: storage,
+            )
+        )
     }
 
     nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
@@ -73,19 +75,20 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     mutating func encode(_ value: Bool, forKey key: Key) throws {
-        let stringValue: String = switch configuration.boolEncodingStrategy {
-        case .trueFalse:
-            value ? "true" : "false"
+        let stringValue: String =
+            switch configuration.boolEncodingStrategy {
+            case .trueFalse:
+                value ? "true" : "false"
 
-        case .numeric:
-            value ? "1" : "0"
+            case .numeric:
+                value ? "1" : "0"
 
-        case .yesNo:
-            value ? "yes" : "no"
+            case .yesNo:
+                value ? "yes" : "no"
 
-        case let .custom(trueValue, falseValue):
-            value ? trueValue : falseValue
-        }
+            case .custom(let trueValue, let falseValue):
+                value ? trueValue : falseValue
+            }
         storage.setValue(stringValue, forKey: prefixedKey(key))
     }
 
@@ -196,7 +199,7 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             )
             try value.encode(to: singleValueEncoder)
 
-        case let .flatten(separator):
+        case .flatten(let separator):
             // Encode nested type with prefixed keys
             let nestedEncoder = CSVNestedEncoder(
                 configuration: configuration,
@@ -207,7 +210,7 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             try value.encode(to: nestedEncoder)
 
         case .codable,
-             .json:
+            .json:
             // Encode as JSON string
             let jsonEncoder = JSONEncoder()
             jsonEncoder.outputFormatting = [.sortedKeys]
@@ -219,13 +222,15 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         }
     }
 
-    mutating func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type,
-                                                        forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
+    mutating func nestedContainer<NestedKey: CodingKey>(
+        keyedBy _: NestedKey.Type,
+        forKey key: Key
+    ) -> KeyedEncodingContainer<NestedKey> {
         switch configuration.nestedTypeEncodingStrategy {
         case .error:
             fatalError("Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable.")
 
-        case let .flatten(separator):
+        case .flatten(let separator):
             let nestedPrefix = prefixedKey(key) + separator
             let nestedContainer = CSVKeyedEncodingContainer<NestedKey>(
                 configuration: configuration,
@@ -236,7 +241,7 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             return KeyedEncodingContainer(nestedContainer)
 
         case .codable,
-             .json:
+            .json:
             // For JSON strategy, we can't return a proper nested container
             // since we need to buffer all values and serialize at the end.
             // This case is handled in encode<T: Encodable> instead.
@@ -335,47 +340,11 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     private func formatNumber(_ value: Double) throws -> String {
-        switch configuration.numberEncodingStrategy {
-        case .standard:
-            return String(value)
-
-        case let .locale(locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            formatter.maximumFractionDigits = 15
-            return formatter.string(from: NSNumber(value: value)) ?? String(value)
-
-        case let .custom(transform):
-            return try transform(value)
-        }
+        try CSVValueFormatter.formatNumber(value, strategy: configuration.numberEncodingStrategy)
     }
 
     private func encodeDate(_ date: Date) throws -> String {
-        switch configuration.dateEncodingStrategy {
-        case .deferredToDate:
-            throw CSVEncodingError.unsupportedType("deferredToDate requires a date encoding strategy")
-
-        case .secondsSince1970:
-            return String(date.timeIntervalSince1970)
-
-        case .millisecondsSince1970:
-            return String(date.timeIntervalSince1970 * 1000)
-
-        case .iso8601:
-            let formatter = ISO8601DateFormatter()
-            return formatter.string(from: date)
-
-        case let .formatted(format):
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            return formatter.string(from: date)
-
-        case let .custom(closure):
-            return try closure(date)
-        }
+        try CSVValueFormatter.formatDate(date, strategy: configuration.dateEncodingStrategy)
     }
 }
 
@@ -391,12 +360,14 @@ nonisolated struct CSVNestedEncoder: Encoder {
     nonisolated var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     nonisolated func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        KeyedEncodingContainer(CSVKeyedEncodingContainer(
-            configuration: configuration,
-            codingPath: codingPath,
-            storage: storage,
-            keyPrefix: keyPrefix,
-        ))
+        KeyedEncodingContainer(
+            CSVKeyedEncodingContainer(
+                configuration: configuration,
+                codingPath: codingPath,
+                storage: storage,
+                keyPrefix: keyPrefix,
+            )
+        )
     }
 
     nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {

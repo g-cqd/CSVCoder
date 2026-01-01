@@ -7,9 +7,10 @@
 //  - CSVUnescaper: Zero-allocation field unescaping
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 // MARK: - SWARUtilsTests
 
@@ -146,7 +147,7 @@ struct CSVUnescaperTests {
 
     @Test("hasEscapedQuotes returns false for single byte")
     func hasEscapedQuotesSingleByte() {
-        let bytes: [UInt8] = [0x22] // single quote
+        let bytes: [UInt8] = [0x22]  // single quote
         let result = bytes.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return false }
             return CSVUnescaper.hasEscapedQuotes(buffer: base, count: buffer.count)
@@ -156,7 +157,7 @@ struct CSVUnescaperTests {
 
     @Test("hasEscapedQuotes returns true for double quotes")
     func hasEscapedQuotesDoubleQuote() {
-        let bytes: [UInt8] = [0x22, 0x22] // ""
+        let bytes: [UInt8] = [0x22, 0x22]  // ""
         let result = bytes.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return false }
             return CSVUnescaper.hasEscapedQuotes(buffer: base, count: buffer.count)
@@ -166,7 +167,7 @@ struct CSVUnescaperTests {
 
     @Test("hasEscapedQuotes returns false for separated quotes")
     func hasEscapedQuotesSeparated() {
-        let bytes: [UInt8] = [0x22, 0x41, 0x22] // "A"
+        let bytes: [UInt8] = [0x22, 0x41, 0x22]  // "A"
         let result = bytes.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return false }
             return CSVUnescaper.hasEscapedQuotes(buffer: base, count: buffer.count)
@@ -187,7 +188,7 @@ struct CSVUnescaperTests {
 
     @Test("hasEscapedQuotes handles long text without escaped quotes")
     func hasEscapedQuotesLongNoEscape() {
-        let text = String(repeating: "abcdefghij", count: 100) // 1000 chars, no quotes
+        let text = String(repeating: "abcdefghij", count: 100)  // 1000 chars, no quotes
         let bytes = Array(text.utf8)
         let result = bytes.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return false }
@@ -198,8 +199,8 @@ struct CSVUnescaperTests {
 
     @Test("hasEscapedQuotes handles long text with escaped quotes")
     func hasEscapedQuotesLongWithEscape() {
-        var text = String(repeating: "abcdefghij", count: 100) // 1000 chars
-        text += "\"\"" // Add escaped quote at end
+        var text = String(repeating: "abcdefghij", count: 100)  // 1000 chars
+        text += "\"\""  // Add escaped quote at end
         let bytes = Array(text.utf8)
         let result = bytes.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return false }
@@ -229,7 +230,7 @@ struct CSVUnescaperTests {
 
     @Test("unescape converts double quote to single quote")
     func unescapeDoubleQuote() {
-        let bytes: [UInt8] = [0x22, 0x22] // ""
+        let bytes: [UInt8] = [0x22, 0x22]  // ""
         let result = bytes.withUnsafeBufferPointer { buffer in
             CSVUnescaper.unescape(buffer: buffer)
         }
@@ -288,11 +289,11 @@ struct CSVUnescaperTests {
 
     @Test("unescape handles consecutive escaped quotes")
     func unescapeConsecutive() {
-        let bytes: [UInt8] = [0x22, 0x22, 0x22, 0x22] // """"
+        let bytes: [UInt8] = [0x22, 0x22, 0x22, 0x22]  // """"
         let result = bytes.withUnsafeBufferPointer { buffer in
             CSVUnescaper.unescape(buffer: buffer)
         }
-        #expect(result == "\"\"") // Two quotes
+        #expect(result == "\"\"")  // Two quotes
     }
 }
 
@@ -348,7 +349,7 @@ struct CSVParserIntegrationTests {
             parser.reduce(0) { count, _ in count + 1 }
         }
 
-        #expect(count == 10001) // Including header
+        #expect(count == 10001)  // Including header
     }
 }
 
@@ -385,7 +386,7 @@ struct SIMDScannerIntegrationTests {
 
         #expect(commas.count == 4)
         #expect(quotes.count == 2)
-        #expect(newlines.count == 3) // CR, LF, LF
+        #expect(newlines.count == 3)  // CR, LF, LF
     }
 
     @Test("countNewlinesApprox counts LF correctly")
@@ -586,60 +587,5 @@ struct CSVFieldEscaperTests {
         var buffer: [UInt8] = []
         CSVFieldEscaper.appendEscaped("日本語,emoji: 🎉", to: &buffer, delimiter: 0x2C)
         #expect(String(decoding: buffer, as: UTF8.self) == "\"日本語,emoji: 🎉\"")
-    }
-}
-
-// MARK: - FieldBufferPoolTests
-
-@Suite("Legacy Field Buffer Pool")
-struct FieldBufferPoolTests {
-    @Test("lease returns buffer with requested capacity")
-    func leaseCapacity() {
-        let pool = FieldBufferPool(maxPoolSize: 4)
-        let buffer = pool.lease(capacity: 100)
-        #expect(buffer.capacity >= 100)
-    }
-
-    @Test("return adds buffer to pool")
-    func returnBuffer() {
-        let pool = FieldBufferPool(maxPoolSize: 4)
-        var buffer = pool.lease(capacity: 100)
-        buffer.append(contentsOf: [1, 2, 3])
-        pool.return(&buffer)
-
-        // Lease again - should get cleared buffer
-        let buffer2 = pool.lease(capacity: 50)
-        #expect(buffer2.isEmpty || buffer2.capacity >= 100)
-    }
-
-    @Test("pool respects max size")
-    func poolMaxSize() {
-        let pool = FieldBufferPool(maxPoolSize: 2)
-        var b1 = pool.lease(capacity: 10)
-        var b2 = pool.lease(capacity: 10)
-        var b3 = pool.lease(capacity: 10)
-
-        pool.return(&b1)
-        pool.return(&b2)
-        pool.return(&b3) // Should be dropped
-
-        // Can only lease 2 from pool
-        _ = pool.lease(capacity: 10)
-        _ = pool.lease(capacity: 10)
-    }
-
-    @Test("clear removes all buffers")
-    func clearPool() {
-        let pool = FieldBufferPool(maxPoolSize: 4)
-        var b1 = pool.lease(capacity: 10)
-        var b2 = pool.lease(capacity: 10)
-        pool.return(&b1)
-        pool.return(&b2)
-
-        pool.clear()
-
-        // Pool should be empty - new lease creates new buffer
-        let buffer = pool.lease(capacity: 10)
-        #expect(buffer.capacity >= 10)
     }
 }

@@ -52,87 +52,105 @@ nonisolated struct CSVThrowingKeyedEncodingContainer<Key: CodingKey>: KeyedEncod
     let codingPath: [CodingKey]
 
     mutating func encodeNil(forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Bool, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: String, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Double, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Float, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Int, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Int8, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Int16, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Int32, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: Int64, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: UInt, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: UInt8, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: UInt16, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: UInt32, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: UInt64, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
     mutating func encode(_ value: some Encodable, forKey key: Key) throws {
-        throw CSVEncodingError
+        throw
+            CSVEncodingError
             .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
-    mutating func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type,
-                                                        forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
+    mutating func nestedContainer<NestedKey: CodingKey>(
+        keyedBy _: NestedKey.Type,
+        forKey _: Key
+    ) -> KeyedEncodingContainer<NestedKey> {
         fatalError("Nested containers are not supported")
     }
 
@@ -270,30 +288,7 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
     }
 
     private func encodeDate(_ date: Date) throws -> String {
-        switch configuration.dateEncodingStrategy {
-        case .deferredToDate:
-            throw CSVEncodingError.unsupportedType("deferredToDate requires a date encoding strategy")
-
-        case .secondsSince1970:
-            return String(date.timeIntervalSince1970)
-
-        case .millisecondsSince1970:
-            return String(date.timeIntervalSince1970 * 1000)
-
-        case .iso8601:
-            let formatter = ISO8601DateFormatter()
-            return formatter.string(from: date)
-
-        case let .formatted(format):
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            return formatter.string(from: date)
-
-        case let .custom(closure):
-            return try closure(date)
-        }
+        try CSVValueFormatter.formatDate(date, strategy: configuration.dateEncodingStrategy)
     }
 }
 

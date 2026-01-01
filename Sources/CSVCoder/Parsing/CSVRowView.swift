@@ -145,13 +145,12 @@ public struct CSVRowView {
 
         // Fast path for UTF-8 (most common case)
         if encoding == .utf8 {
-            if isQuoted, hasEscapedQuote {
-                // Use zero-allocation unescaper
-                return CSVUnescaper.unescape(buffer: fieldBuffer)
-            } else {
+            guard isQuoted, hasEscapedQuote else {
                 // No unescaping needed - direct decode
                 return String(decoding: fieldBuffer, as: UTF8.self)
             }
+            // Use zero-allocation unescaper
+            return CSVUnescaper.unescape(buffer: fieldBuffer)
         }
 
         // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)

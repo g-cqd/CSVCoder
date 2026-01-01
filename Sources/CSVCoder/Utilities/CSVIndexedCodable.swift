@@ -30,14 +30,14 @@ public protocol CSVIndexedBase: _CSVIndexedMarker {
     static var csvColumnOrder: [String] { get }
 }
 
-public extension CSVIndexedBase {
+extension CSVIndexedBase {
     /// Default implementation: extracts column names from CodingKeys.allCases in order.
-    static var csvColumnOrder: [String] {
+    public static var csvColumnOrder: [String] {
         CSVCodingKeys.allCases.map(\.stringValue)
     }
 
     /// Internal marker implementation for runtime detection.
-    static var _csvColumnOrder: [String] { csvColumnOrder }
+    public static var _csvColumnOrder: [String] { csvColumnOrder }
 }
 
 // MARK: - CSVIndexedDecodable

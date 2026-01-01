@@ -5,9 +5,10 @@
 //  Tests for streaming and async decoding.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Streaming Tests")
 struct CSVDecoderStreamingTests {
@@ -30,11 +31,11 @@ struct CSVDecoderStreamingTests {
     @Test("Stream decode simple records from Data")
     func streamDecodeFromData() async throws {
         let csv = """
-        name,age,score
-        Alice,30,95.5
-        Bob,25,88.0
-        Charlie,35,72.0
-        """
+            name,age,score
+            Alice,30,95.5
+            Bob,25,88.0
+            Charlie,35,72.0
+            """
 
         let data = Data(csv.utf8)
         let decoder = CSVDecoder()
@@ -187,10 +188,10 @@ struct CSVDecoderStreamingTests {
     @Test("Async collect decode from Data")
     func asyncCollectDecode() async throws {
         let csv = """
-        name,age,score
-        Alice,30,95.5
-        Bob,25,88.0
-        """
+            name,age,score
+            Alice,30,95.5
+            Bob,25,88.0
+            """
 
         let data = Data(csv.utf8)
 
@@ -211,9 +212,9 @@ struct CSVDecoderStreamingTests {
     @Test("Streaming strict mode rejects quotes in unquoted fields")
     func streamingStrictModeRejectsQuotes() async throws {
         let csv = """
-        name,value
-        Test,Hello"World
-        """
+            name,value
+            Test,Hello"World
+            """
         let data = Data(csv.utf8)
 
         let config = CSVDecoder.Configuration(parsingMode: .strict)
@@ -235,10 +236,10 @@ struct CSVDecoderStreamingTests {
     @Test("Streaming strict mode validates field count")
     func streamingStrictModeValidatesFieldCount() async throws {
         let csv = """
-        name,value
-        A,B
-        X,Y,Z
-        """
+            name,value
+            A,B
+            X,Y,Z
+            """
         let data = Data(csv.utf8)
 
         let config = CSVDecoder.Configuration(
