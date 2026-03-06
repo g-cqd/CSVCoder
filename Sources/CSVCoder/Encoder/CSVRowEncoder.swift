@@ -39,11 +39,17 @@ nonisolated struct CSVRowEncoder: Encoder {
     }
 
     nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
-        fatalError("Unkeyed containers are not supported in CSV encoding")
+        CSVPoisonUnkeyedEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Unkeyed containers are not supported in CSV encoding"),
+            codingPath: codingPath,
+        )
     }
 
     nonisolated func singleValueContainer() -> SingleValueEncodingContainer {
-        fatalError("Single value containers are not supported at root level")
+        CSVPoisonSingleValueEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Single value containers are not supported at root level"),
+            codingPath: codingPath,
+        )
     }
 }
 
@@ -228,7 +234,12 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     ) -> KeyedEncodingContainer<NestedKey> {
         switch configuration.nestedTypeEncodingStrategy {
         case .error:
-            fatalError("Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable.")
+            return KeyedEncodingContainer(CSVPoisonKeyedEncodingContainer<NestedKey>(
+                error: CSVEncodingError.unsupportedType(
+                    "Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable."
+                ),
+                codingPath: codingPath + [key],
+            ))
 
         case .flatten(let separator):
             let nestedPrefix = prefixedKey(key) + separator
@@ -242,23 +253,34 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
 
         case .codable,
             .json:
-            // For JSON strategy, we can't return a proper nested container
-            // since we need to buffer all values and serialize at the end.
-            // This case is handled in encode<T: Encodable> instead.
-            fatalError("JSON/Codable nested encoding requires using encode(_:forKey:) with the nested value directly")
+            return KeyedEncodingContainer(CSVPoisonKeyedEncodingContainer<NestedKey>(
+                error: CSVEncodingError.unsupportedType(
+                    "JSON/Codable nested encoding requires using encode(_:forKey:) with the nested value directly"
+                ),
+                codingPath: codingPath + [key],
+            ))
         }
     }
 
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
-        fatalError("Nested unkeyed containers are not supported in CSV")
+        CSVPoisonUnkeyedEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Nested unkeyed containers are not supported in CSV"),
+            codingPath: codingPath + [key],
+        )
     }
 
     mutating func superEncoder() -> Encoder {
-        fatalError("Super encoder is not supported in CSV")
+        CSVPoisonEncoder(
+            error: CSVEncodingError.unsupportedType("Super encoder is not supported in CSV"),
+            codingPath: codingPath,
+        )
     }
 
     mutating func superEncoder(forKey key: Key) -> Encoder {
-        fatalError("Super encoder is not supported in CSV")
+        CSVPoisonEncoder(
+            error: CSVEncodingError.unsupportedType("Super encoder is not supported in CSV"),
+            codingPath: codingPath + [key],
+        )
     }
 
     // MARK: - Optional Encoding (encodeIfPresent)
@@ -266,7 +288,10 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     // These are called by Swift's synthesized Codable for optional properties
 
     mutating func encodeIfPresent(_ value: Bool?, forKey key: Key) throws {
-        storage.setValue(value.map { $0 ? "1" : "0" } ?? "", forKey: prefixedKey(key))
+        storage.setValue(
+            value.map { CSVValueFormatter.formatBool($0, strategy: configuration.boolEncodingStrategy) } ?? "",
+            forKey: prefixedKey(key),
+        )
     }
 
     mutating func encodeIfPresent(_ value: String?, forKey key: Key) throws {
@@ -274,11 +299,13 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     mutating func encodeIfPresent(_ value: Double?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        let formatted = try value.map { try CSVValueFormatter.formatNumber($0, strategy: configuration.numberEncodingStrategy) }
+        storage.setValue(formatted ?? "", forKey: prefixedKey(key))
     }
 
     mutating func encodeIfPresent(_ value: Float?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        let formatted = try value.map { try CSVValueFormatter.formatNumber(Double($0), strategy: configuration.numberEncodingStrategy) }
+        storage.setValue(formatted ?? "", forKey: prefixedKey(key))
     }
 
     mutating func encodeIfPresent(_ value: Int?, forKey key: Key) throws {
@@ -371,11 +398,17 @@ nonisolated struct CSVNestedEncoder: Encoder {
     }
 
     nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
-        fatalError("Unkeyed containers are not supported in CSV encoding")
+        CSVPoisonUnkeyedEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Unkeyed containers are not supported in CSV encoding"),
+            codingPath: codingPath,
+        )
     }
 
     nonisolated func singleValueContainer() -> SingleValueEncodingContainer {
-        fatalError("Single value containers are not supported for nested types")
+        CSVPoisonSingleValueEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Single value containers are not supported for nested types"),
+            codingPath: codingPath,
+        )
     }
 }
 

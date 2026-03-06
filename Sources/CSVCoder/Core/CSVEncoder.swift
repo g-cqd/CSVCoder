@@ -86,7 +86,6 @@ nonisolated public final class CSVEncoder: Sendable {
         public init(
             delimiter: Character = ",",
             hasHeaders: Bool = true,
-            encoding: String.Encoding = .utf8,
             dateEncodingStrategy: DateEncodingStrategy = .iso8601,
             nilEncodingStrategy: NilEncodingStrategy = .emptyString,
             keyEncodingStrategy: KeyEncodingStrategy = .useDefaultKeys,
@@ -94,10 +93,11 @@ nonisolated public final class CSVEncoder: Sendable {
             numberEncodingStrategy: NumberEncodingStrategy = .standard,
             lineEnding: LineEnding = .lf,
             nestedTypeEncodingStrategy: NestedTypeEncodingStrategy = .error,
+            includesTrailingNewline: Bool = false,
         ) {
+            precondition(delimiter.asciiValue != nil, "CSV delimiter must be an ASCII character, got '\(delimiter)'")
             self.delimiter = delimiter
             self.hasHeaders = hasHeaders
-            self.encoding = encoding
             self.dateEncodingStrategy = dateEncodingStrategy
             self.nilEncodingStrategy = nilEncodingStrategy
             self.keyEncodingStrategy = keyEncodingStrategy
@@ -105,6 +105,7 @@ nonisolated public final class CSVEncoder: Sendable {
             self.numberEncodingStrategy = numberEncodingStrategy
             self.lineEnding = lineEnding
             self.nestedTypeEncodingStrategy = nestedTypeEncodingStrategy
+            self.includesTrailingNewline = includesTrailingNewline
         }
 
         // MARK: Public
@@ -115,9 +116,6 @@ nonisolated public final class CSVEncoder: Sendable {
         /// Whether to include a header row. Default is true.
         /// Renamed from `includeHeaders` for symmetry with `CSVDecoder.Configuration.hasHeaders`.
         public var hasHeaders: Bool
-
-        /// The encoding to use when writing data. Default is UTF-8.
-        public var encoding: String.Encoding
 
         /// The date encoding strategy.
         public var dateEncodingStrategy: DateEncodingStrategy
@@ -139,6 +137,9 @@ nonisolated public final class CSVEncoder: Sendable {
 
         /// Strategy for encoding nested Codable types.
         public var nestedTypeEncodingStrategy: NestedTypeEncodingStrategy
+
+        /// Whether to append a newline after the last row. Default is false.
+        public var includesTrailingNewline: Bool
     }
 
     /// Strategies for encoding nested Codable types.
@@ -270,8 +271,7 @@ nonisolated public final class CSVEncoder: Sendable {
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try value.encode(to: encoder)
 
-        let keys = storage.allKeys()
-        let row = storage.allValues()
+        let (keys, row) = storage.snapshot()
         let delimiter = String(configuration.delimiter)
 
         let values = keys.map { key -> String in
@@ -372,10 +372,7 @@ nonisolated public final class CSVEncoder: Sendable {
                 appendEscaped(val, to: &buffer, delimiter: delimiterByte)
             }
 
-            // Add newline for all rows except the last one (to match previous behavior if needed,
-            // but standard CSV usually has trailing newline. The previous implementation using joined(separator:)
-            // meant NO trailing newline. I will stick to that for compatibility).
-            if index < values.count - 1 {
+            if index < values.count - 1 || configuration.includesTrailingNewline {
                 buffer.append(contentsOf: lineEndingBytes)
             }
         }
@@ -411,7 +408,7 @@ nonisolated public final class CSVEncoder: Sendable {
                 try writer.write(escapeField(val))
             }
 
-            if index < values.count - 1 {
+            if index < values.count - 1 || configuration.includesTrailingNewline {
                 try writer.write(lineEnding)
             }
         }
@@ -423,51 +420,40 @@ nonisolated public final class CSVEncoder: Sendable {
         CSVFieldEscaper.appendEscaped(value, to: &buffer, delimiter: delimiter)
     }
 
-    /// Converts camelCase to snake_case.
+    /// Converts camelCase to a separated-lowercase or separated-uppercase form.
+    private func convertCamelCase(_ key: String, separator: Character, uppercase: Bool) -> String {
+        var result: [Character] = []
+        result.reserveCapacity(key.count + 4)
+        for (index, char) in key.enumerated() {
+            if char.isUppercase {
+                if index > 0 {
+                    result.append(separator)
+                }
+                if uppercase {
+                    result.append(char)
+                } else {
+                    for c in char.lowercased() { result.append(c) }
+                }
+            } else {
+                if uppercase {
+                    for c in char.uppercased() { result.append(c) }
+                } else {
+                    result.append(char)
+                }
+            }
+        }
+        return String(result)
+    }
+
     private func convertToSnakeCase(_ key: String) -> String {
-        var result = ""
-        for (index, char) in key.enumerated() {
-            if char.isUppercase {
-                if index > 0 {
-                    result += "_"
-                }
-                result += char.lowercased()
-            } else {
-                result += String(char)
-            }
-        }
-        return result
+        convertCamelCase(key, separator: "_", uppercase: false)
     }
 
-    /// Converts camelCase to kebab-case.
     private func convertToKebabCase(_ key: String) -> String {
-        var result = ""
-        for (index, char) in key.enumerated() {
-            if char.isUppercase {
-                if index > 0 {
-                    result += "-"
-                }
-                result += char.lowercased()
-            } else {
-                result += String(char)
-            }
-        }
-        return result
+        convertCamelCase(key, separator: "-", uppercase: false)
     }
 
-    /// Converts camelCase to SCREAMING_SNAKE_CASE.
     private func convertToScreamingSnakeCase(_ key: String) -> String {
-        var result = ""
-        for (index, char) in key.enumerated() {
-            if char.isUppercase {
-                if index > 0 {
-                    result += "_"
-                }
-                result += String(char)
-            } else {
-                result += char.uppercased()
-            }
-        }
-        return result
+        convertCamelCase(key, separator: "_", uppercase: true)
     }
 }

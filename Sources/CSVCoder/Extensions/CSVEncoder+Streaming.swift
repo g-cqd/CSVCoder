@@ -163,7 +163,8 @@ extension CSVEncoder {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try value.encode(to: encoder)
-        return (storage.allValues(), storage.allKeys())
+        let (keys, values) = storage.snapshot()
+        return (values, keys)
     }
 
     /// Processes encoding and header initialization for async streaming.

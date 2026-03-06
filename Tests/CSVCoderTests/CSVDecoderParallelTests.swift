@@ -240,8 +240,7 @@ struct CSVDecoderParallelTests {
                 Double(parallelDuration.components.seconds) * 1e9 + Double(parallelDuration.components.attoseconds)
                 / 1e9
             let speedup = seqNanos / parNanos
-            #expect(parallelResult.count == 10000, "Parallel decode should complete successfully")
-            _ = speedup  // Suppress unused warning
+            #expect(speedup > 0.5, "Parallel decode speedup (\(speedup)x) should be reasonable")
         }
     }
 

@@ -197,95 +197,10 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     private func decodeDate() throws -> Date {
-        let dateValue = trimmedValue
-        switch configuration.dateDecodingStrategy {
-        case .deferredToDate:
-            throw CSVDecodingError.typeMismatch(
-                expected: "Date (use a date strategy)",
-                actual: dateValue,
-                location: location,
-            )
-
-        case .secondsSince1970:
-            guard let seconds = Double(dateValue) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: dateValue, location: location)
-            }
-            return Date(timeIntervalSince1970: seconds)
-
-        case .millisecondsSince1970:
-            guard let milliseconds = Double(dateValue) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Unix timestamp (ms)",
-                    actual: dateValue,
-                    location: location,
-                )
-            }
-            return Date(timeIntervalSince1970: milliseconds / 1000)
-
-        case .iso8601:
-            let formatter = ISO8601DateFormatter()
-            guard let date = formatter.date(from: dateValue) else {
-                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: dateValue, location: location)
-            }
-            return date
-
-        case .formatted(let format):
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale.autoupdatingCurrent
-            formatter.timeZone = TimeZone.autoupdatingCurrent
-            guard let date = formatter.date(from: dateValue) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Date with format \(format)",
-                    actual: dateValue,
-                    location: location,
-                )
-            }
-            return date
-
-        case .custom(let closure):
-            return try closure(dateValue)
-
-        case .flexible:
-            guard let date = CSVValueParser.parseFlexibleDate(dateValue, hint: nil) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Date (no matching format found)",
-                    actual: dateValue,
-                    location: location,
-                )
-            }
-            return date
-
-        case .flexibleWithHint(let preferred):
-            guard let date = CSVValueParser.parseFlexibleDate(dateValue, hint: preferred) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Date (no matching format found)",
-                    actual: dateValue,
-                    location: location,
-                )
-            }
-            return date
-
-        case .localeAware(let locale, let style):
-            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
-                // Pre-iOS 15: use flexible parsing
-                guard let date = CSVValueParser.parseFlexibleDate(dateValue, hint: nil) else {
-                    throw CSVDecodingError.typeMismatch(expected: "Date", actual: dateValue, location: location)
-                }
-                return date
-            }
-            if let date = LocaleUtilities.parseDate(dateValue, locale: locale, style: style) {
-                return date
-            }
-            // Fall back to flexible parsing if locale-aware fails
-            if let date = CSVValueParser.parseFlexibleDate(dateValue, hint: nil) {
-                return date
-            }
-            throw CSVDecodingError.typeMismatch(
-                expected: "Date (locale-aware)",
-                actual: dateValue,
-                location: location,
-            )
-        }
+        try CSVValueParser.parseDate(
+            from: trimmedValue,
+            strategy: configuration.dateDecodingStrategy,
+            codingPath: codingPath,
+        )
     }
 }

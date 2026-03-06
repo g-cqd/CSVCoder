@@ -33,7 +33,10 @@ nonisolated struct CSVSingleValueEncoder: Encoder {
     }
 
     nonisolated func unkeyedContainer() -> UnkeyedEncodingContainer {
-        fatalError("Unkeyed containers not supported for single values")
+        CSVPoisonUnkeyedEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Unkeyed containers not supported for single values"),
+            codingPath: codingPath,
+        )
     }
 
     nonisolated func singleValueContainer() -> SingleValueEncodingContainer {
@@ -151,19 +154,31 @@ nonisolated struct CSVThrowingKeyedEncodingContainer<Key: CodingKey>: KeyedEncod
         keyedBy _: NestedKey.Type,
         forKey _: Key
     ) -> KeyedEncodingContainer<NestedKey> {
-        fatalError("Nested containers are not supported")
+        KeyedEncodingContainer(CSVPoisonKeyedEncodingContainer<NestedKey>(
+            error: CSVEncodingError.unsupportedType("Nested containers are not supported"),
+            codingPath: codingPath,
+        ))
     }
 
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
-        fatalError("Nested containers are not supported")
+        CSVPoisonUnkeyedEncodingContainer(
+            error: CSVEncodingError.unsupportedType("Nested containers are not supported"),
+            codingPath: codingPath + [key],
+        )
     }
 
     mutating func superEncoder() -> Encoder {
-        fatalError("Super encoder is not supported")
+        CSVPoisonEncoder(
+            error: CSVEncodingError.unsupportedType("Super encoder is not supported"),
+            codingPath: codingPath,
+        )
     }
 
     mutating func superEncoder(forKey key: Key) -> Encoder {
-        fatalError("Super encoder is not supported")
+        CSVPoisonEncoder(
+            error: CSVEncodingError.unsupportedType("Super encoder is not supported"),
+            codingPath: codingPath + [key],
+        )
     }
 }
 
@@ -189,7 +204,7 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
     }
 
     mutating func encode(_ value: Bool) throws {
-        storage.setValue(value ? "1" : "0", forKey: currentKey)
+        storage.setValue(CSVValueFormatter.formatBool(value, strategy: configuration.boolEncodingStrategy), forKey: currentKey)
     }
 
     mutating func encode(_ value: String) throws {
@@ -325,6 +340,13 @@ nonisolated final class CSVEncodingStorage: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return values
+    }
+
+    /// Returns a consistent snapshot of keys and values under a single lock acquisition.
+    func snapshot() -> (keys: [String], values: [String: String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (orderedKeys, values)
     }
 
     func reset() {

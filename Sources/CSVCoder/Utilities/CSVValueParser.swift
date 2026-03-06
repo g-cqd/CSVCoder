@@ -105,10 +105,8 @@ enum CSVValueParser {
             return nil
 
         case .custom(let trueValues, let falseValues):
-            let lowercasedTrue = Set(trueValues.map { $0.lowercased() })
-            let lowercasedFalse = Set(falseValues.map { $0.lowercased() })
-            if lowercasedTrue.contains(lowercased) { return true }
-            if lowercasedFalse.contains(lowercased) { return false }
+            if trueValues.contains(where: { $0.lowercased() == lowercased }) { return true }
+            if falseValues.contains(where: { $0.lowercased() == lowercased }) { return false }
             return nil
         }
     }
@@ -134,15 +132,9 @@ enum CSVValueParser {
             return formatter.number(from: value)?.doubleValue
 
         case .parseStrategy(let locale):
-            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
-                return parseFlexibleDouble(value)
-            }
             return LocaleUtilities.parseDouble(value, locale: locale)
 
         case .currency(_, let locale):
-            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
-                return parseFlexibleDouble(value)
-            }
             return LocaleUtilities.parseDecimal(value, locale: locale)
                 .flatMap { Double(truncating: $0 as NSDecimalNumber) }
         }
@@ -168,17 +160,9 @@ enum CSVValueParser {
             return formatter.number(from: value)?.decimalValue
 
         case .parseStrategy(let locale):
-            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
-                guard let cleaned = normalizeNumberString(value) else { return nil }
-                return Decimal(string: cleaned)
-            }
             return LocaleUtilities.parseDecimal(value, locale: locale)
 
         case .currency(let code, let locale):
-            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
-                guard let cleaned = normalizeNumberString(value) else { return nil }
-                return Decimal(string: cleaned)
-            }
             return LocaleUtilities.parseCurrency(value, code: code, locale: locale)
         }
     }
@@ -221,6 +205,93 @@ enum CSVValueParser {
 
         cleaned = String(cleaned.filter { $0.isNumber || $0 == "." || $0 == "-" })
         return cleaned.isEmpty ? nil : cleaned
+    }
+
+    // MARK: - Date Decoding (Strategy-Based)
+
+    /// Parses a date string according to the specified decoding strategy.
+    /// Shared implementation used by both `CSVRowDecoder` and `CSVSingleValueDecoder`.
+    static func parseDate(
+        from value: String,
+        strategy: CSVDecoder.DateDecodingStrategy,
+        codingPath: [CodingKey],
+        row: Int? = nil,
+        column: String? = nil,
+    ) throws -> Date {
+        let location = CSVLocation(row: row, column: column, codingPath: codingPath)
+
+        switch strategy {
+        case .deferredToDate:
+            throw CSVDecodingError.typeMismatch(
+                expected: "Date (use a date strategy)",
+                actual: value,
+                location: location,
+            )
+
+        case .secondsSince1970:
+            guard let seconds = Double(value) else {
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value, location: location)
+            }
+            return Date(timeIntervalSince1970: seconds)
+
+        case .millisecondsSince1970:
+            guard let milliseconds = Double(value) else {
+                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value, location: location)
+            }
+            return Date(timeIntervalSince1970: milliseconds / 1000)
+
+        case .iso8601:
+            guard let date = FormatterCache.iso8601.date(from: value) else {
+                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value, location: location)
+            }
+            return date
+
+        case .formatted(let format):
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale.autoupdatingCurrent
+            formatter.timeZone = TimeZone.autoupdatingCurrent
+            guard let date = formatter.date(from: value) else {
+                throw CSVDecodingError.typeMismatch(
+                    expected: "Date with format \(format)",
+                    actual: value,
+                    location: location,
+                )
+            }
+            return date
+
+        case .custom(let closure):
+            return try closure(value)
+
+        case .flexible:
+            guard let date = parseFlexibleDate(value, hint: nil) else {
+                throw CSVDecodingError.typeMismatch(
+                    expected: "Date (no matching format found)",
+                    actual: value,
+                    location: location,
+                )
+            }
+            return date
+
+        case .flexibleWithHint(let preferred):
+            guard let date = parseFlexibleDate(value, hint: preferred) else {
+                throw CSVDecodingError.typeMismatch(
+                    expected: "Date (no matching format found)",
+                    actual: value,
+                    location: location,
+                )
+            }
+            return date
+
+        case .localeAware(let locale, let style):
+            if let date = LocaleUtilities.parseDate(value, locale: locale, style: style) {
+                return date
+            }
+            if let date = parseFlexibleDate(value, hint: nil) {
+                return date
+            }
+            throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: value, location: location)
+        }
     }
 
     // MARK: - Date Parsing

@@ -529,89 +529,13 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     private func decodeDate(from value: String, key: some CodingKey) throws -> Date {
-        let location = CSVLocation(row: rowIndex, column: key.stringValue, codingPath: codingPath + [key])
-
-        switch configuration.dateDecodingStrategy {
-        case .deferredToDate:
-            throw CSVDecodingError.typeMismatch(
-                expected: "Date (use a date strategy)",
-                actual: value,
-                location: location,
-            )
-
-        case .secondsSince1970:
-            guard let seconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp", actual: value, location: location)
-            }
-            return Date(timeIntervalSince1970: seconds)
-
-        case .millisecondsSince1970:
-            guard let milliseconds = Double(value) else {
-                throw CSVDecodingError.typeMismatch(expected: "Unix timestamp (ms)", actual: value, location: location)
-            }
-            return Date(timeIntervalSince1970: milliseconds / 1000)
-
-        case .iso8601:
-            let formatter = ISO8601DateFormatter()
-            guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value, location: location)
-            }
-            return date
-
-        case .formatted(let format):
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale.autoupdatingCurrent
-            formatter.timeZone = TimeZone.autoupdatingCurrent
-            guard let date = formatter.date(from: value) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Date with format \(format)",
-                    actual: value,
-                    location: location,
-                )
-            }
-            return date
-
-        case .custom(let closure):
-            return try closure(value)
-
-        case .flexible:
-            guard let date = CSVValueParser.parseFlexibleDate(value, hint: nil) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Date (no matching format found)",
-                    actual: value,
-                    location: location,
-                )
-            }
-            return date
-
-        case .flexibleWithHint(let preferred):
-            guard let date = CSVValueParser.parseFlexibleDate(value, hint: preferred) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "Date (no matching format found)",
-                    actual: value,
-                    location: location,
-                )
-            }
-            return date
-
-        case .localeAware(let locale, let style):
-            guard #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) else {
-                // Pre-iOS 15: use flexible parsing
-                guard let date = CSVValueParser.parseFlexibleDate(value, hint: nil) else {
-                    throw CSVDecodingError.typeMismatch(expected: "Date", actual: value, location: location)
-                }
-                return date
-            }
-            if let date = LocaleUtilities.parseDate(value, locale: locale, style: style) {
-                return date
-            }
-            // Fall back to flexible parsing if locale-aware fails
-            if let date = CSVValueParser.parseFlexibleDate(value, hint: nil) {
-                return date
-            }
-            throw CSVDecodingError.typeMismatch(expected: "Date (locale-aware)", actual: value, location: location)
-        }
+        try CSVValueParser.parseDate(
+            from: value,
+            strategy: configuration.dateDecodingStrategy,
+            codingPath: codingPath + [key],
+            row: rowIndex,
+            column: key.stringValue,
+        )
     }
 
     /// Creates a source filtered to keys with the given prefix, stripping the prefix.

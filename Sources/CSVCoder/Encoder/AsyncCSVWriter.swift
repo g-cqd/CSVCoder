@@ -43,12 +43,11 @@ actor AsyncCSVWriter {
 
     /// Writes bytes to the buffer, flushing if capacity is reached.
     func write(_ bytes: some Sequence<UInt8>) async throws {
-        for byte in bytes {
-            buffer.append(byte)
-            _totalBytesWritten += 1
-            if buffer.count >= bufferCapacity {
-                try await flush()
-            }
+        let countBefore = buffer.count
+        buffer.append(contentsOf: bytes)
+        _totalBytesWritten += buffer.count - countBefore
+        if buffer.count >= bufferCapacity {
+            try await flush()
         }
     }
 

@@ -33,8 +33,7 @@ enum CSVValueFormatter {
             return String(date.timeIntervalSince1970 * 1000)
 
         case .iso8601:
-            let formatter = ISO8601DateFormatter()
-            return formatter.string(from: date)
+            return FormatterCache.iso8601.string(from: date)
 
         case .formatted(let format):
             let formatter = makeDateFormatter(format: format)
@@ -97,12 +96,32 @@ enum CSVValueFormatter {
 
     // MARK: - Private
 
-    /// Creates a DateFormatter with the specified format string.
     private static func makeDateFormatter(format: String) -> DateFormatter {
+        FormatterCache.dateFormatter(for: format)
+    }
+}
+
+// MARK: - FormatterCache
+
+/// Caches heavyweight formatters to avoid per-call allocation.
+/// Safe because formatters are only used within single-threaded encode/decode passes.
+enum FormatterCache {
+    nonisolated(unsafe) static let iso8601 = ISO8601DateFormatter()
+
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var dateFormatters: [String: DateFormatter] = [:]
+
+    static func dateFormatter(for format: String) -> DateFormatter {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = dateFormatters[format] {
+            return cached
+        }
         let formatter = DateFormatter()
         formatter.dateFormat = format
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        dateFormatters[format] = formatter
         return formatter
     }
 }

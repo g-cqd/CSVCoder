@@ -476,7 +476,6 @@ public final class CSVDecoder: Sendable {
         from string: String,
         columnOrder: [String]?,
     ) throws -> [T] {
-        // Convert string to UTF-8 bytes and use CSVParser for consistency
         let utf8Data = Data(string.utf8)
         return try decodeRowsFromBytes(type, from: utf8Data, columnOrder: columnOrder)
     }

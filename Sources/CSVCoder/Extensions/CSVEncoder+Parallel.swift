@@ -161,8 +161,8 @@ extension CSVEncoder {
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> String {
         let data = try await encodeParallel(values, parallelConfig: parallelConfig)
-        guard let string = String(data: data, encoding: configuration.encoding) else {
-            throw CSVEncodingError.invalidOutput("Could not convert data to string using \(configuration.encoding)")
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw CSVEncodingError.invalidOutput("Could not convert data to string using UTF-8")
         }
         return string
     }

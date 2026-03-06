@@ -145,8 +145,8 @@ struct CSVEncoderParallelEncodingTests {
             let parNanos =
                 Double(parallelDuration.components.seconds) * 1e9 + Double(parallelDuration.components.attoseconds)
                 / 1e9
-            _ = seqNanos / parNanos  // speedup - suppress unused warning
-            #expect(!parallelResult.isEmpty, "Parallel encode should complete successfully")
+            let speedup = seqNanos / parNanos
+            #expect(speedup > 0.5, "Parallel encode speedup (\(speedup)x) should be reasonable")
         }
     }
 }

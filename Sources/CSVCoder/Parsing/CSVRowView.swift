@@ -15,6 +15,11 @@ import Foundation
 /// It stores byte offsets and lengths rather than string values, enabling
 /// high-performance parsing of large CSV files.
 ///
+/// - Warning: `CSVRowView` borrows a buffer owned elsewhere (typically via ``CSVParser``).
+///   The view is only valid while the underlying buffer remains alive. **Never** store a
+///   `CSVRowView` beyond the scope of the parsing closure or iteration context that
+///   produced it — doing so results in undefined behavior.
+///
 /// ## Thread Safety
 ///
 /// `CSVRowView` is **not** `Sendable` because it references a borrowed buffer
@@ -100,6 +105,7 @@ public struct CSVRowView {
     /// - Warning: The returned buffer is only valid while the parent `CSVParser`'s
     ///   data remains in scope. Do not store the buffer beyond the parsing closure.
     public func getBytes(at index: Int) -> UnsafeBufferPointer<UInt8> {
+        guard index < fieldStarts.count else { return UnsafeBufferPointer(start: nil, count: 0) }
         let start = fieldStarts[index]
         let length = fieldLengths[index]
         guard start + length <= buffer.count else { return UnsafeBufferPointer(start: nil, count: 0) }

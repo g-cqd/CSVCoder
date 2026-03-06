@@ -143,6 +143,18 @@ actor BackpressureController {
         }
     }
 
+    /// Resumes all pending waiters and resets state.
+    /// Called on stream termination to prevent continuation leaks.
+    func cancelAllWaiters() {
+        isPaused = false
+        bufferedCount = 0
+        let currentWaiters = waiters
+        waiters.removeAll()
+        for waiter in currentWaiters {
+            waiter.resume()
+        }
+    }
+
     // MARK: Private
 
     private let config: CSVDecoder.MemoryLimitConfiguration
@@ -214,10 +226,9 @@ extension CSVDecoder {
                 }
             }
 
-            // Set up consumption tracking
             continuation.onTermination = { @Sendable _ in
                 Task {
-                    await controller.recordConsumed(Int.max)  // Signal completion
+                    await controller.cancelAllWaiters()
                 }
             }
         }
