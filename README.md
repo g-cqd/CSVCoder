@@ -394,15 +394,15 @@ For CSV files with many short, simple fields, the SIMD overhead is minimal but p
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 3.3 ms | ~303K rows/s |
+| 1K rows (simple) | 3.3 ms | ~306K rows/s |
 | 10K rows (simple) | 34 ms | ~298K rows/s |
-| 100K rows (simple) | 336 ms | ~298K rows/s |
-| 1M rows (simple) | 3.46 s | ~289K rows/s |
+| 100K rows (simple) | 334 ms | ~299K rows/s |
+| 1M rows (simple) | 3.39 s | ~295K rows/s |
 | 10K rows (complex, 8 fields) | 76 ms | ~132K rows/s |
-| 10K rows (quoted fields) | 31 ms | ~323K rows/s |
-| 10K rows (50 columns wide) | 277 ms | ~36K rows/s |
+| 10K rows (quoted fields) | 31 ms | ~326K rows/s |
+| 10K rows (50 columns wide) | 268 ms | ~37K rows/s |
 | 10K rows (500-byte fields) | 105 ms | ~95K rows/s |
-| 100K rows (numeric fields) | 337 ms | ~297K rows/s |
+| 100K rows (numeric fields) | 338 ms | ~296K rows/s |
 
 ### Real-World Scenarios
 
@@ -410,42 +410,42 @@ For CSV files with many short, simple fields, the SIMD overhead is minimal but p
 |-----------|------|------------|
 | 50K orders (18 fields, optionals) | 772 ms | ~65K rows/s |
 | 100K transactions (13 fields) | 1.17 s | ~85K rows/s |
-| 100K log entries (12 fields) | 1.15 s | ~87K rows/s |
-| 10K stress-quoted (nested quotes, newlines) | 25 ms | ~393K rows/s |
-| 50K Unicode-heavy rows | 152 ms | ~329K rows/s |
-| 1K rows (10KB fields) | 170 ms | ~5.9K rows/s |
-| 1K rows (200 columns wide) | 96 ms | ~10K rows/s |
+| 100K log entries (12 fields) | 1.13 s | ~88K rows/s |
+| 10K stress-quoted (nested quotes, newlines) | 25 ms | ~394K rows/s |
+| 50K Unicode-heavy rows | 150 ms | ~333K rows/s |
+| 1K rows (10KB fields) | 169 ms | ~5.9K rows/s |
+| 1K rows (200 columns wide) | 95 ms | ~10.5K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.5 ms | ~667K rows/s |
-| 10K rows | 15 ms | ~667K rows/s |
-| 100K rows | 150 ms | ~667K rows/s |
-| 1M rows | 1.53 s | ~654K rows/s |
-| 10K rows (500-byte fields) | 97 ms | ~103K rows/s |
-| 50K orders (18 fields, optionals) | 293 ms | ~171K rows/s |
-| 100K rows to Data | 152 ms | ~658K rows/s |
-| 100K rows to String | 153 ms | ~654K rows/s |
+| 1K rows | 1.4 ms | ~719K rows/s |
+| 10K rows | 14 ms | ~725K rows/s |
+| 100K rows | 140 ms | ~714K rows/s |
+| 1M rows | 1.39 s | ~719K rows/s |
+| 10K rows (500-byte fields) | 94 ms | ~106K rows/s |
+| 50K orders (18 fields, optionals) | 251 ms | ~199K rows/s |
+| 100K rows to Data | 139 ms | ~719K rows/s |
+| 100K rows to String | 139 ms | ~719K rows/s |
 
 ### Parallel Processing
 
 | Benchmark | Sequential | Parallel | Speedup |
 |-----------|------------|----------|---------|
-| Encode 100K rows | 151 ms | 55 ms | **2.75x** |
-| Encode 100K to file | - | 60 ms | - |
-| Encode 1M rows | - | 527 ms | - |
-| Decode 100K rows | 337 ms | 264 ms | **1.28x** |
-| Decode 100K from file | - | 262 ms | - |
-| Decode 1M rows (parallel) | - | 2.63 s | **1.35x** |
+| Encode 100K rows | 136 ms | 37 ms | **3.73x** |
+| Encode 100K to file | - | 42 ms | - |
+| Encode 1M rows | - | 331 ms | - |
+| Decode 100K rows | 335 ms | 254 ms | **1.32x** |
+| Decode 100K from file | - | 254 ms | - |
+| Decode 1M rows (parallel) | - | 2.54 s | **1.32x** |
 
 ### Mixed Workloads (Real-World Simulation)
 
 | Benchmark | Time |
 |-----------|------|
 | Decode + Transform + Encode 10K | 49 ms |
-| Filter + Aggregate 100K orders | 787 ms |
+| Filter + Aggregate 100K orders | 771 ms |
 
 ### Raw High-Performance API (Codable Bypass)
 
@@ -477,18 +477,18 @@ This approach avoids allocating `struct` or `class` instances for every row, dra
 
 | Benchmark | Time | Throughput | Speedup vs Codable |
 |-----------|------|------------|-------------------|
-| Raw Parse 1M rows (Iterate Only) | 1.68 s | **~597K rows/s** | **2.06x** |
-| Raw Parse 1M rows (Iterate + String) | 1.78 s | **~560K rows/s** | **1.94x** |
-| Raw Parse 100K Quoted (Iterate Only) | 127 ms | **~786K rows/s** | - |
-| Raw Parse 100K Quoted (Iterate + String) | 161 ms | **~621K rows/s** | - |
+| Raw Parse 1M rows (Iterate Only) | 1.66 s | **~602K rows/s** | **2.04x** |
+| Raw Parse 1M rows (Iterate + String) | 1.78 s | **~562K rows/s** | **1.90x** |
+| Raw Parse 100K Quoted (Iterate Only) | 127 ms | **~787K rows/s** | - |
+| Raw Parse 100K Quoted (Iterate + String) | 155 ms | **~645K rows/s** | - |
 
 ### Special Strategies (1K rows)
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
 | snake_case key conversion | 3.4 ms | ~294K rows/s |
-| Flexible date parsing | 144 ms | ~6.9K rows/s |
-| Flexible number parsing | 212 ms | ~4.7K rows/s |
+| Flexible date parsing | 142 ms | ~7.0K rows/s |
+| Flexible number parsing | 218 ms | ~4.6K rows/s |
 
 Run benchmarks locally:
 ```bash

@@ -32,7 +32,7 @@ struct LocaleAwareDecodingTests {
     // MARK: - NumberDecodingStrategy.parseStrategy Tests
 
     @Test("ParseStrategy decodes US format numbers")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func parseStrategyUSFormat() throws {
         let csv = """
             item,price
@@ -52,7 +52,7 @@ struct LocaleAwareDecodingTests {
     }
 
     @Test("ParseStrategy decodes German format numbers")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func parseStrategyGermanFormat() throws {
         let csv = """
             item,price
@@ -72,7 +72,7 @@ struct LocaleAwareDecodingTests {
     }
 
     @Test("ParseStrategy strips currency symbols automatically")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func parseStrategyStripsCurrency() throws {
         let csv = """
             item,price
@@ -94,7 +94,7 @@ struct LocaleAwareDecodingTests {
     }
 
     @Test("ParseStrategy handles unit suffixes")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func parseStrategyStripsUnits() throws {
         let csv = """
             item,price
@@ -116,7 +116,7 @@ struct LocaleAwareDecodingTests {
     // MARK: - NumberDecodingStrategy.currency Tests
 
     @Test("Currency strategy decodes prices with symbols")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func currencyStrategyWithSymbols() throws {
         let csv = """
             item,amount
@@ -136,7 +136,7 @@ struct LocaleAwareDecodingTests {
     }
 
     @Test("Currency strategy handles European format")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func currencyStrategyEuropeanFormat() throws {
         let csv = """
             item,amount
@@ -158,7 +158,7 @@ struct LocaleAwareDecodingTests {
     // MARK: - DateDecodingStrategy.localeAware Tests
 
     @Test("LocaleAware decodes US date format")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func localeAwareUSDateFormat() throws {
         let csv = """
             event,date
@@ -182,7 +182,7 @@ struct LocaleAwareDecodingTests {
     }
 
     @Test("LocaleAware decodes UK date format")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func localeAwareUKDateFormat() throws {
         let csv = """
             event,date
@@ -206,7 +206,7 @@ struct LocaleAwareDecodingTests {
     }
 
     @Test("LocaleAware falls back to flexible parsing")
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+
     func localeAwareFallback() throws {
         let csv = """
             event,date

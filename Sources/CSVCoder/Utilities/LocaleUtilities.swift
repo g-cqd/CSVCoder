@@ -126,7 +126,6 @@ enum LocaleUtilities {
     }
 
     /// Parses a Double using Foundation's FormatStyle.ParseStrategy.
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     static func parseDouble(_ value: String, locale: Locale) -> Double? {
         let cleaned = stripCurrencyAndUnits(value)
         guard !cleaned.isEmpty else { return nil }
@@ -144,7 +143,6 @@ enum LocaleUtilities {
     }
 
     /// Parses a Decimal using Foundation's FormatStyle.ParseStrategy.
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     static func parseDecimal(_ value: String, locale: Locale) -> Decimal? {
         let cleaned = stripCurrencyAndUnits(value)
         guard !cleaned.isEmpty else { return nil }
@@ -160,7 +158,6 @@ enum LocaleUtilities {
     }
 
     /// Parses currency value, stripping the currency symbol first.
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     static func parseCurrency(_ value: String, code: String?, locale: Locale) -> Decimal? {
         let cleaned = stripCurrencyAndUnits(value)
         guard !cleaned.isEmpty else { return nil }
@@ -172,7 +169,6 @@ enum LocaleUtilities {
     // MARK: - Date Parsing
 
     /// Parses a date using locale-aware strategy.
-    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     static func parseDate(_ value: String, locale: Locale, style: CSVDecoder.DateDecodingStrategy.DateStyle) -> Date? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -209,8 +205,6 @@ enum LocaleUtilities {
     }
 
     // MARK: Private
-
-    // MARK: - Fallback Parsing (Pre-iOS 15 compatible)
 
     /// Normalizes a number string by detecting and converting decimal/grouping separators.
     /// Delegates to CSVValueParser for the actual normalization logic.

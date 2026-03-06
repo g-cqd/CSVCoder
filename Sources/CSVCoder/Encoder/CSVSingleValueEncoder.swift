@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Synchronization
 
 // MARK: - CSVSingleValueEncoder
 
@@ -310,55 +311,57 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
 // MARK: - CSVEncodingStorage
 
 /// Storage for encoded CSV values during encoding.
-/// nonisolated with thread-safe access via NSLock
+/// nonisolated with thread-safe access via Mutex
 nonisolated final class CSVEncodingStorage: @unchecked Sendable {
     // MARK: Internal
 
     func setValue(_ value: String, forKey key: String) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if values[key] == nil {
-            orderedKeys.append(key)
+        state.withLock { state in
+            if state.values[key] == nil {
+                state.orderedKeys.append(key)
+            }
+            state.values[key] = value
         }
-        values[key] = value
     }
 
     func getValue(forKey key: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return values[key]
+        state.withLock { state in
+            state.values[key]
+        }
     }
 
     func allKeys() -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return orderedKeys
+        state.withLock { state in
+            state.orderedKeys
+        }
     }
 
     func allValues() -> [String: String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return values
+        state.withLock { state in
+            state.values
+        }
     }
 
     /// Returns a consistent snapshot of keys and values under a single lock acquisition.
     func snapshot() -> (keys: [String], values: [String: String]) {
-        lock.lock()
-        defer { lock.unlock() }
-        return (orderedKeys, values)
+        state.withLock { state in
+            (state.orderedKeys, state.values)
+        }
     }
 
     func reset() {
-        lock.lock()
-        defer { lock.unlock() }
-        values.removeAll()
-        orderedKeys.removeAll()
+        state.withLock { state in
+            state.values.removeAll()
+            state.orderedKeys.removeAll()
+        }
     }
 
     // MARK: Private
 
-    private var values: [String: String] = [:]
-    private var orderedKeys: [String] = []
-    private let lock = NSLock()
+    private struct State {
+        var values: [String: String] = [:]
+        var orderedKeys: [String] = []
+    }
+
+    private let state = Mutex(State())
 }

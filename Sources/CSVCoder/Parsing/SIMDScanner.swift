@@ -51,11 +51,7 @@ enum SWARUtils: Sendable {
     /// Uses unaligned load to avoid alignment requirements.
     @inline(__always)
     static func load(_ buffer: UnsafePointer<UInt8>) -> UInt64 {
-        var result: UInt64 = 0
-        withUnsafeMutableBytes(of: &result) { dest in
-            dest.copyMemory(from: UnsafeRawBufferPointer(start: buffer, count: 8))
-        }
-        return result
+        UnsafeRawPointer(buffer).loadUnaligned(as: UInt64.self)
     }
 }
 
@@ -65,72 +61,7 @@ enum SWARUtils: Sendable {
 /// Package-internal for use by SIMDScanner and its extensions.
 @inline(__always)
 func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
-    SIMD64<UInt8>(
-        buffer[0],
-        buffer[1],
-        buffer[2],
-        buffer[3],
-        buffer[4],
-        buffer[5],
-        buffer[6],
-        buffer[7],
-        buffer[8],
-        buffer[9],
-        buffer[10],
-        buffer[11],
-        buffer[12],
-        buffer[13],
-        buffer[14],
-        buffer[15],
-        buffer[16],
-        buffer[17],
-        buffer[18],
-        buffer[19],
-        buffer[20],
-        buffer[21],
-        buffer[22],
-        buffer[23],
-        buffer[24],
-        buffer[25],
-        buffer[26],
-        buffer[27],
-        buffer[28],
-        buffer[29],
-        buffer[30],
-        buffer[31],
-        buffer[32],
-        buffer[33],
-        buffer[34],
-        buffer[35],
-        buffer[36],
-        buffer[37],
-        buffer[38],
-        buffer[39],
-        buffer[40],
-        buffer[41],
-        buffer[42],
-        buffer[43],
-        buffer[44],
-        buffer[45],
-        buffer[46],
-        buffer[47],
-        buffer[48],
-        buffer[49],
-        buffer[50],
-        buffer[51],
-        buffer[52],
-        buffer[53],
-        buffer[54],
-        buffer[55],
-        buffer[56],
-        buffer[57],
-        buffer[58],
-        buffer[59],
-        buffer[60],
-        buffer[61],
-        buffer[62],
-        buffer[63],
-    )
+    UnsafeRawPointer(buffer).loadUnaligned(as: SIMD64<UInt8>.self)
 }
 
 // MARK: - SIMDScanner

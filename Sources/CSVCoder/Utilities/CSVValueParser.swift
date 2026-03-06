@@ -241,10 +241,11 @@ enum CSVValueParser {
             return Date(timeIntervalSince1970: milliseconds / 1000)
 
         case .iso8601:
-            guard let date = FormatterCache.iso8601.date(from: value) else {
+            do {
+                return try Date.ISO8601FormatStyle().parse(value)
+            } catch {
                 throw CSVDecodingError.typeMismatch(expected: "ISO8601 date", actual: value, location: location)
             }
-            return date
 
         case .formatted(let format):
             let formatter = DateFormatter()
