@@ -51,8 +51,7 @@ struct CSVConcurrencyStressTests {
         #expect(results.count == taskCount)
 
         for csv in results {
-            let lines = csv
-                .components(separatedBy: "\n")
+            let lines = csv.components(separatedBy: "\n")
                 .filter { !$0.isEmpty }
 
             // First line must be the header.

@@ -155,10 +155,12 @@ nonisolated struct CSVThrowingKeyedEncodingContainer<Key: CodingKey>: KeyedEncod
         keyedBy _: NestedKey.Type,
         forKey _: Key
     ) -> KeyedEncodingContainer<NestedKey> {
-        KeyedEncodingContainer(CSVPoisonKeyedEncodingContainer<NestedKey>(
-            error: CSVEncodingError.unsupportedType("Nested containers are not supported"),
-            codingPath: codingPath,
-        ))
+        KeyedEncodingContainer(
+            CSVPoisonKeyedEncodingContainer<NestedKey>(
+                error: CSVEncodingError.unsupportedType("Nested containers are not supported"),
+                codingPath: codingPath,
+            )
+        )
     }
 
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
@@ -205,7 +207,8 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
     }
 
     mutating func encode(_ value: Bool) throws {
-        storage.setValue(CSVValueFormatter.formatBool(value, strategy: configuration.boolEncodingStrategy), forKey: currentKey)
+        let formatted = CSVValueFormatter.formatBool(value, strategy: configuration.boolEncodingStrategy)
+        storage.setValue(formatted, forKey: currentKey)
     }
 
     mutating func encode(_ value: String) throws {

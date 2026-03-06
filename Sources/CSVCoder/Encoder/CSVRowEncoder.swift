@@ -234,12 +234,14 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     ) -> KeyedEncodingContainer<NestedKey> {
         switch configuration.nestedTypeEncodingStrategy {
         case .error:
-            return KeyedEncodingContainer(CSVPoisonKeyedEncodingContainer<NestedKey>(
-                error: CSVEncodingError.unsupportedType(
-                    "Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable."
-                ),
-                codingPath: codingPath + [key],
-            ))
+            return KeyedEncodingContainer(
+                CSVPoisonKeyedEncodingContainer<NestedKey>(
+                    error: CSVEncodingError.unsupportedType(
+                        "Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable."
+                    ),
+                    codingPath: codingPath + [key],
+                )
+            )
 
         case .flatten(let separator):
             let nestedPrefix = prefixedKey(key) + separator
@@ -253,12 +255,14 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
 
         case .codable,
             .json:
-            return KeyedEncodingContainer(CSVPoisonKeyedEncodingContainer<NestedKey>(
-                error: CSVEncodingError.unsupportedType(
-                    "JSON/Codable nested encoding requires using encode(_:forKey:) with the nested value directly"
-                ),
-                codingPath: codingPath + [key],
-            ))
+            return KeyedEncodingContainer(
+                CSVPoisonKeyedEncodingContainer<NestedKey>(
+                    error: CSVEncodingError.unsupportedType(
+                        "JSON/Codable nested encoding requires using encode(_:forKey:) with the nested value directly"
+                    ),
+                    codingPath: codingPath + [key],
+                )
+            )
         }
     }
 
@@ -299,12 +303,16 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     mutating func encodeIfPresent(_ value: Double?, forKey key: Key) throws {
-        let formatted = try value.map { try CSVValueFormatter.formatNumber($0, strategy: configuration.numberEncodingStrategy) }
+        let formatted = try value.map {
+            try CSVValueFormatter.formatNumber($0, strategy: configuration.numberEncodingStrategy)
+        }
         storage.setValue(formatted ?? "", forKey: prefixedKey(key))
     }
 
     mutating func encodeIfPresent(_ value: Float?, forKey key: Key) throws {
-        let formatted = try value.map { try CSVValueFormatter.formatNumber(Double($0), strategy: configuration.numberEncodingStrategy) }
+        let formatted = try value.map {
+            try CSVValueFormatter.formatNumber(Double($0), strategy: configuration.numberEncodingStrategy)
+        }
         storage.setValue(formatted ?? "", forKey: prefixedKey(key))
     }
 
