@@ -3,7 +3,7 @@
 //  CSVCoder
 //
 //  Parallel decoding extension for multi-core CSV processing.
-//  Uses TaskGroup for concurrent chunk decoding.
+//  Uses a pipeline: sequential parse → parallel Codable decode.
 //
 
 import Foundation
@@ -44,183 +44,27 @@ extension CSVDecoder {
     }
 }
 
-// MARK: - CSVChunk
-
-/// Represents a chunk of CSV data with its boundaries.
-struct CSVChunk: Sendable {
-    let index: Int
-    let startOffset: Int
-    let endOffset: Int
-    let isFirstChunk: Bool
-}
-
-// MARK: - ChunkBoundaryFinder
-
-/// Finds safe chunk boundaries in CSV data, avoiding splits in quoted fields.
-struct ChunkBoundaryFinder: Sendable {
-    // MARK: Internal
-
-    /// Finds chunks in the given data, ensuring boundaries are at row ends.
-    static func findChunks(
-        in reader: MemoryMappedReader,
-        targetChunkSize: Int,
-        skipHeader: Bool,
-    ) -> [CSVChunk] {
-        let totalSize = reader.count
-        guard totalSize > 0 else { return [] }
-
-        var chunks: [CSVChunk] = []
-        var currentOffset = 0
-        var chunkIndex = 0
-
-        // Skip header row if needed
-        var headerEndOffset = 0
-        if skipHeader {
-            headerEndOffset = reader.withUnsafeBytes { buffer in
-                guard let baseAddress = buffer.baseAddress else { return 0 }
-                let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
-                return findNextRowBoundary(bytes: bytes, count: totalSize, startingAt: 0)
-            }
-            currentOffset = headerEndOffset
-        }
-
-        while currentOffset < totalSize {
-            let isFirst = chunkIndex == 0
-            var targetEnd = min(currentOffset + targetChunkSize, totalSize)
-
-            // If not at end, find safe boundary
-            if targetEnd < totalSize {
-                targetEnd = reader.withUnsafeBytes { buffer in
-                    guard let baseAddress = buffer.baseAddress else { return targetEnd }
-                    let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
-                    return findSafeChunkBoundary(bytes: bytes, count: totalSize, target: targetEnd)
-                }
-            }
-
-            chunks.append(
-                CSVChunk(
-                    index: chunkIndex,
-                    startOffset: currentOffset,
-                    endOffset: targetEnd,
-                    isFirstChunk: isFirst,
-                )
-            )
-
-            currentOffset = targetEnd
-            chunkIndex += 1
-        }
-
-        return chunks
-    }
-
-    // MARK: Private
-
-    private static let quote: UInt8 = 0x22
-    private static let lf: UInt8 = 0x0A
-    private static let cr: UInt8 = 0x0D
-
-    /// Finds the next row boundary after the given offset.
-    private static func findNextRowBoundary(
-        bytes: UnsafePointer<UInt8>,
-        count: Int,
-        startingAt offset: Int,
-    ) -> Int {
-        var pos = offset
-        var inQuotes = false
-
-        while pos < count {
-            let byte = bytes[pos]
-
-            if byte == quote {
-                inQuotes.toggle()
-            } else if !inQuotes {
-                if byte == lf {
-                    return pos + 1
-                } else if byte == cr {
-                    // CRLF or lone CR
-                    if pos + 1 < count, bytes[pos + 1] == lf {
-                        return pos + 2
-                    }
-                    return pos + 1
-                }
-            }
-            pos += 1
-        }
-
-        return count
-    }
-
-    /// Finds a safe chunk boundary near the target offset.
-    /// Scans forward from target to find a row boundary not inside quotes.
-    private static func findSafeChunkBoundary(
-        bytes: UnsafePointer<UInt8>,
-        count: Int,
-        target: Int,
-    ) -> Int {
-        // Scan backward to find quote state at target
-        var inQuotes = false
-        var scanPos = 0
-
-        // Use SIMD to quickly count quotes up to target
-        let structuralPositions = SIMDScanner.scanStructural(
-            buffer: bytes,
-            count: min(target + 4096, count),  // Scan slightly past target
-            delimiter: 0x2C,
-        )
-
-        // Process structural positions to determine quote state at target
-        for pos in structuralPositions {
-            if pos.offset >= target { break }
-            if pos.isQuote {
-                inQuotes.toggle()
-            }
-        }
-
-        // Now scan forward from target to find safe boundary
-        scanPos = target
-        while scanPos < count {
-            let byte = bytes[scanPos]
-
-            if byte == quote {
-                inQuotes.toggle()
-            } else if !inQuotes {
-                if byte == lf {
-                    return scanPos + 1
-                } else if byte == cr {
-                    if scanPos + 1 < count, bytes[scanPos + 1] == lf {
-                        return scanPos + 2
-                    }
-                    return scanPos + 1
-                }
-            }
-            scanPos += 1
-        }
-
-        return count
-    }
-}
-
 // MARK: - Parallel Decoding Extension
 
 extension CSVDecoder {
     /// Decodes CSV data in parallel using multiple cores.
-    /// Splits file into chunks and decodes each chunk concurrently.
+    ///
+    /// Uses a pipeline architecture for optimal throughput:
+    /// 1. **Sequential parse**: SIMD-accelerated parsing extracts string fields (memory-bound, fast)
+    /// 2. **Parallel decode**: Codable decode runs concurrently across cores (CPU-bound)
     ///
     /// - Parameters:
     ///   - type: The array type to decode.
     ///   - url: The file URL to read CSV data from.
     ///   - parallelConfig: Configuration for parallel processing.
     /// - Returns: An array of all decoded values in original order.
-    ///
-    /// - Note: For ordered results, use `preserveOrder: true` (default).
-    ///         For maximum throughput, set `preserveOrder: false`.
     public func decodeParallel<T: Decodable & Sendable>(
         _ type: [T].Type,
         from url: URL,
         parallelConfig: ParallelConfiguration = ParallelConfiguration(),
     ) async throws -> [T] {
-        let reader = try MemoryMappedReader(url: url)
-        return try await decodeParallel(type, reader: reader, parallelConfig: parallelConfig)
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return try await decodeParallel(type, from: data, parallelConfig: parallelConfig)
     }
 
     /// Decodes CSV Data in parallel using multiple cores.
@@ -229,242 +73,212 @@ extension CSVDecoder {
         from data: Data,
         parallelConfig: ParallelConfiguration = ParallelConfiguration(),
     ) async throws -> [T] {
-        let reader = MemoryMappedReader(data: data)
-        return try await decodeParallel(type, reader: reader, parallelConfig: parallelConfig)
-    }
-
-    private func decodeParallel<T: Decodable & Sendable>(
-        _ type: [T].Type,
-        reader: MemoryMappedReader,
-        parallelConfig: ParallelConfiguration,
-    ) async throws -> [T] {
-        // Extract headers first
-        let headers = try extractHeaders(from: reader)
-
-        // Build header map
-        var headerMap: [String: Int] = [:]
-        for (index, header) in headers.enumerated() {
-            headerMap[header] = index
+        // For single core or small data, use the regular decode path directly
+        // to avoid intermediate string extraction overhead
+        guard parallelConfig.parallelism > 1 else {
+            return try decodeRowsFromBytes(type, from: data, columnOrder: nil)
         }
 
-        // Find chunks
-        let chunks = ChunkBoundaryFinder.findChunks(
-            in: reader,
-            targetChunkSize: parallelConfig.chunkSize,
-            skipHeader: configuration.hasHeaders,
-        )
+        // Phase 1: Sequential parse — extract string rows (SIMD-fast, memory-bound)
+        let (headerMap, rows) = try parseToStringRows(data: data)
 
-        guard !chunks.isEmpty else { return [] }
+        guard !rows.isEmpty else { return [] }
 
-        // Decode chunks in parallel
-        let config = configuration
-
-        guard parallelConfig.preserveOrder else {
-            return try await decodeChunksUnordered(
-                chunks: chunks,
-                reader: reader,
-                headers: headers,
-                headerMap: headerMap,
-                config: config,
-                parallelism: parallelConfig.parallelism,
-            )
+        // For small datasets, skip parallelism overhead
+        guard rows.count > 500 else {
+            return try decodeStringRowsSequential(rows, headerMap: headerMap)
         }
-        return try await decodeChunksOrdered(
-            chunks: chunks,
-            reader: reader,
-            headers: headers,
+
+        // Phase 2: Parallel Codable decode (CPU-bound, scales with cores)
+        return try await decodeStringRowsParallel(
+            rows,
             headerMap: headerMap,
-            config: config,
             parallelism: parallelConfig.parallelism,
+            preserveOrder: parallelConfig.preserveOrder,
         )
     }
 
-    private func extractHeaders(from reader: MemoryMappedReader) throws -> [String] {
-        reader.withUnsafeBytes { buffer -> [String] in
-            guard let baseAddress = buffer.baseAddress else { return [] }
-            let bytes = UnsafeBufferPointer(
-                start: baseAddress.assumingMemoryBound(to: UInt8.self),
-                count: reader.count,
-            )
+    // MARK: - Phase 1: Sequential Parse
 
-            // Handle UTF-8 BOM
-            let startOffset = CSVUtilities.bomOffset(in: bytes)
+    /// Parses CSV data into string rows. Runs sequentially since parsing
+    /// is memory-bound and already SIMD-accelerated.
+    private func parseToStringRows(
+        data: Data,
+    ) throws -> (headerMap: [String: Int], rows: [[String]]) {
+        let encoding = configuration.encoding
+        let isASCIICompatible = CSVUtilities.isASCIICompatible(encoding)
 
-            let adjustedBytes = UnsafeBufferPointer(
-                start: bytes.baseAddress?.advanced(by: startOffset),
-                count: bytes.count - startOffset,
-            )
+        let effectiveData: Data
+        if !isASCIICompatible {
+            guard let transcoded = CSVUtilities.transcodeToUTF8(data, from: encoding) else {
+                throw CSVDecodingError.parsingError(
+                    "Failed to transcode data from \(encoding) to UTF-8",
+                    line: nil,
+                    column: nil,
+                )
+            }
+            effectiveData = transcoded
+        } else {
+            effectiveData = data
+        }
 
+        return try effectiveData.withUnsafeBytes { buffer in
+            guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else {
+                return ([:], [])
+            }
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
-            let parser = CSVParser(buffer: adjustedBytes, delimiter: delimiter)
-            var iterator = parser.makeIterator()
+            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
 
-            guard let firstRow = iterator.next() else {
-                return []
-            }
+            var allRows: [[String]] = []
+            var headers: [String] = []
+            var headerMap: [String: Int] = [:]
+            var isFirstRow = true
 
-            // Extract strings from CSVRowView
-            var rawHeaders: [String] = []
-            rawHeaders.reserveCapacity(firstRow.count)
-            for i in 0 ..< firstRow.count {
-                if let s = firstRow.string(at: i) {
-                    rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
-                } else {
-                    rawHeaders.append("column\(i)")
+            for rowView in parser {
+                if isFirstRow {
+                    isFirstRow = false
+
+                    // Extract headers
+                    var rawHeaders: [String] = []
+                    rawHeaders.reserveCapacity(rowView.count)
+                    for i in 0 ..< rowView.count {
+                        if let s = rowView.string(at: i) {
+                            rawHeaders.append(
+                                configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s
+                            )
+                        } else {
+                            rawHeaders.append("column\(i)")
+                        }
+                    }
+                    headers = resolveHeaders(
+                        rawHeaders: rawHeaders,
+                        columnOrder: nil,
+                        columnCount: rowView.count,
+                    )
+                    for (index, header) in headers.enumerated() {
+                        headerMap[header] = index
+                    }
+
+                    // If no headers config, this row is data too
+                    if !configuration.hasHeaders {
+                        let row = extractStringRow(from: rowView, fieldCount: headers.count)
+                        allRows.append(row)
+                    }
+                    continue
                 }
+
+                let row = extractStringRow(from: rowView, fieldCount: headers.count)
+                allRows.append(row)
             }
 
-            // Use shared header resolution
-            return resolveHeaders(
-                rawHeaders: rawHeaders,
-                columnOrder: nil,
-                columnCount: firstRow.count,
-            )
+            return (headerMap, allRows)
         }
     }
 
-    private func decodeChunksOrdered<T: Decodable & Sendable>(
-        chunks: [CSVChunk],
-        reader: MemoryMappedReader,
-        headers: [String],
+    /// Extracts string values from a CSVRowView into a flat array.
+    @inline(__always)
+    private func extractStringRow(from rowView: CSVRowView, fieldCount: Int) -> [String] {
+        var row: [String] = []
+        row.reserveCapacity(fieldCount)
+        for i in 0 ..< rowView.count {
+            if let s = rowView.string(at: i) {
+                row.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
+            } else {
+                row.append("")
+            }
+        }
+        return row
+    }
+
+    // MARK: - Phase 2: Parallel Decode
+
+    /// Builds a `[String: String]` dictionary from header map and field array.
+    @inline(__always)
+    private static func buildRowDict(
+        fields: some RandomAccessCollection<String>,
         headerMap: [String: Int],
-        config: Configuration,
+    ) -> [String: String] {
+        var dict: [String: String] = [:]
+        dict.reserveCapacity(headerMap.count)
+        for (key, columnIndex) in headerMap {
+            if columnIndex < fields.count {
+                dict[key] = fields[fields.index(fields.startIndex, offsetBy: columnIndex)]
+            }
+        }
+        return dict
+    }
+
+    /// Decodes pre-parsed string rows in parallel using TaskGroup.
+    private func decodeStringRowsParallel<T: Decodable & Sendable>(
+        _ rows: [[String]],
+        headerMap: [String: Int],
         parallelism: Int,
+        preserveOrder: Bool,
     ) async throws -> [T] {
-        // Use TaskGroup with indexed results for ordering
+        let config = configuration
+        let chunkCount = min(parallelism, rows.count)
+        let chunkSize = (rows.count + chunkCount - 1) / chunkCount
+
         typealias ChunkResult = (index: Int, values: [T])
 
         let results: [ChunkResult] = try await withThrowingTaskGroup(of: ChunkResult.self) { group in
-            var results: [ChunkResult] = []
-            results.reserveCapacity(chunks.count)
+            var collected: [ChunkResult] = []
+            collected.reserveCapacity(chunkCount)
 
-            // Limit concurrency by adding tasks in batches
-            var chunkIterator = chunks.makeIterator()
-            var activeTasks = 0
+            for chunkIndex in 0 ..< chunkCount {
+                let start = chunkIndex * chunkSize
+                let end = min(start + chunkSize, rows.count)
+                let slice = rows[start ..< end]
 
-            // Add initial batch of tasks
-            while activeTasks < parallelism, let chunk = chunkIterator.next() {
                 group.addTask {
-                    let values: [T] = try Self.decodeChunk(
-                        chunk: chunk,
-                        reader: reader,
-                        headers: headers,
-                        headerMap: headerMap,
-                        config: config,
-                    )
-                    return (chunk.index, values)
+                    var decoded: [T] = []
+                    decoded.reserveCapacity(slice.count)
+
+                    for (localIndex, fields) in slice.enumerated() {
+                        let dict = Self.buildRowDict(fields: fields, headerMap: headerMap)
+                        let decoder = CSVRowDecoder(
+                            row: dict,
+                            configuration: config,
+                            codingPath: [],
+                            rowIndex: start + localIndex + 1,
+                        )
+                        try decoded.append(T(from: decoder))
+                    }
+                    return (chunkIndex, decoded)
                 }
-                activeTasks += 1
             }
 
-            // Process results and add new tasks
             for try await result in group {
-                results.append(result)
-                if let nextChunk = chunkIterator.next() {
-                    group.addTask {
-                        let values: [T] = try Self.decodeChunk(
-                            chunk: nextChunk,
-                            reader: reader,
-                            headers: headers,
-                            headerMap: headerMap,
-                            config: config,
-                        )
-                        return (nextChunk.index, values)
-                    }
-                }
+                collected.append(result)
             }
-
-            return results
+            return collected
         }
 
-        // Sort by chunk index and flatten
-        return results.sorted { $0.index < $1.index }.flatMap(\.values)
-    }
-
-    private func decodeChunksUnordered<T: Decodable & Sendable>(
-        chunks: [CSVChunk],
-        reader: MemoryMappedReader,
-        headers: [String],
-        headerMap: [String: Int],
-        config: Configuration,
-        parallelism: Int,
-    ) async throws -> [T] {
-        // Unordered collection for maximum throughput
-        var allValues: [T] = []
-
-        try await withThrowingTaskGroup(of: [T].self) { group in
-            var chunkIterator = chunks.makeIterator()
-            var activeTasks = 0
-
-            while activeTasks < parallelism, let chunk = chunkIterator.next() {
-                group.addTask {
-                    try Self.decodeChunk(
-                        chunk: chunk,
-                        reader: reader,
-                        headers: headers,
-                        headerMap: headerMap,
-                        config: config,
-                    )
-                }
-                activeTasks += 1
-            }
-
-            for try await values in group {
-                allValues.append(contentsOf: values)
-                if let nextChunk = chunkIterator.next() {
-                    group.addTask {
-                        try Self.decodeChunk(
-                            chunk: nextChunk,
-                            reader: reader,
-                            headers: headers,
-                            headerMap: headerMap,
-                            config: config,
-                        )
-                    }
-                }
-            }
+        if preserveOrder {
+            return results.sorted { $0.index < $1.index }.flatMap(\.values)
         }
-
-        return allValues
+        return results.flatMap(\.values)
     }
 
-    private static func decodeChunk<T: Decodable>(
-        chunk: CSVChunk,
-        reader: MemoryMappedReader,
-        headers: [String],
+    /// Sequential decode fallback for small datasets.
+    private func decodeStringRowsSequential<T: Decodable>(
+        _ rows: [[String]],
         headerMap: [String: Int],
-        config: Configuration,
     ) throws -> [T] {
-        try reader.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else { return [] }
-            let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
+        var results: [T] = []
+        results.reserveCapacity(rows.count)
 
-            // Create a view into the chunk
-            let chunkBytes = UnsafeBufferPointer(
-                start: bytes.advanced(by: chunk.startOffset),
-                count: chunk.endOffset - chunk.startOffset,
+        for (index, fields) in rows.enumerated() {
+            let dict = Self.buildRowDict(fields: fields, headerMap: headerMap)
+            let decoder = CSVRowDecoder(
+                row: dict,
+                configuration: configuration,
+                codingPath: [],
+                rowIndex: index + 1,
             )
-
-            let delimiter = config.delimiter.asciiValue ?? 0x2C
-            let parser = CSVParser(buffer: chunkBytes, delimiter: delimiter)
-            let rows = parser.parse()
-
-            // Decode rows
-            var results: [T] = []
-            results.reserveCapacity(rows.count)
-
-            for (index, rowView) in rows.enumerated() {
-                let decoder = CSVRowDecoder(
-                    view: rowView,
-                    headerMap: headerMap,
-                    configuration: config,
-                    codingPath: [],
-                    rowIndex: chunk.index * 1000 + index,  // Approximate row index
-                )
-                try results.append(T(from: decoder))
-            }
-            return results
+            try results.append(T(from: decoder))
         }
+        return results
     }
 }
 
@@ -487,69 +301,59 @@ extension CSVDecoder {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let reader = try MemoryMappedReader(url: url)
-                    let headers = try self.extractHeaders(from: reader)
+                    let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                    let (headerMap, rows) = try self.parseToStringRows(data: data)
 
-                    let headerMap = headers.enumerated().reduce(into: [String: Int]()) { result, element in
-                        result[element.element] = element.offset
+                    guard !rows.isEmpty else {
+                        continuation.finish()
+                        return
                     }
 
-                    let chunks = ChunkBoundaryFinder.findChunks(
-                        in: reader,
-                        targetChunkSize: parallelConfig.chunkSize,
-                        skipHeader: self.configuration.hasHeaders,
-                    )
-
                     let config = self.configuration
+                    let chunkCount = min(parallelConfig.parallelism, rows.count)
+                    let chunkSize = (rows.count + chunkCount - 1) / chunkCount
 
-                    // Decode and yield batches
                     try await withThrowingTaskGroup(of: (Int, [T]).self) { group in
-                        var chunkIterator = chunks.makeIterator()
-                        var activeTasks = 0
                         var pendingResults: [Int: [T]] = [:]
                         var nextExpectedIndex = 0
 
-                        // Add initial tasks
-                        while activeTasks < parallelConfig.parallelism,
-                            let chunk = chunkIterator.next()
-                        {
+                        for chunkIndex in 0 ..< chunkCount {
+                            let start = chunkIndex * chunkSize
+                            let end = min(start + chunkSize, rows.count)
+                            let slice = Array(rows[start ..< end])
+
                             group.addTask {
-                                let values: [T] = try Self.decodeChunk(
-                                    chunk: chunk,
-                                    reader: reader,
-                                    headers: headers,
-                                    headerMap: headerMap,
-                                    config: config,
-                                )
-                                return (chunk.index, values)
+                                var decoded: [T] = []
+                                decoded.reserveCapacity(slice.count)
+                                for (localIndex, fields) in slice.enumerated() {
+                                    var dict: [String: String] = [:]
+                                    dict.reserveCapacity(headerMap.count)
+                                    for (key, columnIndex) in headerMap {
+                                        if columnIndex < fields.count {
+                                            dict[key] = fields[columnIndex]
+                                        }
+                                    }
+                                    let decoder = CSVRowDecoder(
+                                        row: dict,
+                                        configuration: config,
+                                        codingPath: [],
+                                        rowIndex: start + localIndex + 1,
+                                    )
+                                    try decoded.append(T(from: decoder))
+                                }
+                                return (chunkIndex, decoded)
                             }
-                            activeTasks += 1
                         }
 
                         for try await (index, values) in group {
                             if parallelConfig.preserveOrder {
                                 pendingResults[index] = values
-
-                                // Yield in order
                                 while let batch = pendingResults.removeValue(forKey: nextExpectedIndex) {
                                     continuation.yield(batch)
                                     nextExpectedIndex += 1
                                 }
                             } else {
                                 continuation.yield(values)
-                            }
-
-                            if let nextChunk = chunkIterator.next() {
-                                group.addTask {
-                                    let values: [T] = try Self.decodeChunk(
-                                        chunk: nextChunk,
-                                        reader: reader,
-                                        headers: headers,
-                                        headerMap: headerMap,
-                                        config: config,
-                                    )
-                                    return (nextChunk.index, values)
-                                }
                             }
                         }
 

@@ -481,7 +481,7 @@ public final class CSVDecoder: Sendable {
     }
 
     /// Optimized zero-copy decoding from Data.
-    private func decodeRowsFromBytes<T: Decodable>(
+    func decodeRowsFromBytes<T: Decodable>(
         _ type: [T].Type,
         from data: Data,
         columnOrder: [String]?,

@@ -63,11 +63,11 @@ for try await batch in encoder.encodeParallelBatched(
 
 ## Performance Characteristics
 
-| Dataset Size | Sequential | Parallel (8 cores) | Speedup |
-|--------------|------------|-------------------|---------|
-| 10K rows     | 17 ms      | 17 ms             | ~1.0x   |
-| 100K rows    | 170 ms     | 83 ms             | ~2.0x   |
-| 1M rows      | 1.7 s      | 0.4 s             | ~4.0x   |
+| Dataset Size | Sequential | Parallel (10 cores) | Speedup |
+|--------------|------------|---------------------|---------|
+| 10K rows     | 15 ms      | 15 ms               | ~1.0x   |
+| 100K rows    | 151 ms     | 55 ms               | ~2.8x   |
+| 1M rows      | 1.5 s      | 527 ms              | ~2.9x   |
 
 Parallel encoding benefits increase with dataset size due to reduced per-chunk overhead.
 

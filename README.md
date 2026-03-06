@@ -6,7 +6,6 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 
 - **Type-safe CSV encoding/decoding** via Swift's `Codable` protocol
 - **Zero-boilerplate macros** (`@CSVIndexed`, `@CSVColumn`) for headerless CSV
-- **Multi-encoding support** (UTF-8, ISO-8859-1, Windows-1252, UTF-16, UTF-32)
 - **Streaming encoding/decoding** for O(1) memory with large files
 - **Parallel encoding/decoding** for multi-core performance
 - **Smart error suggestions** with typo detection and strategy hints
@@ -20,6 +19,7 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 - **Optional value handling** with configurable nil encoding
 - **SIMD-accelerated** parsing and field scanning
 - **Thread-safe** with `Sendable` conformance
+- **Safe error handling** — no `fatalError()` calls; all unsupported operations throw
 - **Swift 6.2 Approachable Concurrency** compatible with `nonisolated` types
 
 ## Requirements
@@ -86,11 +86,12 @@ let people = try decoder.decode([Person].self, from: csvData)
 
 ```swift
 let config = CSVEncoder.Configuration(
-    delimiter: ";",                           // Use semicolon
-    includeHeaders: true,                     // Include header row
+    delimiter: ";",                           // Use semicolon (must be ASCII)
+    hasHeaders: true,                         // Include header row
     dateEncodingStrategy: .iso8601,           // ISO 8601 dates
     nilEncodingStrategy: .emptyString,        // Empty string for nil
-    lineEnding: .crlf                         // Windows line endings
+    lineEnding: .crlf,                        // Windows line endings
+    includesTrailingNewline: true             // Add newline after last row
 )
 
 let encoder = CSVEncoder(configuration: config)
@@ -393,58 +394,58 @@ For CSV files with many short, simple fields, the SIMD overhead is minimal but p
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 3.2 ms | ~313K rows/s |
-| 10K rows (simple) | 32 ms | ~313K rows/s |
-| 100K rows (simple) | 326 ms | ~307K rows/s |
-| 1M rows (simple) | 3.29 s | ~304K rows/s |
-| 10K rows (complex, 8 fields) | 74 ms | ~135K rows/s |
-| 10K rows (quoted fields) | 30 ms | ~333K rows/s |
-| 10K rows (50 columns wide) | 259 ms | ~39K rows/s |
-| 10K rows (500-byte fields) | 96 ms | ~104K rows/s |
-| 100K rows (numeric fields) | 329 ms | ~304K rows/s |
+| 1K rows (simple) | 3.3 ms | ~303K rows/s |
+| 10K rows (simple) | 34 ms | ~298K rows/s |
+| 100K rows (simple) | 336 ms | ~298K rows/s |
+| 1M rows (simple) | 3.46 s | ~289K rows/s |
+| 10K rows (complex, 8 fields) | 76 ms | ~132K rows/s |
+| 10K rows (quoted fields) | 31 ms | ~323K rows/s |
+| 10K rows (50 columns wide) | 277 ms | ~36K rows/s |
+| 10K rows (500-byte fields) | 105 ms | ~95K rows/s |
+| 100K rows (numeric fields) | 337 ms | ~297K rows/s |
 
 ### Real-World Scenarios
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 50K orders (18 fields, optionals) | 765 ms | ~65K rows/s |
-| 100K transactions (13 fields) | 1.15 s | ~87K rows/s |
-| 100K log entries (12 fields) | 1.11 s | ~90K rows/s |
-| 10K stress-quoted (nested quotes, newlines) | 25 ms | ~400K rows/s |
-| 50K Unicode-heavy rows | 149 ms | ~336K rows/s |
-| 1K rows (10KB fields) | 154 ms | ~6.5K rows/s |
-| 1K rows (200 columns wide) | 91 ms | ~11K rows/s |
+| 50K orders (18 fields, optionals) | 772 ms | ~65K rows/s |
+| 100K transactions (13 fields) | 1.17 s | ~85K rows/s |
+| 100K log entries (12 fields) | 1.15 s | ~87K rows/s |
+| 10K stress-quoted (nested quotes, newlines) | 25 ms | ~393K rows/s |
+| 50K Unicode-heavy rows | 152 ms | ~329K rows/s |
+| 1K rows (10KB fields) | 170 ms | ~5.9K rows/s |
+| 1K rows (200 columns wide) | 96 ms | ~10K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.6 ms | ~625K rows/s |
-| 10K rows | 16 ms | ~625K rows/s |
-| 100K rows | 165 ms | ~606K rows/s |
-| 1M rows | 1.64 s | ~610K rows/s |
-| 10K rows (500-byte fields) | 96 ms | ~104K rows/s |
-| 50K orders (18 fields, optionals) | 291 ms | ~172K rows/s |
-| 100K rows to Data | 164 ms | ~610K rows/s |
-| 100K rows to String | 167 ms | ~599K rows/s |
+| 1K rows | 1.5 ms | ~667K rows/s |
+| 10K rows | 15 ms | ~667K rows/s |
+| 100K rows | 150 ms | ~667K rows/s |
+| 1M rows | 1.53 s | ~654K rows/s |
+| 10K rows (500-byte fields) | 97 ms | ~103K rows/s |
+| 50K orders (18 fields, optionals) | 293 ms | ~171K rows/s |
+| 100K rows to Data | 152 ms | ~658K rows/s |
+| 100K rows to String | 153 ms | ~654K rows/s |
 
 ### Parallel Processing
 
 | Benchmark | Sequential | Parallel | Speedup |
 |-----------|------------|----------|---------|
-| Encode 100K rows | 168 ms | 61 ms | **2.75x** |
-| Encode 100K to file | - | 66 ms | - |
-| Encode 1M rows | - | 609 ms | - |
-| Decode 100K rows | 759 ms | 897 ms | 0.85x |
-| Decode 100K from file | - | 935 ms | - |
-| Decode 1M rows (parallel) | - | 17.3 s | - |
+| Encode 100K rows | 151 ms | 55 ms | **2.75x** |
+| Encode 100K to file | - | 60 ms | - |
+| Encode 1M rows | - | 527 ms | - |
+| Decode 100K rows | 337 ms | 264 ms | **1.28x** |
+| Decode 100K from file | - | 262 ms | - |
+| Decode 1M rows (parallel) | - | 2.63 s | **1.35x** |
 
 ### Mixed Workloads (Real-World Simulation)
 
 | Benchmark | Time |
 |-----------|------|
-| Decode + Transform + Encode 10K | 51 ms |
-| Filter + Aggregate 100K orders | 760 ms |
+| Decode + Transform + Encode 10K | 49 ms |
+| Filter + Aggregate 100K orders | 787 ms |
 
 ### Raw High-Performance API (Codable Bypass)
 
@@ -476,18 +477,18 @@ This approach avoids allocating `struct` or `class` instances for every row, dra
 
 | Benchmark | Time | Throughput | Speedup vs Codable |
 |-----------|------|------------|-------------------|
-| Raw Parse 1M rows (Iterate Only) | 1.61 s | **~621K rows/s** | **2.04x** |
-| Raw Parse 1M rows (Iterate + String) | 1.71 s | **~585K rows/s** | **1.92x** |
-| Raw Parse 100K Quoted (Iterate Only) | 122 ms | **~820K rows/s** | - |
-| Raw Parse 100K Quoted (Iterate + String) | 154 ms | **~649K rows/s** | - |
+| Raw Parse 1M rows (Iterate Only) | 1.68 s | **~597K rows/s** | **2.06x** |
+| Raw Parse 1M rows (Iterate + String) | 1.78 s | **~560K rows/s** | **1.94x** |
+| Raw Parse 100K Quoted (Iterate Only) | 127 ms | **~786K rows/s** | - |
+| Raw Parse 100K Quoted (Iterate + String) | 161 ms | **~621K rows/s** | - |
 
 ### Special Strategies (1K rows)
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| snake_case key conversion | 3.3 ms | ~307K rows/s |
-| Flexible date parsing | 142 ms | ~7.0K rows/s |
-| Flexible number parsing | 222 ms | ~4.5K rows/s |
+| snake_case key conversion | 3.4 ms | ~294K rows/s |
+| Flexible date parsing | 144 ms | ~6.9K rows/s |
+| Flexible number parsing | 212 ms | ~4.7K rows/s |
 
 Run benchmarks locally:
 ```bash

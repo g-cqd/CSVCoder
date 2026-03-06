@@ -32,6 +32,7 @@ let csv = try encoder.encodeToString(people)
 - **Parallel processing** for multi-core performance
 - **Flexible parsing** with automatic date, number, and boolean detection
 - **SIMD-accelerated** parsing for maximum throughput
+- **Safe error handling** — all unsupported operations throw, no `fatalError()` calls
 - **Swift 6.2 concurrency** compatible with `nonisolated` types
 
 ## Performance

@@ -9,14 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### Multi-Encoding Support
-- Full support for ASCII-compatible encodings (ISO-8859-1, Windows-1252, macOS Roman)
-- Automatic transcoding for non-ASCII encodings (UTF-16, UTF-16LE/BE, UTF-32)
-- BOM (Byte Order Mark) detection for UTF-8, UTF-16, and UTF-32
-- Zero-copy parsing preserved for ASCII-compatible encodings
-- `CSVUtilities.isASCIICompatible(_:)` for encoding classification
-- `CSVUtilities.transcodeToUTF8(_:from:)` for encoding conversion
-- `CSVUtilities.detectBOM(in:)` for multi-format BOM detection
+#### Safety & Error Handling
+- Replaced all 14 `fatalError()` calls with thrown `CSVEncodingError` using poison-pill containers
+- Bounds check in `CSVRowView.getBytes(at:)` prevents array out-of-bounds crashes
+- `BackpressureController.cancelAllWaiters()` properly resumes all pending continuations on stream termination
+- `CSVEncodingStorage.snapshot()` provides atomic key+value reads under single lock
+- `includesTrailingNewline` configuration option for consistent trailing newline behavior
+- Delimiter validation: `precondition` enforces ASCII-only delimiters at configuration time
+
+#### Correctness
+- `encodeIfPresent(Bool?)` now respects `boolEncodingStrategy` (was hardcoded to `1`/`0`)
+- `encodeIfPresent(Double?/Float?)` now respects `numberEncodingStrategy` (was using `String($0)`)
+- `CSVSingleValueEncodingContainer.encode(Bool)` now respects `boolEncodingStrategy`
+
+#### Performance
+- Cached `ISO8601DateFormatter`, `DateFormatter`, and `NumberFormatter` via `FormatterCache`
+- O(n) key strategy conversion using `[Character]` array (was O(n²) string concatenation)
+- Batch byte appends in `AsyncCSVWriter` via `append(contentsOf:)` (was byte-by-byte)
+- Centralized date decoding in `CSVValueParser.parseDate()` eliminates ~80 lines of duplication
+- Removed dead `#available(iOS 15, ...)` checks (minimum target is iOS 18)
+
+#### Test Coverage
+- 22 new tests for code review fixes (`CSVCodeReviewFixTests`)
+- 3 cancellation tests for streaming/backpressure (`CSVDecoderCancellationTests`)
+- 3 concurrency stress tests (`CSVConcurrencyStressTests`)
+- Strengthened parallel performance test assertions
+
+### Changed
+- Removed unused `encoding: String.Encoding` property from `CSVEncoder.Configuration` (always UTF-8)
+- Key encoding strategies (`convertToSnakeCase`, `convertToKebabCase`, `convertToScreamingSnakeCase`) share a single `convertCamelCase(_:separator:uppercase:)` implementation
 
 #### Streaming & Memory Efficiency
 - `CSVDecoder.decode(_:from: URL)` - Stream decode from files with O(1) memory
