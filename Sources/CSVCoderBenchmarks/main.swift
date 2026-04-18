@@ -358,28 +358,36 @@ let quotedRecords10K = (0 ..< 10000).map { i in
 
 let longFieldRecords10K = (0 ..< 10000).map { LongFieldRecord(id: $0, data: String(repeating: "x", count: 500)) }
 
-let orderRecords50K = (0 ..< 50000).map { i in
-    Order(
+let orderPaymentMethods = ["credit_card", "paypal", "bank_transfer", "crypto"]
+let orderStatuses = ["pending", "processing", "shipped", "delivered", "cancelled"]
+
+func makeOrderRecord(_ i: Int) -> Order {
+    let quantity = 1 + i % 10
+    let unitPrice = Double(10 + i % 100)
+
+    return Order(
         orderId: "ORD-\(String(format: "%08d", i))",
         customerId: 1000 + i % 500,
         customerName: "Customer \(i)",
         email: "customer\(i)@example.com",
         productId: i % 1000,
         productName: "Product \(i % 100)",
-        quantity: 1 + i % 10,
-        unitPrice: Double(10 + i % 100),
+        quantity: quantity,
+        unitPrice: unitPrice,
         discount: i % 3 == 0 ? 0.1 : nil,
         taxRate: 0.08,
         shippingCost: 5.99,
-        totalAmount: Double(10 + i % 100) * Double(1 + i % 10),
+        totalAmount: unitPrice * Double(quantity),
         currency: "USD",
-        paymentMethod: ["credit_card", "paypal", "bank_transfer", "crypto"][i % 4],
+        paymentMethod: orderPaymentMethods[i % orderPaymentMethods.count],
         orderDate: "2024-01-15",
         shipDate: i % 2 == 0 ? "2024-01-18" : nil,
-        status: ["pending", "processing", "shipped", "delivered", "cancelled"][i % 5],
+        status: orderStatuses[i % orderStatuses.count],
         notes: i % 5 == 0 ? "Rush order" : nil,
     )
 }
+
+let orderRecords50K: [Order] = (0 ..< 50_000).map(makeOrderRecord)
 
 // Strategy test datasets
 let snakeCaseCSV1K: String = {
