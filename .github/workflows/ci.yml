@@ -28,12 +28,6 @@ permissions:
 env:
   XCODE_VERSION: '26.1.1'
   SWA_VERSION: '0.0.23'
-  # Opt into Node.js 24 for JavaScript actions ahead of the
-  # Node 20 → 24 migration that GitHub forces on 2026-06-02.
-  # Without this, `actions/checkout@v4`, `actions/cache@v4`, etc.
-  # emit a deprecation warning on every run.
-  # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   # ============================================================================
@@ -45,7 +39,7 @@ jobs:
     steps:
       - name: Cache SWA Binary
         id: cache-swa
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/swa
           key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
@@ -62,7 +56,7 @@ jobs:
           echo "Installed SWA ${{ env.SWA_VERSION }}"
 
       - name: Upload SWA Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: swa-binary
           path: /usr/local/bin/swa
@@ -73,7 +67,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
@@ -89,10 +83,10 @@ jobs:
     needs: setup-swa
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download SWA Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: swa-binary
           path: /tmp
@@ -115,10 +109,10 @@ jobs:
     needs: setup-swa
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download SWA Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: swa-binary
           path: /tmp
@@ -152,13 +146,13 @@ jobs:
       (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
       - name: Cache SPM Dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .build
@@ -203,7 +197,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Coverage Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: |
@@ -232,13 +226,13 @@ jobs:
             destination: 'generic/platform=visionOS Simulator'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
       - name: Restore SPM Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .build
@@ -279,7 +273,7 @@ jobs:
       changelog: ${{ steps.changelog.outputs.content }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -358,13 +352,13 @@ jobs:
       summary: ${{ steps.run.outputs.summary }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
       - name: Restore SPM Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .build
@@ -384,7 +378,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Upload Benchmark Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: benchmark-results
           path: benchmark_output.txt
@@ -397,13 +391,13 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
       - name: Restore SPM Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .build
@@ -428,14 +422,14 @@ jobs:
           done || true
 
       - name: Upload Documentation Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: documentation
           path: docs
           retention-days: 30
 
       - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./docs
 
@@ -449,10 +443,10 @@ jobs:
     if: needs.prepare-release.outputs.should_release == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download Benchmark Results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: benchmark-results
 
@@ -501,7 +495,7 @@ jobs:
           RELEASE_EOF
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag }}
           name: CSVCoder ${{ needs.prepare-release.outputs.version }}

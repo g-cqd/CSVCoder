@@ -122,7 +122,7 @@ extension CSVDecoder {
             effectiveData = data
         }
 
-        return try effectiveData.withUnsafeBytes { buffer in
+        return effectiveData.withUnsafeBytes { buffer in
             guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else {
                 return ([:], [])
             }

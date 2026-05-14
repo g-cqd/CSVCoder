@@ -127,9 +127,11 @@ struct CSVDecoderNestedTests {
 
     // MARK: - Codable Strategy Tests
 
-    @Test("Nested decoding with codable strategy")
+    @Test("Nested decoding with deprecated codable strategy is functional alias for json")
+    @available(*, deprecated, message: "Exercises the deprecated .codable case to verify the alias still works.")
     func nestedDecodingCodable() throws {
-        // Same escaping as JSON strategy
+        // .codable is deprecated as a renamed alias for .json — this test
+        // exists only to confirm the alias still decodes successfully.
         let json = #"{"street":"321 Elm St","city":"Townsville","zipCode":"22222"}"#
         let csv = "name,age,address\nDave,40,\"\(json.replacingOccurrences(of: "\"", with: "\"\""))\""
 

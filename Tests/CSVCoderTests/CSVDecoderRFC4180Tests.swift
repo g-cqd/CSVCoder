@@ -404,14 +404,14 @@ struct CSVDecoderRFC4180Tests {
             """
         let data = Data(csv.utf8)
 
-        // Count rows safely
-        let rowCount = try CSVParser.parse(data: data) { parser in
+        // Count rows safely (closure is non-throwing → no `try`).
+        let rowCount = CSVParser.parse(data: data) { parser in
             parser.reduce(0) { count, _ in count + 1 }
         }
         #expect(rowCount == 3)  // header + 2 rows
 
-        // Extract values safely
-        let names = try CSVParser.parse(data: data) { parser -> [String] in
+        // Extract values safely.
+        let names = CSVParser.parse(data: data) { parser -> [String] in
             var results: [String] = []
             for row in parser {
                 if let name = row.string(at: 0) {

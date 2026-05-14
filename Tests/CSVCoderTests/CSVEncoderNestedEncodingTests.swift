@@ -66,8 +66,11 @@ struct CSVEncoderNestedEncodingTests {
         #expect(csv.contains("street"))
     }
 
-    @Test("Nested encoding with codable strategy")
+    @Test("Nested encoding with deprecated codable strategy is functional alias for json")
+    @available(*, deprecated, message: "Exercises the deprecated .codable case to verify the alias still works.")
     func nestedEncodingCodable() throws {
+        // .codable is deprecated as a renamed alias for .json — this test
+        // exists only to confirm the alias still encodes successfully.
         let records = [
             PersonWithAddress(
                 name: "Carol",
