@@ -143,7 +143,11 @@ struct CSVDecoderStrategyTests {
             ("1,2345", 1.2345),
             // Exactly three digits after the only comma is the thousands case.
             ("1,234", 1234.0),
-            ("12,345", 12345.0)
+            ("12,345", 12345.0),
+            // Leading zero is never a thousands group — "0,100" is the
+            // European decimal 0.1, not the integer 100 (audit 4.3).
+            ("0,100", 0.100),
+            ("0,250", 0.250)
         ]
     )
     func decodeNumbersFlexibleThousandsHeuristic(value: String, expected: Double) throws {
