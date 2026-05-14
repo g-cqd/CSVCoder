@@ -42,25 +42,25 @@ enum LocaleUtilities {
 
     // MARK: - Currency Symbol Enumeration
 
-    /// All known currency symbols from system locales.
+    /// Hand-curated set of common currency symbols and ISO codes.
     ///
-    /// This set is lazily computed on first access by iterating all available
-    /// locale identifiers. Includes both symbols (€, $, £) and common codes
-    /// (USD, EUR, GBP).
-    ///
-    /// - Note: Cached after first computation for O(1) subsequent access.
-    static let allCurrencySymbols: Set<String> = {
-        var symbols = Set<String>()
-        for identifier in Locale.availableIdentifiers {
-            let locale = Locale(identifier: identifier)
-            if let symbol = locale.currencySymbol {
-                symbols.insert(symbol)
-            }
-        }
-        // Add common currency codes as well (USD, EUR, etc.)
-        symbols.formUnion(["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY", "INR", "BRL"])
-        return symbols
-    }()
+    /// Audit C6: the previous implementation enumerated
+    /// `Locale.availableIdentifiers` (~900 entries on macOS 15), constructed
+    /// one `Locale` per identifier and queried `currencySymbol`, costing
+    /// 10–45 ms on first use of `.flexible` / `.currency` parsing.  The
+    /// curated set covers the symbols actually encountered in real-world
+    /// CSV data without the cold-start tax.
+    static let allCurrencySymbols: Set<String> = [
+        // Single-character symbols
+        "$", "€", "£", "¥", "¢", "₹", "₽", "₩", "₪", "₫", "₦", "₱", "₴", "₸",
+        // Multi-character symbols
+        "kr", "zł", "Kč", "Ft", "lei", "ל",
+        "R$", "A$", "C$", "HK$", "NT$", "S$", "NZ$", "Mex$",
+        // ISO 4217 codes (common subset)
+        "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY", "INR", "BRL",
+        "RUB", "KRW", "MXN", "ZAR", "SEK", "NOK", "DKK", "PLN", "TRY", "HKD",
+        "SGD", "NZD", "THB",
+    ]
 
     /// Common unit suffixes to strip from numeric values.
     static let unitSuffixes: Set<String> = [
@@ -98,31 +98,55 @@ enum LocaleUtilities {
             }
         }
 
-        // Then strip currency symbols (longest first to handle "R$" before "$")
-        // Only strip symbols that are at boundaries (start/end or next to space/number)
+        // Then strip currency symbols (longest first to handle "R$" before "$").
+        // Audit C7: only strip symbols anchored at the start or end of the
+        // trimmed string.  Stripping anywhere in the middle (`replacingOccurrences`)
+        // mis-handles property values that legitimately contain currency-symbol
+        // substrings — e.g., `"Krakow,123"` should not become `"akow,123"`
+        // because `kr` is one of the recognised currency tokens.
         let sortedSymbols = allCurrencySymbols.sorted { $0.count > $1.count }
         for symbol in sortedSymbols {
-            // Skip single-letter symbols to avoid false positives in unit names
             if symbol.count == 1, symbol.first?.isLetter == true {
-                // Only strip single letters if at very start or end
-                if cleaned.hasPrefix(symbol) {
-                    let rest = String(cleaned.dropFirst(symbol.count)).trimmingCharacters(in: .whitespaces)
-                    if rest.first?.isNumber == true || rest.first == "-" {
-                        cleaned = rest
-                    }
-                } else if cleaned.hasSuffix(symbol) {
-                    let rest = String(cleaned.dropLast(symbol.count)).trimmingCharacters(in: .whitespaces)
-                    if rest.last?.isNumber == true {
-                        cleaned = rest
-                    }
-                }
+                // Single letters: same boundary discipline as multi-char symbols.
+                stripIfBoundaryAnchored(&cleaned, symbol: symbol)
             } else {
-                // Multi-char symbols can be replaced more freely
-                cleaned = cleaned.replacingOccurrences(of: symbol, with: "", options: .caseInsensitive)
+                stripIfBoundaryAnchored(&cleaned, symbol: symbol)
             }
         }
 
         return cleaned.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Strips a currency `symbol` from `cleaned` only when it appears at a
+    /// boundary: the very start, the very end, or immediately after a leading
+    /// sign character.  This preserves substrings in the middle of property
+    /// values (e.g. `"Krakow,123"` does not lose its `kr`) while still
+    /// handling signed currency notation (`"-$50.00"`).
+    private static func stripIfBoundaryAnchored(_ cleaned: inout String, symbol: String) {
+        // Leading sign followed by symbol: `-$50.00` or `+€42`.
+        if let signFirst = cleaned.first, signFirst == "-" || signFirst == "+" {
+            let afterSign = cleaned.dropFirst()
+            if afterSign.range(of: symbol, options: [.anchored, .caseInsensitive]) != nil {
+                let rest = String(afterSign.dropFirst(symbol.count)).trimmingCharacters(in: .whitespaces)
+                if rest.first?.isNumber == true {
+                    cleaned = String(signFirst) + rest
+                    return
+                }
+            }
+        }
+        if cleaned.range(of: symbol, options: [.anchored, .caseInsensitive]) != nil {
+            let rest = String(cleaned.dropFirst(symbol.count)).trimmingCharacters(in: .whitespaces)
+            if rest.first?.isNumber == true || rest.first == "-" || rest.first == "+" {
+                cleaned = rest
+                return
+            }
+        }
+        if cleaned.range(of: symbol, options: [.anchored, .backwards, .caseInsensitive]) != nil {
+            let rest = String(cleaned.dropLast(symbol.count)).trimmingCharacters(in: .whitespaces)
+            if rest.last?.isNumber == true || rest.last == "." || rest.last == "," {
+                cleaned = rest
+            }
+        }
     }
 
     /// Parses a Double using Foundation's FormatStyle.ParseStrategy.

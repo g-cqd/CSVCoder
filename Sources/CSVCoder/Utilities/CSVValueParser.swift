@@ -126,7 +126,12 @@ enum CSVValueParser {
             return parseFlexibleDouble(value)
 
         case .locale(let locale):
-            return FormatterCache.numberFormatter(for: locale).number(from: value)?.doubleValue
+            // `FloatingPointFormatStyle.ParseStrategy` is Sendable and value-typed,
+            // so no per-call NumberFormatter caching is needed (audit C5).
+            return try? FloatingPointFormatStyle<Double>.number
+                .locale(locale)
+                .parseStrategy
+                .parse(value)
 
         case .parseStrategy(let locale):
             return LocaleUtilities.parseDouble(value, locale: locale)
@@ -154,7 +159,11 @@ enum CSVValueParser {
             return Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))
 
         case .locale(let locale):
-            return FormatterCache.numberFormatter(for: locale).number(from: value)?.decimalValue
+            // Decimal.FormatStyle is value-typed and Sendable — no caching layer needed.
+            return try? Decimal.FormatStyle.number
+                .locale(locale)
+                .parseStrategy
+                .parse(value)
 
         case .parseStrategy(let locale):
             return LocaleUtilities.parseDecimal(value, locale: locale)

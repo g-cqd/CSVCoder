@@ -100,10 +100,8 @@ public struct CSVParser: Sequence {
                 return nil
             }
 
-            var fieldStarts: [Int] = []
-            var fieldLengths: [Int] = []
-            var fieldQuoted: [Bool] = []
-            var fieldHasEscapedQuote: [Bool] = []
+            var fields: [CSVRowView.Field] = []
+            fields.reserveCapacity(8)
             var hasUnterminatedQuote = false
             var hasQuoteInUnquotedField = false
 
@@ -112,10 +110,16 @@ public struct CSVParser: Sequence {
             while !rowEnded && offset < parser.buffer.count {
                 // Parse Field
                 let result = parser.parseField(from: offset)
-                fieldStarts.append(result.start)
-                fieldLengths.append(result.length)
-                fieldQuoted.append(result.quoted)
-                fieldHasEscapedQuote.append(result.hasEscapedQuote)
+                var flags: UInt8 = 0
+                if result.quoted { flags |= CSVRowView.Field.quotedBit }
+                if result.hasEscapedQuote { flags |= CSVRowView.Field.hasEscapedQuoteBit }
+                fields.append(
+                    CSVRowView.Field(
+                        start: Int32(result.start),
+                        length: Int32(result.length),
+                        flags: flags,
+                    )
+                )
 
                 if result.unterminated {
                     hasUnterminatedQuote = true
@@ -128,24 +132,19 @@ public struct CSVParser: Sequence {
             }
 
             // Handle trailing empty line (EOF after newline)
-            if fieldStarts
-                .isEmpty || (fieldStarts.count == 1 && fieldLengths[0] == 0 && offset >= parser.buffer.count)
-            {
-                if offset >= parser.buffer.count, fieldStarts.isEmpty {
+            if fields.isEmpty || (fields.count == 1 && fields[0].length == 0 && offset >= parser.buffer.count) {
+                if offset >= parser.buffer.count, fields.isEmpty {
                     return nil
                 }
                 // If it's a single empty field at EOF, usually we skip it if it was just a newline
-                if fieldStarts.count == 1, fieldLengths[0] == 0 {
+                if fields.count == 1, fields[0].length == 0 {
                     return nil
                 }
             }
 
             return CSVRowView(
                 buffer: parser.buffer,
-                fieldStarts: fieldStarts,
-                fieldLengths: fieldLengths,
-                fieldQuoted: fieldQuoted,
-                fieldHasEscapedQuote: fieldHasEscapedQuote,
+                fields: fields,
                 hasUnterminatedQuote: hasUnterminatedQuote,
                 hasQuoteInUnquotedField: hasQuoteInUnquotedField,
             )

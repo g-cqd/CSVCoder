@@ -140,7 +140,8 @@ struct CSVRowStreamProducer: Sendable {
             // directly; quoted fields with escapes need to be unescaped first
             // and then re-validated.
             let raw = view.getBytes(at: index)
-            if !view.fieldQuoted[index] || !view.fieldHasEscapedQuote[index] {
+            let field = view.fields[index]
+            if !field.quoted || !field.hasEscapedQuote {
                 guard let str = String(bytes: raw, encoding: .utf8) else {
                     throw CSVDecodingError.parsingError(
                         "Invalid UTF-8 byte sequence in field",

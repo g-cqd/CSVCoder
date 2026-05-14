@@ -48,7 +48,29 @@ import Foundation
 public struct CSVRowView {
     // MARK: Lifecycle
 
-    /// Creates a row view with the given buffer and field metadata.
+    /// Creates a row view from packed `Field` records.
+    ///
+    /// The packed representation collapses the four parallel `[Int]`/`[Bool]`
+    /// arrays into a single contiguous `[Field]` (9 bytes per field including
+    /// alignment padding), trading the four array allocations per row for a
+    /// single buffer.
+    public init(
+        buffer: UnsafeBufferPointer<UInt8>,
+        fields: [Field],
+        hasUnterminatedQuote: Bool,
+        hasQuoteInUnquotedField: Bool,
+    ) {
+        self.buffer = buffer
+        self.fields = fields
+        self.hasUnterminatedQuote = hasUnterminatedQuote
+        self.hasQuoteInUnquotedField = hasQuoteInUnquotedField
+    }
+
+    /// Legacy initializer that accepts the historical four-array layout.
+    ///
+    /// Kept for source compatibility with external callers of the
+    /// `CSVRowView` initializer.  The arrays are packed into `Field` records
+    /// before being stored.
     public init(
         buffer: UnsafeBufferPointer<UInt8>,
         fieldStarts: [Int],
@@ -58,31 +80,67 @@ public struct CSVRowView {
         hasUnterminatedQuote: Bool,
         hasQuoteInUnquotedField: Bool,
     ) {
-        self.buffer = buffer
-        self.fieldStarts = fieldStarts
-        self.fieldLengths = fieldLengths
-        self.fieldQuoted = fieldQuoted
-        self.fieldHasEscapedQuote = fieldHasEscapedQuote
-        self.hasUnterminatedQuote = hasUnterminatedQuote
-        self.hasQuoteInUnquotedField = hasQuoteInUnquotedField
+        let count = fieldStarts.count
+        var packed: [Field] = []
+        packed.reserveCapacity(count)
+        for i in 0 ..< count {
+            packed.append(
+                Field(
+                    start: Int32(fieldStarts[i]),
+                    length: Int32(fieldLengths[i]),
+                    flags: (fieldQuoted[i] ? Field.quotedBit : 0)
+                        | (fieldHasEscapedQuote[i] ? Field.hasEscapedQuoteBit : 0),
+                )
+            )
+        }
+        self.init(
+            buffer: buffer,
+            fields: packed,
+            hasUnterminatedQuote: hasUnterminatedQuote,
+            hasQuoteInUnquotedField: hasQuoteInUnquotedField,
+        )
     }
 
     // MARK: Public
 
+    /// Compact per-field metadata, replacing four parallel arrays with one.
+    public struct Field: Sendable {
+        public let start: Int32
+        public let length: Int32
+        public let flags: UInt8
+
+        /// Bit 0 — field was originally quoted in source.
+        @usableFromInline static let quotedBit: UInt8 = 1 << 0
+        /// Bit 1 — field contains `""` escape sequences that require unescaping.
+        @usableFromInline static let hasEscapedQuoteBit: UInt8 = 1 << 1
+
+        public init(start: Int32, length: Int32, flags: UInt8) {
+            self.start = start
+            self.length = length
+            self.flags = flags
+        }
+
+        public var quoted: Bool { (flags & Self.quotedBit) != 0 }
+        public var hasEscapedQuote: Bool { (flags & Self.hasEscapedQuoteBit) != 0 }
+    }
+
     /// Reference to the full buffer (owned elsewhere).
     public let buffer: UnsafeBufferPointer<UInt8>
 
-    /// Offsets of field starts within the buffer.
-    public let fieldStarts: [Int]
+    /// Packed metadata for each field in this row.
+    public let fields: [Field]
 
-    /// Lengths of each field.
-    public let fieldLengths: [Int]
+    /// Offsets of field starts within the buffer (source-compatibility view).
+    public var fieldStarts: [Int] { fields.map { Int($0.start) } }
 
-    /// Whether each field was quoted (needs unescaping).
-    public let fieldQuoted: [Bool]
+    /// Lengths of each field (source-compatibility view).
+    public var fieldLengths: [Int] { fields.map { Int($0.length) } }
 
-    /// Whether each field contains escaped quotes ("" that need unescaping.
-    public let fieldHasEscapedQuote: [Bool]
+    /// Whether each field was quoted (source-compatibility view).
+    public var fieldQuoted: [Bool] { fields.map(\.quoted) }
+
+    /// Whether each field contains escaped quotes (source-compatibility view).
+    public var fieldHasEscapedQuote: [Bool] { fields.map(\.hasEscapedQuote) }
 
     /// Whether any field has an unterminated quote.
     public let hasUnterminatedQuote: Bool
@@ -91,7 +149,7 @@ public struct CSVRowView {
     public let hasQuoteInUnquotedField: Bool
 
     /// The number of fields in this row.
-    public var count: Int { fieldStarts.count }
+    public var count: Int { fields.count }
 
     /// Returns the raw UTF-8 bytes for the field at the given index.
     ///
@@ -105,9 +163,10 @@ public struct CSVRowView {
     /// - Warning: The returned buffer is only valid while the parent `CSVParser`'s
     ///   data remains in scope. Do not store the buffer beyond the parsing closure.
     public func getBytes(at index: Int) -> UnsafeBufferPointer<UInt8> {
-        guard index < fieldStarts.count else { return UnsafeBufferPointer(start: nil, count: 0) }
-        let start = fieldStarts[index]
-        let length = fieldLengths[index]
+        guard index < fields.count else { return UnsafeBufferPointer(start: nil, count: 0) }
+        let field = fields[index]
+        let start = Int(field.start)
+        let length = Int(field.length)
         guard start + length <= buffer.count else { return UnsafeBufferPointer(start: nil, count: 0) }
         return UnsafeBufferPointer(start: buffer.baseAddress?.advanced(by: start), count: length)
     }
@@ -137,12 +196,13 @@ public struct CSVRowView {
     /// - Returns: The decoded string value, or `nil` if the index is out of bounds or conversion fails.
     /// - Complexity: O(1) for unquoted UTF-8 fields; O(n) for quoted fields with escaped quotes or non-UTF-8 encodings.
     public func string(at index: Int, encoding: String.Encoding) -> String? {
-        guard index < fieldStarts.count else { return nil }
+        guard index < fields.count else { return nil }
 
-        let start = fieldStarts[index]
-        let length = fieldLengths[index]
-        let isQuoted = fieldQuoted[index]
-        let hasEscapedQuote = fieldHasEscapedQuote[index]
+        let field = fields[index]
+        let start = Int(field.start)
+        let length = Int(field.length)
+        let isQuoted = field.quoted
+        let hasEscapedQuote = field.hasEscapedQuote
 
         guard let base = buffer.baseAddress else { return nil }
 

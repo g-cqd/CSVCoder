@@ -60,11 +60,14 @@ enum CSVValueFormatter {
             return String(value)
 
         case .locale(let locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            formatter.maximumFractionDigits = 15
-            return formatter.string(from: NSNumber(value: value)) ?? String(value)
+            // `FloatingPointFormatStyle` is `Sendable` and value-typed, so no
+            // cross-thread cache is needed — Foundation's internal ICU cache
+            // amortises pattern parsing per locale (audit C5).
+            return value.formatted(
+                .number
+                    .locale(locale)
+                    .precision(.fractionLength(0 ... 15))
+            )
 
         case .custom(let transform):
             return try transform(value)
@@ -117,7 +120,6 @@ enum CSVValueFormatter {
 /// the ICU pattern is reused.
 enum FormatterCache {
     private static let dateCache = Mutex<[String: DateFormatter]>([:])
-    private static let localeNumberCache = Mutex<[String: NumberFormatter]>([:])
     private static let formatDateAutoupdatingCache = Mutex<[String: DateFormatter]>([:])
 
     static func dateFormatter(for format: String) -> DateFormatter {
@@ -153,21 +155,4 @@ enum FormatterCache {
         return (template.copy() as? DateFormatter) ?? template
     }
 
-    /// NumberFormatter for `.locale(_:)` strategies. Keyed on locale identifier so any
-    /// two callers with the same locale share the formatter template — the typical
-    /// case for bulk CSV ingest.
-    static func numberFormatter(for locale: Locale) -> NumberFormatter {
-        let template = localeNumberCache.withLock { cache -> NumberFormatter in
-            if let cached = cache[locale.identifier] {
-                return cached
-            }
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            formatter.maximumFractionDigits = 15
-            cache[locale.identifier] = formatter
-            return formatter
-        }
-        return (template.copy() as? NumberFormatter) ?? template
-    }
 }

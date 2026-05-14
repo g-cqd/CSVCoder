@@ -517,80 +517,80 @@ public final class CSVDecoder: Sendable {
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
 
             let parser = CSVParser(buffer: bytes, delimiter: delimiter)
-            let rows = parser.parse()
-
-            // Check for parsing errors
+            var iterator = parser.makeIterator()
             let isStrict = configuration.parsingMode == .strict
             let expectedFieldCount = configuration.expectedFieldCount
 
-            for (index, row) in rows.enumerated() {
-                // Check for unterminated quotes (always an error)
+            var headerMap: [String: Int]?
+            var results: [T] = []
+            var rowIndex = 0
+
+            // Fused parse + validate + decode loop.  Each row view exists only
+            // for the duration of one iteration, eliminating the
+            // `[CSVRowView]` materialization that previously held all row
+            // metadata in memory simultaneously (audit C3).
+            while let row = iterator.next() {
+                rowIndex += 1
+
+                // Inline strict-mode validation
                 if row.hasUnterminatedQuote {
-                    throw CSVDecodingError.parsingError("Unterminated quoted field", line: index + 1, column: nil)
+                    throw CSVDecodingError.parsingError("Unterminated quoted field", line: rowIndex, column: nil)
                 }
 
-                // Strict mode: reject quotes in unquoted fields
                 if isStrict, row.hasQuoteInUnquotedField {
                     throw CSVDecodingError.parsingError(
                         "Quote character in unquoted field (RFC 4180 violation)",
-                        line: index + 1,
+                        line: rowIndex,
                         column: nil,
                     )
                 }
 
-                // Strict mode: validate field count
                 if isStrict, let expected = expectedFieldCount, row.count != expected {
                     throw CSVDecodingError.parsingError(
                         "Expected \(expected) fields but found \(row.count)",
-                        line: index + 1,
+                        line: rowIndex,
                         column: nil,
                     )
                 }
-            }
 
-            guard !rows.isEmpty else { return [] }
+                // First row resolves headers (either as the header row or as
+                // the first data row when `hasHeaders` is false).
+                if headerMap == nil {
+                    var rawHeaders: [String] = []
+                    rawHeaders.reserveCapacity(row.count)
+                    for i in 0 ..< row.count {
+                        if let s = row.string(at: i, encoding: effectiveEncoding) {
+                            rawHeaders.append(
+                                configuration.trimWhitespace
+                                    ? s.trimmingCharacters(in: .whitespaces) : s
+                            )
+                        } else {
+                            rawHeaders.append("column\(i)")
+                        }
+                    }
+                    let headers = resolveHeaders(
+                        rawHeaders: rawHeaders,
+                        columnOrder: columnOrder,
+                        columnCount: row.count,
+                    )
+                    var map: [String: Int] = [:]
+                    map.reserveCapacity(headers.count)
+                    for (index, header) in headers.enumerated() {
+                        map[header] = index
+                    }
+                    headerMap = map
 
-            // Extract raw headers from first row using the effective encoding
-            let firstRow = rows[0]
-            var rawHeaders: [String] = []
-            rawHeaders.reserveCapacity(firstRow.count)
-            for i in 0 ..< firstRow.count {
-                if let s = firstRow.string(at: i, encoding: effectiveEncoding) {
-                    // Apply trimWhitespace to headers for consistency with parallel decoding
-                    rawHeaders.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
-                } else {
-                    rawHeaders.append("column\(i)")
+                    // Skip the header row itself when the source carries one.
+                    if configuration.hasHeaders { continue }
                 }
-            }
 
-            // Resolve headers using unified method
-            let headers = resolveHeaders(
-                rawHeaders: rawHeaders,
-                columnOrder: columnOrder,
-                columnCount: firstRow.count,
-            )
-
-            // Build header map (Header -> Column Index)
-            var headerMap: [String: Int] = [:]
-            for (index, header) in headers.enumerated() {
-                headerMap[header] = index
-            }
-
-            // Skip header row if present
-            let startIndex = configuration.hasHeaders ? 1 : 0
-
-            // Decode rows
-            var results: [T] = []
-            results.reserveCapacity(rows.count - startIndex)
-
-            for i in startIndex ..< rows.count {
-                let rowView = rows[i]
+                guard let map = headerMap else { continue }
                 let decoder = CSVRowDecoder(
-                    view: rowView,
-                    headerMap: headerMap,
+                    view: row,
+                    headerMap: map,
                     configuration: configuration,
                     codingPath: [],
-                    rowIndex: i + 1,
+                    rowIndex: rowIndex,
                     encoding: effectiveEncoding,
                 )
                 try results.append(T(from: decoder))
