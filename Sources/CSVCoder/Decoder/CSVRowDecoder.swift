@@ -540,7 +540,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     private func getValue(for key: Key) throws -> String {
-        let rawValue: String
+        let trim = configuration.trimWhitespace
         switch source {
         case .dictionary(let row):
             guard let value = row[key.stringValue] else {
@@ -549,7 +549,8 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
-            rawValue = value
+            // Dictionary source has pre-materialised strings; apply trim via stdlib.
+            return trim ? value.trimmingCharacters(in: .whitespaces) : value
 
         case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue], index < view.count else {
@@ -558,18 +559,16 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
-            // Decode string on demand using the effective encoding
-            guard let value = view.string(at: index, encoding: encoding) else {
+            // Byte-level trim is performed inside `string(at:encoding:trim:)`
+            // before the String is materialised — skips one allocation.
+            guard let value = view.string(at: index, encoding: encoding, trim: trim) else {
                 throw CSVDecodingError.keyNotFound(
                     key.stringValue,
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
-            rawValue = value
+            return value
         }
-
-        // Apply trimWhitespace configuration
-        return configuration.trimWhitespace ? rawValue.trimmingCharacters(in: .whitespaces) : rawValue
     }
 
     /// Returns the string value for a key, or nil if not present.

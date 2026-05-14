@@ -196,6 +196,26 @@ public struct CSVRowView {
     /// - Returns: The decoded string value, or `nil` if the index is out of bounds or conversion fails.
     /// - Complexity: O(1) for unquoted UTF-8 fields; O(n) for quoted fields with escaped quotes or non-UTF-8 encodings.
     public func string(at index: Int, encoding: String.Encoding) -> String? {
+        string(at: index, encoding: encoding, trim: false)
+    }
+
+    /// Decodes the string value for the field at `index`, optionally trimming
+    /// ASCII whitespace at the byte level before string materialization.
+    ///
+    /// Passing `trim: true` is equivalent to applying
+    /// `.trimmingCharacters(in: .whitespaces)` afterwards but avoids the
+    /// second String allocation — the trim is performed by adjusting the
+    /// byte range used to build the String.
+    ///
+    /// - Parameters:
+    ///   - index: The zero-based field index.
+    ///   - encoding: The string encoding to use for conversion.
+    ///   - trim: When `true`, strip leading and trailing ASCII whitespace
+    ///     bytes (`0x09`, `0x0A`, `0x0B`, `0x0C`, `0x0D`, `0x20`) before
+    ///     materializing the String.
+    /// - Returns: The decoded string value, or `nil` if the index is out of
+    ///   bounds or encoding conversion fails.
+    public func string(at index: Int, encoding: String.Encoding, trim: Bool) -> String? {
         guard index < fields.count else { return nil }
 
         let field = fields[index]
@@ -208,23 +228,48 @@ public struct CSVRowView {
 
         let ptr = base.advanced(by: start)
         let fieldBuffer = UnsafeBufferPointer(start: ptr, count: length)
+        let trimmedBuffer = trim ? Self.trimASCII(fieldBuffer) : fieldBuffer
 
         // Fast path for UTF-8 (most common case)
         if encoding == .utf8 {
             guard isQuoted, hasEscapedQuote else {
-                // No unescaping needed - direct decode
-                return String(decoding: fieldBuffer, as: UTF8.self)
+                return String(decoding: trimmedBuffer, as: UTF8.self)
             }
-            // Use zero-allocation unescaper
-            return CSVUnescaper.unescape(buffer: fieldBuffer)
+            return CSVUnescaper.unescape(buffer: trimmedBuffer)
         }
 
         // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)
         if isQuoted, hasEscapedQuote {
-            return CSVUnescaper.unescape(buffer: fieldBuffer, encoding: encoding)
+            return CSVUnescaper.unescape(buffer: trimmedBuffer, encoding: encoding)
         }
 
-        let data = Data(bytes: ptr, count: length)
+        guard let trimmedBase = trimmedBuffer.baseAddress else { return "" }
+        let data = Data(bytes: trimmedBase, count: trimmedBuffer.count)
         return String(data: data, encoding: encoding)
+    }
+
+    /// Returns a sub-range of `buffer` with leading and trailing ASCII whitespace
+    /// bytes removed. Operates entirely on byte offsets — no allocation. Whitespace
+    /// is the standard set: 0x09 (TAB), 0x0A (LF), 0x0B (VT), 0x0C (FF), 0x0D (CR),
+    /// 0x20 (SP).
+    @inlinable
+    static func trimASCII(_ buffer: UnsafeBufferPointer<UInt8>) -> UnsafeBufferPointer<UInt8> {
+        guard let base = buffer.baseAddress, !buffer.isEmpty else { return buffer }
+        var start = 0
+        var end = buffer.count
+        while start < end, Self.isASCIIWhitespace(base[start]) {
+            start &+= 1
+        }
+        while end > start, Self.isASCIIWhitespace(base[end &- 1]) {
+            end &-= 1
+        }
+        return UnsafeBufferPointer(start: base.advanced(by: start), count: end - start)
+    }
+
+    @inlinable
+    static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
+        // 0x09..=0x0D and 0x20 — same set as Foundation's CharacterSet.whitespaces
+        // restricted to ASCII (which CSV fields are at this layer).
+        byte == 0x20 || (byte >= 0x09 && byte <= 0x0D)
     }
 }
