@@ -50,6 +50,9 @@ For maximum throughput on large datasets, use ``CSVParser`` directly with the ze
 ### Essentials
 
 - <doc:GettingStarted>
+- <doc:Configuration>
+- <doc:ErrorHandling>
+- <doc:LocaleAwareParsing>
 - ``CSVEncoder``
 - ``CSVDecoder``
 

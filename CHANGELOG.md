@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Audit follow-up (2026-05-14)
+
+#### Breaking changes
+- `CSVDecoder.NestedTypeDecodingStrategy.json` and
+  `CSVEncoder.NestedTypeEncodingStrategy.json` now take an associated
+  `maxBytes: Int = 1 << 20` parameter and reject cells / payloads larger
+  than the configured budget.  Existing `.json` call sites need to be
+  written as `.json()` (default 1 MiB cap).
+- `.codable` nested strategy is deprecated as a renamed alias for `.json`
+  and will be removed in a future release.
+- The acronym-aware `convertToSnakeCase` algorithm now matches
+  `JSONEncoder._convertToSnakeCase`: `myURLProperty` becomes
+  `my_url_property` instead of `my_u_r_l_property`.  The inverse
+  `convertFromSnakeCase` mirrors `JSONDecoder` semantics.
+- `expectedFieldCount` is now validated in both lenient and strict
+  parsing modes (it expresses caller intent, not parser leniency).
+- `NumberDecodingStrategy.parseStrategy` and `.currency` now default to
+  `Locale.current` (snapshot) instead of `Locale.autoupdatingCurrent`.
+- `CSVDecoder.NestedTypeDecodingStrategy.codable` deprecated; use `.json`.
+
+#### Safety & correctness
+- `CSVIndexedEncodable` is now honoured on every encode entry point
+  (parallel, streaming, batched, single-row).  Headerless encode order
+  matches the macro's `CodingKeys` declaration order.
+- `BackpressureController.waitForSpace()` cooperates with task
+  cancellation via `withTaskCancellationHandler`, closing the
+  continuation-leak window.
+- `URL` decoding uses the strict
+  `URL(string:encodingInvalidCharacters: false)` overload, rejecting
+  malformed URLs instead of silently percent-encoding.
+- Strategy-aware integer parsing: every typed integer overload now
+  routes through `CSVValueParser.parseInt64(_:strategy:)`, so
+  `.flexible` correctly strips currency / grouping separators and
+  rejects fractional values (`"1.5"` → error, not `1`).
+- Strict mode now rejects invalid UTF-8 byte sequences instead of
+  silently substituting U+FFFD.
+- Macro emits diagnostics for duplicate `@CSVColumn` names and for
+  orphan `@CSVColumn` usage on a struct without `@CSVIndexed`.  Property
+  names that are Swift reserved keywords are backtick-escaped.
+
+#### Performance
+- Replaced the dual parser (`CSVParser` + `StreamingCSVParser`) with a
+  single SIMD-accelerated path; the new `CSVRowStreamProducer` powers
+  all async / backpressure / progress streams.
+- Packed per-row metadata into a single `[CSVRowView.Field]` allocation
+  instead of four parallel arrays.
+- Fused parse + validate + decode in `CSVDecoder.decodeRowsFromBytes`,
+  eliminating the `[CSVRowView]` materialisation pass.
+- `LocaleUtilities.allCurrencySymbols` is now a hand-curated set of ~50
+  symbols / ISO codes, saving 10–45 ms of cold-start ICU lookups.
+- Number `.locale(_:)` formatting / parsing now uses `FormatStyle`
+  (Sendable, no caching required); `NumberFormatter` cache removed.
+- `OrderedDictionary` from `swift-collections` backs
+  `CSVEncodingStorage`, dropping the redundant `orderedKeys` array.
+
 ### Added
 
 #### Safety & Error Handling

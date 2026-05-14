@@ -27,6 +27,26 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 - iOS 18.0+ / macOS 15.0+
 - Swift 6.2+
 
+## Breaking changes since 0.0.4
+
+The audit follow-up landed on `main` 2026-05-14 and introduces three
+source-breaking changes worth highlighting:
+
+- **`convertToSnakeCase` is now acronym-aware.**  The algorithm matches
+  `JSONEncoder._convertToSnakeCase` from swift-foundation:
+  `myURLProperty` produces `my_url_property` instead of the previous
+  `my_u_r_l_property`.  The inverse `convertFromSnakeCase` mirrors
+  `JSONDecoder` (`my_url` → `myUrl`).  Migrate by either changing
+  fixture data or accepting the new headers.
+- **`.json` nested strategy now carries an `Int = 1 << 20` byte budget.**
+  `CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json)` and the
+  decoder equivalent now have to be written as `.json()` (default 1 MiB
+  cap) or `.json(maxBytes: <number>)`.  `.codable` is deprecated as a
+  renamed alias and will be removed in a future minor release.
+- **`expectedFieldCount` is enforced in both lenient and strict modes.**
+  Previously a `expectedFieldCount: 5` setting silently no-op'd outside
+  strict mode.  Mixed-width CSV will now surface a parsing error.
+
 ## Installation
 
 ### Swift Package Manager
@@ -244,7 +264,12 @@ let decoder = CSVDecoder(configuration: config)
 let people = try decoder.decode([Person].self, from: csv)
 ```
 
-The macro generates `CodingKeys`, `CSVCodingKeys`, and protocol conformance automatically.
+The macro generates `CodingKeys`, `CSVCodingKeys`, and protocol conformance
+automatically.  Both `CSVDecoder` and `CSVEncoder` honour the macro's
+declared column order — the encoder writes the header and data rows in
+`CodingKeys` order regardless of property declaration order, and works
+identically across the sync, streaming, parallel, and batched encode
+entry points.
 
 #### Custom Column Names with @CSVColumn
 
@@ -262,6 +287,11 @@ struct Product: Codable {
     let price: Double
 }
 ```
+
+The macro emits a compile-time error for duplicate `@CSVColumn` names on
+the same struct, and a warning when `@CSVColumn` is applied to a property
+whose parent struct lacks `@CSVIndexed` (the rename would silently do
+nothing without the macro to read it).
 
 ### CSVIndexedDecodable (Manual Protocol)
 
