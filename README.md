@@ -346,6 +346,7 @@ Available strategies:
 - `.formatted(String)` - Custom date format
 - `.flexible` - Auto-detect from common patterns
 - `.flexibleWithHint(preferred:)` - Try preferred format first, then auto-detect
+- `.localeAware(locale:style:)` - Region-aware parsing via `Date.FormatStyle.parseStrategy`
 - `.custom((String) throws -> Date)` - Custom closure
 
 #### Number Decoding
@@ -361,7 +362,9 @@ let config = CSVDecoder.Configuration(
 Available strategies:
 - `.standard` - Swift's standard number parsing (default)
 - `.flexible` - Auto-detect `1,234.56` (US) and `1.234,56` (EU), strip currency symbols
-- `.locale(Locale)` - Use specific locale for parsing
+- `.locale(Locale)` - Use specific locale for parsing via `FloatingPointFormatStyle`
+- `.parseStrategy(locale:)` - Region-aware parsing via `FloatingPointFormatStyle.ParseStrategy`
+- `.currency(code:locale:)` - Currency-aware parsing that strips known currency symbols
 
 #### Boolean Decoding
 
@@ -402,97 +405,88 @@ CSVCoder is compatible with projects using `SWIFT_DEFAULT_ACTOR_ISOLATION = Main
 
 ## Performance
 
-**Benchmark Environment:**
-- CPU: Apple M2 Pro
-- Cores: 10 (6 performance + 4 efficiency)
-- Memory: 16 GB
-- OS: macOS 26.3
-- Swift: 6.2+
-- Build: Release
+> Numbers below were measured on Apple M2 Pro (10 cores: 6P + 4E), 16 GB RAM,
+> macOS 26.4.1, Swift 6.2, release build, 3 iterations with one warm-up. Hardware
+> and toolchain differences will shift absolute timings — run
+> `swift run -c release CSVCoderBenchmarks` locally for numbers you can
+> compare against. The table is a representative subset; the full benchmark
+> harness exposes 40+ cases.
 
-### Performance Characteristics
+### Architecture
 
-CSVCoder uses **SIMD-accelerated parsing** with 64-byte vector operations and **SWAR (SIMD Within A Register)** for 8-byte fallback processing. This optimization is particularly effective for:
-
-- **Quoted fields** with long spans of non-structural bytes (~15% faster)
-- **Large fields** (500+ bytes) where vectorized scanning shines
-- **Unicode-heavy content** processed efficiently in bulk
-
-For CSV files with many short, simple fields, the SIMD overhead is minimal but present. The trade-off favors real-world CSV data which typically contains quoted text fields.
+- **Zero-copy parser.** Field offsets/lengths are stored in a packed
+  struct-of-arrays; rows borrow into the source `Data` buffer with no
+  per-row allocation.
+- **SIMD scanning.** 64-byte vector compares find structural bytes (`"`,
+  delimiter, `\r`, `\n`); SWAR (8-byte register operations) covers the
+  tail. Falls back to scalar for the last 0–7 bytes.
+- **Byte-level trim.** `trimWhitespace` runs over a `Span<UInt8>` view
+  with bounds-checked-at-compile-time semantics; no second `String`
+  allocation per field.
+- **Mutex-serialized encoder storage.** Encoder cells are deposited
+  through `Synchronization.Mutex` so the same `CSVEncoder` can drive
+  multiple concurrent encodes without coordination from the caller.
 
 ### Decoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 3.3 ms | ~306K rows/s |
-| 10K rows (simple) | 34 ms | ~298K rows/s |
-| 100K rows (simple) | 334 ms | ~299K rows/s |
-| 1M rows (simple) | 3.39 s | ~295K rows/s |
-| 10K rows (complex, 8 fields) | 76 ms | ~132K rows/s |
-| 10K rows (quoted fields) | 31 ms | ~326K rows/s |
-| 10K rows (50 columns wide) | 268 ms | ~37K rows/s |
-| 10K rows (500-byte fields) | 105 ms | ~95K rows/s |
-| 100K rows (numeric fields) | 338 ms | ~296K rows/s |
+| 1K rows (simple) | 1.3 ms | ~770K rows/s |
+| 10K rows (simple) | 13 ms | ~750K rows/s |
+| 100K rows (simple) | 132 ms | ~760K rows/s |
+| 1M rows (simple) | 1.33 s | ~754K rows/s |
+| 10K rows (complex, 8 fields) | 29 ms | ~344K rows/s |
+| 10K rows (quoted fields) | 15 ms | ~660K rows/s |
+| 100K rows (numeric fields) | 138 ms | ~725K rows/s |
 
 ### Real-World Scenarios
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 50K orders (18 fields, optionals) | 772 ms | ~65K rows/s |
-| 100K transactions (13 fields) | 1.17 s | ~85K rows/s |
-| 100K log entries (12 fields) | 1.13 s | ~88K rows/s |
-| 10K stress-quoted (nested quotes, newlines) | 25 ms | ~394K rows/s |
-| 50K Unicode-heavy rows | 150 ms | ~333K rows/s |
-| 1K rows (10KB fields) | 169 ms | ~5.9K rows/s |
-| 1K rows (200 columns wide) | 95 ms | ~10.5K rows/s |
+| 50K orders (18 fields, optionals) | 283 ms | ~177K rows/s |
+| 100K transactions (13 fields) | 447 ms | ~224K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.4 ms | ~719K rows/s |
-| 10K rows | 14 ms | ~725K rows/s |
-| 100K rows | 140 ms | ~714K rows/s |
-| 1M rows | 1.39 s | ~719K rows/s |
-| 10K rows (500-byte fields) | 94 ms | ~106K rows/s |
-| 50K orders (18 fields, optionals) | 251 ms | ~199K rows/s |
-| 100K rows to Data | 139 ms | ~719K rows/s |
-| 100K rows to String | 139 ms | ~719K rows/s |
+| 1K rows | 1.3 ms | ~770K rows/s |
+| 10K rows | 13 ms | ~770K rows/s |
+| 100K rows | 146 ms | ~685K rows/s |
+| 1M rows | 1.28 s | ~779K rows/s |
+| 50K orders (18 fields, optionals) | 220 ms | ~227K rows/s |
+| 100K rows to Data | 145 ms | ~690K rows/s |
+| 100K rows to String | 132 ms | ~758K rows/s |
 
 ### Parallel Processing
 
 | Benchmark | Sequential | Parallel | Speedup |
-|-----------|------------|----------|---------|
-| Encode 100K rows | 136 ms | 37 ms | **3.73x** |
-| Encode 100K to file | - | 42 ms | - |
-| Encode 1M rows | - | 331 ms | - |
-| Decode 100K rows | 335 ms | 254 ms | **1.32x** |
-| Decode 100K from file | - | 254 ms | - |
-| Decode 1M rows (parallel) | - | 2.54 s | **1.32x** |
+|-----------|-----------:|---------:|--------:|
+| Decode 100K rows | 132 ms | 97 ms | **1.36×** |
+| Decode 1M rows | 1.33 s | 919 ms | **1.44×** |
+| Encode 100K rows | 146 ms | 41 ms | **3.54×** |
+| Encode 1M rows | 1.28 s | 423 ms | **3.04×** |
 
-### Mixed Workloads (Real-World Simulation)
+### Mixed Workloads
 
 | Benchmark | Time |
 |-----------|------|
-| Decode + Transform + Encode 10K | 49 ms |
-| Filter + Aggregate 100K orders | 771 ms |
+| Decode + Transform + Encode 10K | 27 ms |
+| Filter + Aggregate 100K orders | 290 ms |
 
 ### Raw High-Performance API (Codable Bypass)
 
-For performance-critical tasks (pre-processing, filtering, or massive datasets), you can bypass `Codable` overhead entirely using the zero-copy `CSVParser` API. This achieves **~2x higher throughput**.
-
-**Safe Usage:**
-Use the `CSVParser.parse(data:)` wrapper to ensure memory safety.
+For performance-critical pipelines (pre-processing, filtering, or massive
+datasets), bypass `Codable` overhead entirely using the zero-copy
+`CSVParser` API. The parser yields ``CSVRowView`` instances that reference
+the source buffer with no per-row allocation.
 
 ```swift
-let data = Data(contentsOf: bigFile)
+let data = try Data(contentsOf: bigFile)
 
-// Count rows where age > 18
 let count = try CSVParser.parse(data: data) { parser in
     var validCount = 0
     for row in parser {
-        // 'row' is a zero-allocation View
-        // Access fields by index (0-based)
         if let ageStr = row.string(at: 1), let age = Int(ageStr), age > 18 {
             validCount += 1
         }
@@ -501,26 +495,17 @@ let count = try CSVParser.parse(data: data) { parser in
 }
 ```
 
-This approach avoids allocating `struct` or `class` instances for every row, drastically reducing ARC traffic.
-
 #### Raw API Benchmarks
-
-| Benchmark | Time | Throughput | Speedup vs Codable |
-|-----------|------|------------|-------------------|
-| Raw Parse 1M rows (Iterate Only) | 1.66 s | **~602K rows/s** | **2.04x** |
-| Raw Parse 1M rows (Iterate + String) | 1.78 s | **~562K rows/s** | **1.90x** |
-| Raw Parse 100K Quoted (Iterate Only) | 127 ms | **~787K rows/s** | - |
-| Raw Parse 100K Quoted (Iterate + String) | 155 ms | **~645K rows/s** | - |
-
-### Special Strategies (1K rows)
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| snake_case key conversion | 3.4 ms | ~294K rows/s |
-| Flexible date parsing | 142 ms | ~7.0K rows/s |
-| Flexible number parsing | 218 ms | ~4.6K rows/s |
+| Raw Parse 1M rows (Iterate Only) | 85 ms | **~11.78M rows/s** |
+| Raw Parse 1M rows (Iterate + String) | 214 ms | **~4.69M rows/s** |
+| Raw Parse 100K Quoted (Iterate Only) | 9 ms | **~11.24M rows/s** |
+| Raw Parse 100K Quoted (Iterate + String) | 37 ms | **~2.70M rows/s** |
 
 Run benchmarks locally:
+
 ```bash
 swift run -c release CSVCoderBenchmarks
 ```

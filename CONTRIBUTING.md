@@ -6,7 +6,7 @@ Contributions are welcome! This document outlines how to contribute to CSVCoder.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-org/CSVCoder.git
+   git clone https://github.com/g-cqd/CSVCoder.git
    cd CSVCoder
    ```
 
@@ -20,7 +20,8 @@ Contributions are welcome! This document outlines how to contribute to CSVCoder.
    swift test --parallel
    ```
 
-4. Run benchmarks:
+4. Run benchmarks (must be `-c release`, the benchmark harness refuses
+   to run without optimizations):
    ```bash
    swift run -c release CSVCoderBenchmarks
    ```
@@ -28,7 +29,7 @@ Contributions are welcome! This document outlines how to contribute to CSVCoder.
 ## Requirements
 
 - Swift 6.2+
-- Xcode 16.2+
+- Xcode 26+ (Swift 6.2 toolchain)
 - macOS 15+ / iOS 18+ / tvOS 18+ / watchOS 11+ / visionOS 2+
 
 ## Code Style

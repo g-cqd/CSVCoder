@@ -59,8 +59,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   symbols / ISO codes, saving 10–45 ms of cold-start ICU lookups.
 - Number `.locale(_:)` formatting / parsing now uses `FormatStyle`
   (Sendable, no caching required); `NumberFormatter` cache removed.
-- `OrderedDictionary` from `swift-collections` backs
-  `CSVEncodingStorage`, dropping the redundant `orderedKeys` array.
+
+### Follow-up (post-audit perf + safety)
+
+#### Performance
+- `CSVRowView.string(at:encoding:trim:)` performs byte-level whitespace
+  trimming on a `Span<UInt8>` view before materializing the `String`,
+  eliminating the second allocation per field. Decoder hot path is ~17%
+  faster on representative workloads:
+  - Decode 100K simple rows: 160 ms → 132 ms
+  - Decode 100K transactions: 506 ms → 447 ms
+  - Decode 50K orders: 341 ms → 283 ms
+- Reverted the audit's `OrderedDictionary` adoption in
+  `CSVEncodingStorage` back to a `Dictionary + [String]` pair (still
+  under `Mutex` for thread-safety). `OrderedDictionary` measured 3-6%
+  slower for the storage's insert-once / read-once access pattern.
+  `swift-collections` is no longer a dependency.
+
+#### Safety
+- Migrated the internal byte-trim helper from `UnsafeBufferPointer<UInt8>`
+  to `Span<UInt8>` (SE-0447, available on iOS 12.2+). Hot loops use
+  `subscript(unchecked:)` so the compile-time bounds and lifetime
+  guarantees come at zero runtime cost.
 
 ### Added
 
