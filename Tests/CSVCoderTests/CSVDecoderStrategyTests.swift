@@ -164,6 +164,42 @@ struct CSVDecoderStrategyTests {
         #expect(records[0].price == expected)
     }
 
+    @Test("Decode Int with flexible strategy strips currency and grouping (audit B2)")
+    func decodeIntFlexible() throws {
+        struct CountRecord: Codable {
+            let name: String
+            let count: Int
+        }
+        let csv = """
+            name,count
+            US,"1,234"
+            Money,$1234
+            Trailing,1234€
+            """
+
+        let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([CountRecord].self, from: csv)
+
+        #expect(records.count == 3)
+        #expect(records[0].count == 1234)
+        #expect(records[1].count == 1234)
+        #expect(records[2].count == 1234)
+    }
+
+    @Test("Flexible Int rejects fractional values (audit B2)")
+    func decodeIntFlexibleRejectsFractions() {
+        struct Row: Codable {
+            let n: Int
+        }
+        let csv = "n\n1.5"
+        let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
+        let decoder = CSVDecoder(configuration: config)
+        #expect(throws: CSVDecodingError.self) {
+            _ = try decoder.decode([Row].self, from: csv)
+        }
+    }
+
     @Test("Decode numbers with flexible strategy - currency symbols")
     func decodeNumbersFlexibleCurrency() throws {
         let csv = """

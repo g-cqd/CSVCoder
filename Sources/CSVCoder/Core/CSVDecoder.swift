@@ -600,28 +600,20 @@ public final class CSVDecoder: Sendable {
         }
     }
 
-    /// Converts snake_case to camelCase.
+    /// Converts snake_case to camelCase, matching
+    /// `JSONDecoder.KeyDecodingStrategy.convertFromSnakeCase` semantics.
     private func convertFromSnakeCase(_ key: String) -> String {
-        let parts = key.split(separator: "_")
-        guard let first = parts.first else { return key }
-        let rest = parts.dropFirst().map(\.capitalized)
-        return String(first).lowercased() + rest.joined()
+        JSONStyleCaseConverter.invert(key, separator: "_")
     }
 
     /// Converts kebab-case to camelCase.
     private func convertFromKebabCase(_ key: String) -> String {
-        let parts = key.split(separator: "-")
-        guard let first = parts.first else { return key }
-        let rest = parts.dropFirst().map(\.capitalized)
-        return String(first).lowercased() + rest.joined()
+        JSONStyleCaseConverter.invert(key, separator: "-")
     }
 
     /// Converts SCREAMING_SNAKE_CASE to camelCase.
     private func convertFromScreamingSnakeCase(_ key: String) -> String {
-        let parts = key.lowercased().split(separator: "_")
-        guard let first = parts.first else { return key }
-        let rest = parts.dropFirst().map(\.capitalized)
-        return String(first) + rest.joined()
+        JSONStyleCaseConverter.invert(key.lowercased(), separator: "_")
     }
 
     /// Converts PascalCase to camelCase.

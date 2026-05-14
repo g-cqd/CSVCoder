@@ -171,6 +171,32 @@ enum CSVValueParser {
         return Double(normalized)
     }
 
+    /// Parses an `Int64` value using the configured number strategy.
+    ///
+    /// For `.standard`, falls back to `Int64(value)` directly so digit-only
+    /// strings retain full 64-bit precision.  Other strategies route through
+    /// ``parseDouble(_:strategy:)`` (so currency symbols and locale grouping
+    /// are stripped) and then convert via `Int64(exactly:)`, returning `nil`
+    /// when the value is fractional or out of range.
+    static func parseInt64(
+        _ value: String,
+        strategy: CSVDecoder.NumberDecodingStrategy
+    ) -> Int64? {
+        switch strategy {
+        case .standard:
+            return Int64(value)
+
+        case .flexible,
+            .locale,
+            .parseStrategy,
+            .currency:
+            guard let double = parseDouble(value, strategy: strategy) else { return nil }
+            // Reject fractional values — an Int field with "1.5" should fail
+            // rather than silently truncating.
+            return Int64(exactly: double)
+        }
+    }
+
     /// Normalizes a number string by removing currency and fixing decimal separators.
     /// Supports both US (1,234.56) and EU (1.234,56) formats.
     static func normalizeNumberString(_ value: String) -> String? {

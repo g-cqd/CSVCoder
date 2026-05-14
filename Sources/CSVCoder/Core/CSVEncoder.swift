@@ -454,40 +454,127 @@ nonisolated public final class CSVEncoder: Sendable {
         CSVFieldEscaper.appendEscaped(value, to: &buffer, delimiter: delimiter)
     }
 
-    /// Converts camelCase to a separated-lowercase or separated-uppercase form.
-    private func convertCamelCase(_ key: String, separator: Character, uppercase: Bool) -> String {
-        var result: [Character] = []
-        result.reserveCapacity(key.count + 4)
-        for (index, char) in key.enumerated() {
-            if char.isUppercase {
-                if index > 0 {
-                    result.append(separator)
-                }
-                if uppercase {
-                    result.append(char)
-                } else {
-                    for c in char.lowercased() { result.append(c) }
-                }
-            } else {
-                if uppercase {
-                    for c in char.uppercased() { result.append(c) }
-                } else {
-                    result.append(char)
-                }
-            }
-        }
-        return String(result)
-    }
-
     private func convertToSnakeCase(_ key: String) -> String {
-        convertCamelCase(key, separator: "_", uppercase: false)
+        JSONStyleCaseConverter.convert(key, separator: "_", uppercase: false)
     }
 
     private func convertToKebabCase(_ key: String) -> String {
-        convertCamelCase(key, separator: "-", uppercase: false)
+        JSONStyleCaseConverter.convert(key, separator: "-", uppercase: false)
     }
 
     private func convertToScreamingSnakeCase(_ key: String) -> String {
-        convertCamelCase(key, separator: "_", uppercase: true)
+        JSONStyleCaseConverter.convert(key, separator: "_", uppercase: true)
+    }
+}
+
+// MARK: - JSONStyleCaseConverter
+
+/// Acronym-aware camelCase splitter, matching `JSONEncoder._convertToSnakeCase`
+/// from swift-foundation.
+///
+/// Splits a camelCase identifier on the same word boundaries the standard
+/// library uses, then joins the lowercased (or uppercased) parts with the
+/// requested separator.
+///
+/// Examples (snake_case form):
+/// - `myProperty` → `my_property`
+/// - `myURLProperty` → `my_url_property`
+/// - `URLEncoder` → `url_encoder`
+/// - `ID` → `id`
+/// - `iPhone` → `i_phone`
+enum JSONStyleCaseConverter {
+    /// Converts a camelCase string to a separator-joined form.
+    /// - Parameters:
+    ///   - key: The camelCase identifier.
+    ///   - separator: The character to insert between words.
+    ///   - uppercase: When `true`, joined words are uppercased; otherwise lowercased.
+    static func convert(_ key: String, separator: Character, uppercase: Bool) -> String {
+        guard !key.isEmpty else { return key }
+
+        // Walk through the string finding word boundaries.  The algorithm
+        // mirrors swift-foundation's `JSONEncoder._convertToSnakeCase`:
+        // it identifies runs of uppercase letters and treats a trailing
+        // uppercase-followed-by-lowercase as the start of a new word.
+        var wordRanges: [Range<String.Index>] = []
+        wordRanges.reserveCapacity(8)
+
+        var wordStart = key.startIndex
+        var searchIndex = key.index(after: key.startIndex)
+
+        while searchIndex < key.endIndex {
+            // Find the next uppercase character.
+            guard let upperBoundary = key[searchIndex ..< key.endIndex].firstIndex(where: { $0.isUppercase }) else {
+                wordRanges.append(wordStart ..< key.endIndex)
+                wordStart = key.endIndex
+                break
+            }
+
+            // Find the end of the uppercase run.
+            let upperRunEnd = key[upperBoundary ..< key.endIndex].firstIndex(where: { !$0.isUppercase })
+
+            guard let upperRunEnd else {
+                // The uppercase run extends to the end of the string.
+                wordRanges.append(wordStart ..< upperBoundary)
+                wordRanges.append(upperBoundary ..< key.endIndex)
+                wordStart = key.endIndex
+                break
+            }
+            if upperRunEnd == key.index(after: upperBoundary) {
+                // Single uppercase letter (camelCase boundary).
+                wordRanges.append(wordStart ..< upperBoundary)
+                wordStart = upperBoundary
+                searchIndex = key.index(after: upperBoundary)
+            } else {
+                // Run of uppercase letters: the previous word ends at the
+                // start of the run, and a new word begins at the last
+                // uppercase letter before a lowercase letter (acronym tail).
+                wordRanges.append(wordStart ..< upperBoundary)
+                let acronymTailStart = key.index(before: upperRunEnd)
+                wordRanges.append(upperBoundary ..< acronymTailStart)
+                wordStart = acronymTailStart
+                searchIndex = upperRunEnd
+            }
+        }
+
+        if wordStart < key.endIndex {
+            wordRanges.append(wordStart ..< key.endIndex)
+        }
+
+        // Drop empty ranges (defensive against single-character inputs).
+        let words = wordRanges.compactMap { range -> Substring? in
+            range.isEmpty ? nil : key[range]
+        }
+
+        guard !words.isEmpty else { return key }
+
+        let transform: (Substring) -> String = uppercase ? { $0.uppercased() } : { $0.lowercased() }
+        return words.map(transform).joined(separator: String(separator))
+    }
+
+    /// Inverts the conversion above: splits on the separator and capitalises
+    /// every word after the first.  This matches
+    /// `JSONDecoder.KeyDecodingStrategy.convertFromSnakeCase`, which is lossy
+    /// for acronyms (`my_url` → `myUrl`, not `myURL`).
+    static func invert(_ key: String, separator: Character) -> String {
+        guard !key.isEmpty else { return key }
+
+        // Preserve any leading or trailing separator runs (e.g. `_foo`, `foo_`).
+        let leading = key.prefix(while: { $0 == separator })
+        let trailing = key.reversed().prefix(while: { $0 == separator })
+        let core = key.dropFirst(leading.count).dropLast(trailing.count)
+
+        guard !core.isEmpty else { return key }
+
+        let parts = core.split(separator: separator, omittingEmptySubsequences: true)
+        guard let first = parts.first else { return key }
+
+        var result = String(leading)
+        result.append(first.lowercased())
+        for part in parts.dropFirst() {
+            result.append(part.prefix(1).uppercased())
+            result.append(part.dropFirst().lowercased())
+        }
+        result.append(String(trailing.reversed()))
+        return result
     }
 }

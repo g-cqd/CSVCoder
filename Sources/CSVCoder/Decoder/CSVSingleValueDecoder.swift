@@ -80,70 +80,92 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     }
 
     func decode(_ type: Int.Type) throws -> Int {
-        guard let result = Int(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = Int(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int8.Type) throws -> Int8 {
-        guard let result = Int8(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = Int8(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int8", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int16.Type) throws -> Int16 {
-        guard let result = Int16(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = Int16(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int16", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int32.Type) throws -> Int32 {
-        guard let result = Int32(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = Int32(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int32", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: Int64.Type) throws -> Int64 {
-        guard let result = Int64(trimmedValue) else {
+        guard let result = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int64", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt.Type) throws -> UInt {
-        guard let result = UInt(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = UInt(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt8.Type) throws -> UInt8 {
-        guard let result = UInt8(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = UInt8(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt16.Type) throws -> UInt16 {
-        guard let result = UInt16(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = UInt16(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt32.Type) throws -> UInt32 {
-        guard let result = UInt32(trimmedValue) else {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = UInt32(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: trimmedValue, location: location)
         }
         return result
     }
 
     func decode(_ type: UInt64.Type) throws -> UInt64 {
-        guard let result = UInt64(trimmedValue) else {
+        if case .standard = configuration.numberDecodingStrategy, let direct = UInt64(trimmedValue) {
+            return direct
+        }
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = UInt64(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: trimmedValue, location: location)
         }
         return result
@@ -173,9 +195,10 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             if let result = uuid as? T { return result }
         }
 
-        // Handle URL specially
+        // Handle URL specially. Use the strict iOS 17+/macOS 14+ overload so
+        // malformed values (spaces, control bytes) are rejected outright.
         if type == URL.self {
-            guard let url = URL(string: trimmedValue) else {
+            guard let url = URL(string: trimmedValue, encodingInvalidCharacters: false) else {
                 throw CSVDecodingError.typeMismatch(expected: "URL", actual: trimmedValue, location: location)
             }
             if let result = url as? T { return result }

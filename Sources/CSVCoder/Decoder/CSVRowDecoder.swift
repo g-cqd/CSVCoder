@@ -199,7 +199,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Int.Type, forKey key: Key) throws -> Int {
         let value = try getValue(for: key)
-        guard let result = Int(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = Int(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -207,7 +209,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 {
         let value = try getValue(for: key)
-        guard let result = Int8(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = Int8(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -215,7 +219,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 {
         let value = try getValue(for: key)
-        guard let result = Int16(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = Int16(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -223,7 +229,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 {
         let value = try getValue(for: key)
-        guard let result = Int32(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = Int32(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -231,7 +239,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 {
         let value = try getValue(for: key)
-        guard let result = Int64(value) else {
+        guard let result = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy) else {
             throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -239,7 +247,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt {
         let value = try getValue(for: key)
-        guard let result = UInt(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = UInt(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -247,7 +257,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 {
         let value = try getValue(for: key)
-        guard let result = UInt8(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = UInt8(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -255,7 +267,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 {
         let value = try getValue(for: key)
-        guard let result = UInt16(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = UInt16(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -263,7 +277,9 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 {
         let value = try getValue(for: key)
-        guard let result = UInt32(value) else {
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = UInt32(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -271,7 +287,15 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
 
     func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 {
         let value = try getValue(for: key)
-        guard let result = UInt64(value) else {
+        // UInt64 may exceed Int64 range; parse via parseInt64 only when the
+        // value fits in signed Int64. For larger values, fall back to direct
+        // parsing under `.standard`, or unsupported under other strategies.
+        if case .standard = configuration.numberDecodingStrategy, let direct = UInt64(value) {
+            return direct
+        }
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = UInt64(exactly: raw)
+        else {
             throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value, location: makeLocation(for: key))
         }
         return result
@@ -378,9 +402,11 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             if let result = uuid as? T { return result }
         }
 
-        // Handle URL specially
+        // Handle URL specially. Use the strict iOS 17+/macOS 14+ overload so
+        // malformed values (spaces, control bytes) are rejected outright
+        // instead of being silently percent-encoded.
         if type == URL.self {
-            guard let url = URL(string: value) else {
+            guard let url = URL(string: value, encodingInvalidCharacters: false) else {
                 throw CSVDecodingError.typeMismatch(expected: "URL", actual: value, location: location)
             }
             if let result = url as? T { return result }

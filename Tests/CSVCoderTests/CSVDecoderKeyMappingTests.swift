@@ -127,6 +127,26 @@ struct CSVDecoderKeyMappingTests {
         #expect(records[0].firstName == "Carol")
     }
 
+    @Test("Snake-case decoder is the inverse of the JSON-style encoder (audit B7)")
+    func snakeCaseRoundTripWithAcronyms() throws {
+        // JSONEncoder/Decoder's documented round-trip behaviour: snake_case
+        // collapses acronyms to lower-case (`my_url_property`), and decoding
+        // back lowercases the first letter only (`myUrlProperty`).  The CSV
+        // decoder must produce keys that match what the encoder emitted.
+        struct Record: Codable, Equatable {
+            let myUrlProperty: String
+            let httpServerUrl: String
+        }
+        let csv = """
+            my_url_property,http_server_url
+            a,b
+            """
+        let config = CSVDecoder.Configuration(keyDecodingStrategy: .convertFromSnakeCase)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([Record].self, from: csv)
+        #expect(records == [Record(myUrlProperty: "a", httpServerUrl: "b")])
+    }
+
     @Test("Decode with custom key transformation")
     func decodeWithCustomKeyTransformation() throws {
         let csv = """

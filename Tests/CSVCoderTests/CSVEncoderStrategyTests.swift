@@ -90,6 +90,30 @@ struct CSVEncoderStrategyTests {
         #expect(csv.contains("PHONE_NUMBER"))
     }
 
+    @Test("Snake-case algorithm matches JSONEncoder acronym rules (audit B7)")
+    func snakeCaseAcronymParity() {
+        // The new converter follows JSONEncoder._convertToSnakeCase semantics:
+        // consecutive uppercase letters form a single acronym word.
+        struct Sample: Codable {
+            let myURLProperty: String
+            let httpServerURL: String
+            let urlEncoder: String
+            let id: String
+        }
+
+        let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
+        let encoder = CSVEncoder(configuration: config)
+        let headers = try? encoder.headers(
+            for: Sample.self,
+            sample: Sample(myURLProperty: "", httpServerURL: "", urlEncoder: "", id: ""),
+        )
+
+        #expect(headers?.contains("my_url_property") == true)
+        #expect(headers?.contains("http_server_url") == true)
+        #expect(headers?.contains("url_encoder") == true)
+        #expect(headers?.contains("id") == true)
+    }
+
     @Test("Key encoding with custom transform")
     func keyEncodingCustom() throws {
         let records = [CamelCaseRecord(firstName: "John", lastName: "Doe", phoneNumber: "555-1234")]
