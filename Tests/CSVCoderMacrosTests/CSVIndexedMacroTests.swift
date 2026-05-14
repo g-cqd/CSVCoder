@@ -493,6 +493,112 @@ import Testing
                 macros: testMacros,
             )
         }
+
+        // MARK: - Diagnostics (audit D5)
+
+        @Test("Macro reports duplicate @CSVColumn names")
+        func macroReportsDuplicateColumns() {
+            assertMacroExpansion(
+                """
+                @CSVIndexed
+                struct R: Codable {
+                    @CSVColumn("x")
+                    let a: Int
+                    @CSVColumn("x")
+                    let b: Int
+                }
+                """,
+                expandedSource: """
+                    struct R: Codable {
+                        @CSVColumn("x")
+                        let a: Int
+                        @CSVColumn("x")
+                        let b: Int
+
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case a = "x"
+                            case b = "x"
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
+                    }
+
+                    extension R: CSVIndexedDecodable {
+                    }
+
+                    extension R: CSVIndexedEncodable {
+                    }
+                    """,
+                diagnostics: [
+                    DiagnosticSpec(
+                        message: "Duplicate CSV column name 'x' on 'a' and 'b'",
+                        line: 5,
+                        column: 5,
+                    )
+                ],
+                macros: testMacros,
+            )
+        }
+
+        @Test("Macro warns on orphan @CSVColumn (no @CSVIndexed on container)")
+        func macroWarnsOnOrphanCSVColumn() {
+            assertMacroExpansion(
+                """
+                struct Loose: Codable {
+                    @CSVColumn("renamed")
+                    let value: Int
+                }
+                """,
+                expandedSource: """
+                    struct Loose: Codable {
+                        @CSVColumn("renamed")
+                        let value: Int
+                    }
+                    """,
+                diagnostics: [
+                    DiagnosticSpec(
+                        message: "@CSVColumn has no effect without @CSVIndexed on the containing struct",
+                        line: 2,
+                        column: 5,
+                        severity: .warning,
+                    )
+                ],
+                macros: testMacros,
+            )
+        }
+
+        @Test("Macro escapes Swift keyword property names")
+        func macroEscapesKeywords() {
+            assertMacroExpansion(
+                """
+                @CSVIndexed
+                struct K: Codable {
+                    let `init`: Int
+                    let `class`: String
+                }
+                """,
+                expandedSource: """
+                    struct K: Codable {
+                        let `init`: Int
+                        let `class`: String
+
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case `init`
+                            case `class`
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
+                    }
+
+                    extension K: CSVIndexedDecodable {
+                    }
+
+                    extension K: CSVIndexedEncodable {
+                    }
+                    """,
+                macros: testMacros,
+            )
+        }
     }
 
 #endif

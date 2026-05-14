@@ -360,16 +360,6 @@ enum CSVFieldEscaper: Sendable {
         }
     }
 
-    /// SIMD-accelerated quoting check for larger fields.
-    /// Falls back to scalar check for small fields.
-    /// - Parameters:
-    ///   - bytes: UTF-8 bytes of the field value.
-    ///   - delimiter: The field delimiter byte.
-    /// - Returns: `true` if the field contains characters requiring quoting.
-    static func needsQuotingSIMD(_ bytes: [UInt8], delimiter: UInt8) -> Bool {
-        needsQuoting(bytes, delimiter: delimiter)
-    }
-
     /// Appends an escaped field to a byte buffer.
     /// Quotes the field if it contains delimiters, quotes, or newlines.
     /// Uses contiguous UTF-8 storage for efficient access.

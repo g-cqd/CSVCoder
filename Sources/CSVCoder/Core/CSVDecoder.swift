@@ -252,13 +252,19 @@ public final class CSVDecoder: Sendable {
         case locale(Locale)
         /// Use Foundation's FormatStyle.ParseStrategy for locale-aware parsing.
         /// Handles all 300+ locales automatically including grouping separators and decimal marks.
-        case parseStrategy(locale: Locale = .autoupdatingCurrent)
+        ///
+        /// Defaults to a snapshot `Locale.current` so the parser stays
+        /// consistent across a long-running decode, matching `JSONDecoder`
+        /// conventions.  Pass `.autoupdatingCurrent` explicitly if you want
+        /// to track system locale changes mid-stream.
+        case parseStrategy(locale: Locale = .current)
         /// Currency-aware parsing that strips currency symbols/codes before parsing.
         /// Uses system locale data to recognize all known currency symbols.
         /// - Parameters:
         ///   - code: Expected currency code (e.g., "USD"). If nil, accepts any currency.
-        ///   - locale: Locale for number format interpretation.
-        case currency(code: String? = nil, locale: Locale = .autoupdatingCurrent)
+        ///   - locale: Locale for number format interpretation.  Defaults to
+        ///             a snapshot `Locale.current`.
+        case currency(code: String? = nil, locale: Locale = .current)
     }
 
     /// Strategies for decoding boolean values.

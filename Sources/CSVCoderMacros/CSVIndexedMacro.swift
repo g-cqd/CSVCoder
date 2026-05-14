@@ -5,9 +5,64 @@
 //  Macro implementation for @CSVIndexed that generates CSVIndexedDecodable conformance.
 //
 
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
+
+// MARK: - Diagnostics
+
+/// Diagnostic message emitted when two `@CSVColumn` attributes claim the
+/// same external column name on the same `@CSVIndexed` struct.
+private struct DuplicateColumnDiagnostic: DiagnosticMessage {
+    let columnName: String
+    let firstProperty: String
+    let secondProperty: String
+
+    var message: String {
+        "Duplicate CSV column name '\(columnName)' on '\(firstProperty)' and '\(secondProperty)'"
+    }
+
+    var diagnosticID: MessageID {
+        MessageID(domain: "CSVCoderMacros", id: "duplicateColumnName")
+    }
+
+    var severity: DiagnosticSeverity { .error }
+}
+
+/// Diagnostic message emitted when `@CSVColumn` is applied to a property
+/// whose parent struct lacks `@CSVIndexed` — the column rename will silently
+/// have no effect, which is almost always a bug.
+private struct OrphanCSVColumnDiagnostic: DiagnosticMessage {
+    var message: String {
+        "@CSVColumn has no effect without @CSVIndexed on the containing struct"
+    }
+
+    var diagnosticID: MessageID {
+        MessageID(domain: "CSVCoderMacros", id: "orphanCSVColumn")
+    }
+
+    var severity: DiagnosticSeverity { .warning }
+}
+
+/// Swift reserved keywords that need backtick-escaping when used as property
+/// names.  This is the subset that legally appears in a value declaration
+/// (so `Self` / `Any` etc. are intentionally excluded).
+private let swiftReservedWords: Set<String> = [
+    "associatedtype", "class", "deinit", "enum", "extension", "fileprivate",
+    "func", "import", "init", "inout", "internal", "let", "open", "operator",
+    "private", "precedencegroup", "protocol", "public", "rethrows", "static",
+    "struct", "subscript", "typealias", "var",
+    "break", "case", "catch", "continue", "default", "defer", "do", "else",
+    "fallthrough", "for", "guard", "if", "in", "repeat", "return", "throw",
+    "switch", "where", "while",
+    "as", "false", "is", "nil", "self", "super", "throws", "true", "try",
+]
+
+/// Backtick-escapes a property name if it is a Swift reserved keyword.
+private func escapeIdentifier(_ name: String) -> String {
+    swiftReservedWords.contains(name) ? "`\(name)`" : name
+}
 
 // MARK: - CSVIndexedMacroError
 
@@ -50,7 +105,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         of _: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
         conformingTo _: [TypeSyntax],
-        in _: some MacroExpansionContext,
+        in context: some MacroExpansionContext,
     ) throws -> [DeclSyntax] {
         // Ensure we're attached to a struct
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
@@ -65,6 +120,12 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         guard !storedProperties.isEmpty else {
             throw CSVIndexedMacroError.noStoredProperties
         }
+
+        // Audit D5: emit a diagnostic for duplicate @CSVColumn names.  Two
+        // properties resolving to the same external column produce a
+        // `case foo = "x"` / `case bar = "x"` enum, which the Swift compiler
+        // rejects with a much less actionable error.
+        diagnoseDuplicateColumns(storedProperties, in: context)
 
         // Check if CodingKeys already exists
         let existingCodingKeys = findExistingCodingKeys(in: structDecl)
@@ -82,6 +143,33 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         members.append(typealiasDecl)
 
         return members
+    }
+
+    /// Scans `properties` for duplicate external column names and reports
+    /// each collision via the macro expansion context.
+    private static func diagnoseDuplicateColumns(
+        _ properties: [(name: String, customName: String?, attribute: AttributeSyntax?)],
+        in context: some MacroExpansionContext,
+    ) {
+        var seen: [String: String] = [:]
+        for property in properties {
+            // Only `@CSVColumn` renames participate in duplicate detection;
+            // bare properties always use their own name.
+            guard let columnName = property.customName, let attribute = property.attribute else { continue }
+            if let firstProperty = seen[columnName] {
+                let diag = Diagnostic(
+                    node: Syntax(attribute),
+                    message: DuplicateColumnDiagnostic(
+                        columnName: columnName,
+                        firstProperty: firstProperty,
+                        secondProperty: property.name,
+                    ),
+                )
+                context.diagnose(diag)
+            } else {
+                seen[columnName] = property.name
+            }
+        }
     }
 
     // MARK: - ExtensionMacro
@@ -147,11 +235,14 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     // MARK: - Helpers
 
     /// Extracts stored property names from a struct declaration.
+    /// The `attribute` field carries the `@CSVColumn` syntax node when a custom
+    /// name was provided, so diagnostics can point at the offending source.
     private static func extractStoredProperties(from structDecl: StructDeclSyntax) -> [(
         name: String,
         customName: String?,
+        attribute: AttributeSyntax?,
     )] {
-        var properties: [(name: String, customName: String?)] = []
+        var properties: [(name: String, customName: String?, attribute: AttributeSyntax?)] = []
 
         for member in structDecl.memberBlock.members {
             guard let varDecl = member.decl.as(VariableDeclSyntax.self) else { continue }
@@ -179,17 +270,20 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
                 let propertyName = identifier.identifier.text
 
                 // Check for @CSVColumn attribute
-                let customName = extractCSVColumnName(from: varDecl.attributes)
+                let (customName, attribute) = extractCSVColumnInfo(from: varDecl.attributes)
 
-                properties.append((name: propertyName, customName: customName))
+                properties.append((name: propertyName, customName: customName, attribute: attribute))
             }
         }
 
         return properties
     }
 
-    /// Extracts custom column name from @CSVColumn attribute if present.
-    private static func extractCSVColumnName(from attributes: AttributeListSyntax) -> String? {
+    /// Extracts the custom column name and the originating attribute syntax
+    /// from `@CSVColumn("…")`, if present.
+    private static func extractCSVColumnInfo(
+        from attributes: AttributeListSyntax
+    ) -> (name: String?, attribute: AttributeSyntax?) {
         for attribute in attributes {
             guard case .attribute(let attr) = attribute else { continue }
             guard let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
@@ -204,10 +298,10 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
                 let segment = stringLiteral.segments.first,
                 case .stringSegment(let stringSegment) = segment
             {
-                return stringSegment.content.text
+                return (stringSegment.content.text, attr)
             }
         }
-        return nil
+        return (nil, nil)
     }
 
     /// Finds existing CodingKeys enum in the struct.
@@ -222,24 +316,27 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         return nil
     }
 
-    /// Generates CodingKeys enum with CaseIterable conformance.
+    /// Generates the `CodingKeys` enum with `CaseIterable` conformance.
+    /// Property names that collide with Swift reserved keywords are
+    /// backtick-escaped so `init` / `class` / `default` etc. compile cleanly.
     private static func generateCodingKeys(
-        properties: [(name: String, customName: String?)],
-        accessLevel: AccessLevel
+        properties: [(name: String, customName: String?, attribute: AttributeSyntax?)],
+        accessLevel: AccessLevel,
     ) -> DeclSyntax {
-        var casesCode = ""
-        for (index, prop) in properties.enumerated() {
-            if index > 0 { casesCode += "\n" }
+        var lines: [String] = []
+        for prop in properties {
+            let escapedName = escapeIdentifier(prop.name)
             if let customName = prop.customName {
-                casesCode += "        case \(prop.name) = \"\(customName)\""
+                lines.append("case \(escapedName) = \"\(customName)\"")
             } else {
-                casesCode += "        case \(prop.name)"
+                lines.append("case \(escapedName)")
             }
         }
+        let body = lines.joined(separator: "\n    ")
 
         return """
             \(raw: accessLevel.rawValue)enum CodingKeys: String, CodingKey, CaseIterable {
-            \(raw: casesCode)
+                \(raw: body)
             }
             """
     }
@@ -250,14 +347,37 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
 /// The @CSVColumn macro marks a property with a custom CSV column name.
 /// This is a peer macro that doesn't generate any code itself;
 /// it's read by @CSVIndexed to customize CodingKeys.
+///
+/// Audit D5: when applied to a property whose parent struct is not annotated
+/// with `@CSVIndexed`, the rename is silently dropped.  Emit a warning so the
+/// mistake surfaces during macro expansion rather than at runtime.
 public struct CSVColumnMacro: PeerMacro {
     public static func expansion(
-        of _: AttributeSyntax,
-        providingPeersOf _: some DeclSyntaxProtocol,
-        in _: some MacroExpansionContext,
+        of attribute: AttributeSyntax,
+        providingPeersOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext,
     ) throws -> [DeclSyntax] {
-        // This macro doesn't generate any code
-        // It's just a marker that @CSVIndexed reads
-        []
+        // Walk up the syntax tree looking for the containing struct.
+        var parent: Syntax? = declaration.parent
+        while let node = parent {
+            if let structDecl = node.as(StructDeclSyntax.self) {
+                let hasCSVIndexed = structDecl.attributes.contains { element in
+                    guard case .attribute(let attr) = element,
+                        let identifier = attr.attributeName.as(IdentifierTypeSyntax.self)
+                    else { return false }
+                    return identifier.name.text == "CSVIndexed"
+                }
+                if !hasCSVIndexed {
+                    context.diagnose(
+                        Diagnostic(node: Syntax(attribute), message: OrphanCSVColumnDiagnostic())
+                    )
+                }
+                break
+            }
+            parent = node.parent
+        }
+
+        // This macro doesn't generate any code; it's a marker that @CSVIndexed reads.
+        return []
     }
 }
