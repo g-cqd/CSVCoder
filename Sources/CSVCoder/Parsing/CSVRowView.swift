@@ -207,6 +207,11 @@ public struct CSVRowView {
     /// second String allocation — the trim is performed by adjusting the
     /// byte range used to build the String.
     ///
+    /// Internally the trim runs over a `Span<UInt8>` view (Swift 6.2,
+    /// iOS 12.2+) for compile-time bounds and lifetime safety; the hot
+    /// loop uses `subscript(unchecked:)` so the safety has no runtime
+    /// cost.
+    ///
     /// - Parameters:
     ///   - index: The zero-based field index.
     ///   - encoding: The string encoding to use for conversion.
@@ -228,7 +233,20 @@ public struct CSVRowView {
 
         let ptr = base.advanced(by: start)
         let fieldBuffer = UnsafeBufferPointer(start: ptr, count: length)
-        let trimmedBuffer = trim ? Self.trimASCII(fieldBuffer) : fieldBuffer
+
+        // Compute the trimmed byte range using a Span view, then re-derive
+        // an UnsafeBufferPointer of the matching sub-range. This keeps the
+        // existing CSVUnescaper / String constructor call sites unchanged.
+        let (trimOffset, trimCount): (Int, Int)
+        if trim {
+            (trimOffset, trimCount) = Self.trimASCIIRange(fieldBuffer.span)
+        } else {
+            (trimOffset, trimCount) = (0, length)
+        }
+        let trimmedBuffer = UnsafeBufferPointer(
+            start: ptr.advanced(by: trimOffset),
+            count: trimCount,
+        )
 
         // Fast path for UTF-8 (most common case)
         if encoding == .utf8 {
@@ -248,22 +266,24 @@ public struct CSVRowView {
         return String(data: data, encoding: encoding)
     }
 
-    /// Returns a sub-range of `buffer` with leading and trailing ASCII whitespace
-    /// bytes removed. Operates entirely on byte offsets — no allocation. Whitespace
-    /// is the standard set: 0x09 (TAB), 0x0A (LF), 0x0B (VT), 0x0C (FF), 0x0D (CR),
-    /// 0x20 (SP).
+    /// Returns the `(offset, count)` of the sub-range of `span` with leading
+    /// and trailing ASCII whitespace removed. `Span` provides compile-time
+    /// bounds checking for the loop; `subscript(unchecked:)` keeps the hot
+    /// path free of redundant bounds-check codegen. Whitespace is the
+    /// ASCII set: `0x09` (TAB), `0x0A` (LF), `0x0B` (VT), `0x0C` (FF),
+    /// `0x0D` (CR), `0x20` (SP).
     @inlinable
-    static func trimASCII(_ buffer: UnsafeBufferPointer<UInt8>) -> UnsafeBufferPointer<UInt8> {
-        guard let base = buffer.baseAddress, !buffer.isEmpty else { return buffer }
+    static func trimASCIIRange(_ span: Span<UInt8>) -> (offset: Int, count: Int) {
+        guard !span.isEmpty else { return (0, 0) }
         var start = 0
-        var end = buffer.count
-        while start < end, Self.isASCIIWhitespace(base[start]) {
+        var end = span.count
+        while start < end, Self.isASCIIWhitespace(span[unchecked: start]) {
             start &+= 1
         }
-        while end > start, Self.isASCIIWhitespace(base[end &- 1]) {
+        while end > start, Self.isASCIIWhitespace(span[unchecked: end &- 1]) {
             end &-= 1
         }
-        return UnsafeBufferPointer(start: base.advanced(by: start), count: end - start)
+        return (start, end - start)
     }
 
     @inlinable
