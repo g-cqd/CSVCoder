@@ -132,6 +132,34 @@ struct CSVDecoderStrategyTests {
         #expect(records[1].price == 45.50)
     }
 
+    @Test(
+        "Flexible thousands-vs-decimal heuristic stays in the European-decimal lane unless the part is exactly 3 digits",
+        arguments: [
+            // Two-digit fraction is European decimal, not thousands.
+            ("1,10", 1.10),
+            // Single-digit fraction is also European decimal.
+            ("9,5", 9.5),
+            // Four-digit fraction is European decimal (precision case).
+            ("1,2345", 1.2345),
+            // Exactly three digits after the only comma is the thousands case.
+            ("1,234", 1234.0),
+            ("12,345", 12345.0)
+        ]
+    )
+    func decodeNumbersFlexibleThousandsHeuristic(value: String, expected: Double) throws {
+        let csv = """
+            item,price
+            sample,"\(value)"
+            """
+
+        let config = CSVDecoder.Configuration(numberDecodingStrategy: .flexible)
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([PriceRecord].self, from: csv)
+
+        #expect(records.count == 1)
+        #expect(records[0].price == expected)
+    }
+
     @Test("Decode numbers with flexible strategy - currency symbols")
     func decodeNumbersFlexibleCurrency() throws {
         let csv = """

@@ -126,10 +126,7 @@ enum CSVValueParser {
             return parseFlexibleDouble(value)
 
         case .locale(let locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            return formatter.number(from: value)?.doubleValue
+            return FormatterCache.numberFormatter(for: locale).number(from: value)?.doubleValue
 
         case .parseStrategy(let locale):
             return LocaleUtilities.parseDouble(value, locale: locale)
@@ -147,17 +144,17 @@ enum CSVValueParser {
     ) -> Decimal? {
         switch strategy {
         case .standard:
-            return Decimal(string: value)
+            // Pin to en_US_POSIX so `.standard` is genuinely locale-independent
+            // (Decimal(string:) without a locale uses the current locale and
+            // fails on `"3.14"` under a comma-decimal locale).
+            return Decimal(string: value, locale: Locale(identifier: "en_US_POSIX"))
 
         case .flexible:
             guard let cleaned = normalizeNumberString(value) else { return nil }
-            return Decimal(string: cleaned)
+            return Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))
 
         case .locale(let locale):
-            let formatter = NumberFormatter()
-            formatter.locale = locale
-            formatter.numberStyle = .decimal
-            return formatter.number(from: value)?.decimalValue
+            return FormatterCache.numberFormatter(for: locale).number(from: value)?.decimalValue
 
         case .parseStrategy(let locale):
             return LocaleUtilities.parseDecimal(value, locale: locale)
@@ -195,11 +192,18 @@ enum CSVValueParser {
                 }
             }
         } else if hasComma, !hasDot {
+            // Single comma, no dot — ambiguous between European decimal ("9,5")
+            // and an Indian/Latin thousands separator. Heuristics:
+            //   parts[1].count == 3 → almost certainly thousands ("1,234")
+            //   parts[1].count == 1 or 2 → European decimal ("9,5", "1,10")
+            //   otherwise → treat as decimal (strip leading thousands groups
+            //   would require multiple commas, which the parser bucket above
+            //   already handles).
             let parts = cleaned.split(separator: ",")
-            if parts.count == 2, parts[1].count <= 2 {
-                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
-            } else {
+            if parts.count == 2, parts[1].count == 3 {
                 cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+            } else {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
             }
         }
 
@@ -248,10 +252,7 @@ enum CSVValueParser {
             }
 
         case .formatted(let format):
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale.autoupdatingCurrent
-            formatter.timeZone = TimeZone.autoupdatingCurrent
+            let formatter = FormatterCache.userLocaleDateFormatter(for: format)
             guard let date = formatter.date(from: value) else {
                 throw CSVDecodingError.typeMismatch(
                     expected: "Date with format \(format)",

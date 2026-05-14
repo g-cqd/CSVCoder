@@ -17,6 +17,12 @@ struct StreamingRowProcessor<T: Decodable> {
 
     init(configuration: CSVDecoder.Configuration) {
         self.configuration = configuration
+        // Build a top-level decoder once so we can route the first row through
+        // its `resolveHeaders` — that path applies `indexMapping`,
+        // `columnMapping`, and `keyDecodingStrategy` consistently with the
+        // non-streaming code in `CSVDecoder.decode(_:from:)`. Without this,
+        // streaming callers silently get the raw header strings.
+        self.decoder = CSVDecoder(configuration: configuration)
     }
 
     // MARK: Internal
@@ -31,10 +37,18 @@ struct StreamingRowProcessor<T: Decodable> {
         // Handle headers on first row
         if headers == nil {
             if configuration.hasHeaders {
-                headers = row
+                headers = decoder.resolveHeaders(
+                    rawHeaders: row,
+                    columnOrder: nil,
+                    columnCount: row.count
+                )
                 return nil
             } else {
-                headers = (0 ..< row.count).map { "column\($0)" }
+                headers = decoder.resolveHeaders(
+                    rawHeaders: (0 ..< row.count).map { "column\($0)" },
+                    columnOrder: nil,
+                    columnCount: row.count
+                )
             }
         }
 
@@ -50,16 +64,17 @@ struct StreamingRowProcessor<T: Decodable> {
         }
 
         // Decode row
-        let decoder = CSVRowDecoder(
+        let rowDecoder = CSVRowDecoder(
             row: dictionary,
             configuration: configuration,
             codingPath: [],
         )
-        return try T(from: decoder)
+        return try T(from: rowDecoder)
     }
 
     // MARK: Private
 
     private let configuration: CSVDecoder.Configuration
+    private let decoder: CSVDecoder
     private var headers: [String]?
 }

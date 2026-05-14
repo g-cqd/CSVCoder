@@ -80,7 +80,12 @@ struct SIMDScanner: Sendable {
         var isQuote: Bool { byte == SIMDScanner.quote }
         var isComma: Bool { byte == SIMDScanner.comma }
         var isNewline: Bool { byte == SIMDScanner.cr || byte == SIMDScanner.lf }
-        var isDelimiter: Bool { byte == SIMDScanner.comma || byte == SIMDScanner.tab }
+
+        /// Returns true when this position is the configured field separator.
+        /// Callers must pass the actual delimiter byte; the property version
+        /// that hardcoded comma+tab was removed because it silently lied about
+        /// configured non-comma delimiters such as semicolon.
+        func isDelimiter(_ delimiter: UInt8) -> Bool { byte == delimiter }
     }
 
     /// Result of scanning a buffer for row boundaries.

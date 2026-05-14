@@ -104,13 +104,17 @@ enum CSVValueFormatter {
 
 // MARK: - FormatterCache
 
-/// Caches heavyweight formatters to avoid per-call allocation.
+/// Caches heavyweight Foundation formatters so decoders/encoders that touch
+/// many rows don't pay the per-row construction cost (NumberFormatter and
+/// DateFormatter both go through ICU initialisation, ~5–50µs each).
 /// Thread-safe via Mutex.
 enum FormatterCache {
-    private static let cache = Mutex<[String: DateFormatter]>([:])
+    private static let dateCache = Mutex<[String: DateFormatter]>([:])
+    private static let localeNumberCache = Mutex<[String: NumberFormatter]>([:])
+    private static let formatDateAutoupdatingCache = Mutex<[String: DateFormatter]>([:])
 
     static func dateFormatter(for format: String) -> DateFormatter {
-        cache.withLock { cache in
+        dateCache.withLock { cache in
             if let cached = cache[format] {
                 return cached
             }
@@ -119,6 +123,40 @@ enum FormatterCache {
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.timeZone = TimeZone(secondsFromGMT: 0)
             cache[format] = formatter
+            return formatter
+        }
+    }
+
+    /// DateFormatter pinned to `Locale.autoupdatingCurrent` / `TimeZone.autoupdatingCurrent`,
+    /// for the decoder's `.formatted(_:)` strategy which is expected to honour the user's
+    /// locale. Cached separately from the POSIX variant.
+    static func userLocaleDateFormatter(for format: String) -> DateFormatter {
+        formatDateAutoupdatingCache.withLock { cache in
+            if let cached = cache[format] {
+                return cached
+            }
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale.autoupdatingCurrent
+            formatter.timeZone = TimeZone.autoupdatingCurrent
+            cache[format] = formatter
+            return formatter
+        }
+    }
+
+    /// NumberFormatter for `.locale(_:)` strategies. Keyed on locale identifier so any
+    /// two callers with the same locale share the formatter — the typical case for
+    /// bulk CSV ingest.
+    static func numberFormatter(for locale: Locale) -> NumberFormatter {
+        localeNumberCache.withLock { cache in
+            if let cached = cache[locale.identifier] {
+                return cached
+            }
+            let formatter = NumberFormatter()
+            formatter.locale = locale
+            formatter.numberStyle = .decimal
+            formatter.maximumFractionDigits = 15
+            cache[locale.identifier] = formatter
             return formatter
         }
     }
