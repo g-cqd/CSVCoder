@@ -28,6 +28,12 @@ permissions:
 env:
   XCODE_VERSION: '26.1.1'
   SWA_VERSION: '0.0.23'
+  # Opt into Node.js 24 for JavaScript actions ahead of the
+  # Node 20 → 24 migration that GitHub forces on 2026-06-02.
+  # Without this, `actions/checkout@v4`, `actions/cache@v4`, etc.
+  # emit a deprecation warning on every run.
+  # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   # ============================================================================
@@ -280,8 +286,8 @@ jobs:
       - name: Determine Version
         id: version
         run: |
-          if [[ -f ".spk.json" ]]; then
-            VERSION=$(jq -r '.project.version // empty' .spk.json)
+          if [[ -f ".version" ]]; then
+            VERSION="$(tr -d '[:space:]' < .version)"
           elif [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then

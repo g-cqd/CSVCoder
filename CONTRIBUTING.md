@@ -40,13 +40,29 @@ Contributions are welcome! This document outlines how to contribute to CSVCoder.
 - Prefer `async`/`await` over callbacks
 - No force unwrapping in library code
 
+## Git Hooks
+
+This repo uses [project-hooks](https://github.com/g-cqd/project-hooks)
+for pre-commit and pre-push validation. Configuration is in
+`.project-hooks.yml`. To install the hooks locally after cloning:
+
+```bash
+project-hooks install
+```
+
+The hooks auto-detect `swift-format` and the SwiftPM test runner. The
+config layered on top enforces Conventional Commits on pushed commits
+and runs `swift test --parallel` on pre-push.
+
 ## Pull Request Process
 
 1. Fork the repository and create a feature branch
-2. Ensure all tests pass: `swift test --parallel`
-3. Add tests for new functionality
-4. Update documentation if needed
-5. Submit a pull request with a clear description
+2. Install hooks: `project-hooks install`
+3. Ensure all tests pass: `swift test --parallel`
+4. Add tests for new functionality
+5. Update documentation if needed
+6. Submit a pull request with a clear description; commit messages
+   must follow Conventional Commits (`feat:`, `fix:`, `perf:`, etc.)
 
 ## Reporting Issues
 

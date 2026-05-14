@@ -1,0 +1,31 @@
+# project-hooks configuration for CSVCoder
+#
+# Auto-detection handles the heavy lifting: project-hooks discovers
+# `swift-format` and the SwiftPM test runner without further hints.
+# The settings below add a thin layer of project-specific policy on
+# top of that:
+#
+# - Pre-push enforces Conventional Commits on commits unique to the
+#   pushed branch (commits already on origin/main are ignored).
+# - work-scope keeps downstream checks focused on the branch's own
+#   work so pushes don't re-validate the whole history.
+# - test-override pins the SwiftPM runner with `--parallel` so the
+#   test stage matches what CI runs.
+
+pre-push:
+  commit-message:
+    pattern: "^(feat|fix|perf|refactor|test|docs|chore|build|ci|style|revert)(\\(.+\\))?:\\s.+"
+    error: |
+      Commit message must follow Conventional Commits format:
+        <type>(<optional scope>): <subject>
+      Allowed types: feat, fix, perf, refactor, test, docs, chore, build, ci, style, revert
+    base: "origin/main"
+
+  work-scope:
+    base: "origin/main"
+    walk: first-parent
+
+  test-override:
+    type: swift
+    extra-args:
+      - "--parallel"
