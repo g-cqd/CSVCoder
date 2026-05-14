@@ -126,20 +126,37 @@ actor BackpressureController {
 
         if shouldResume {
             isPaused = false
-            let currentWaiters = waiters
+            let snapshot = waiters
             waiters.removeAll()
-            for waiter in currentWaiters {
-                waiter.resume()
+            for (_, continuation) in snapshot {
+                continuation.resume()
             }
         }
     }
 
-    /// Waits until buffer has space for more items.
+    /// Waits until buffer has space for more items.  Cooperates with task
+    /// cancellation: if the calling task is cancelled while suspended, the
+    /// continuation is resumed promptly (no leak window).
     func waitForSpace() async {
         guard isPaused else { return }
 
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
+        // If the task is already cancelled there is no point parking — bail
+        // before reserving a continuation slot.
+        guard !Task.isCancelled else { return }
+
+        let id = nextWaiterID
+        nextWaiterID &+= 1
+
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                // We are running on the actor's executor (called via `await self.waitForSpace`),
+                // so registering the continuation is synchronous and atomic with the suspend.
+                registerWaiter(id: id, continuation: continuation)
+            }
+        } onCancel: {
+            // The cancellation handler runs outside actor isolation, so it
+            // must hop back onto the actor to mutate the waiter map.
+            Task { await self.resumeWaiter(id: id) }
         }
     }
 
@@ -148,10 +165,10 @@ actor BackpressureController {
     func cancelAllWaiters() {
         isPaused = false
         bufferedCount = 0
-        let currentWaiters = waiters
+        let snapshot = waiters
         waiters.removeAll()
-        for waiter in currentWaiters {
-            waiter.resume()
+        for (_, continuation) in snapshot {
+            continuation.resume()
         }
     }
 
@@ -160,7 +177,27 @@ actor BackpressureController {
     private let config: CSVDecoder.MemoryLimitConfiguration
     private var bufferedCount: Int = 0
     private var isPaused: Bool = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [UInt64: CheckedContinuation<Void, Never>] = [:]
+    private var nextWaiterID: UInt64 = 0
+
+    /// Adds a continuation to the waiter map.  If the calling Task is already
+    /// cancelled (or the controller is no longer paused) the continuation is
+    /// resumed immediately to avoid a leak.
+    private func registerWaiter(id: UInt64, continuation: CheckedContinuation<Void, Never>) {
+        guard isPaused else {
+            continuation.resume()
+            return
+        }
+        waiters[id] = continuation
+    }
+
+    /// Resumes (and removes) the continuation associated with the given ID,
+    /// if it is still present in the waiter map.
+    private func resumeWaiter(id: UInt64) {
+        if let continuation = waiters.removeValue(forKey: id) {
+            continuation.resume()
+        }
+    }
 }
 
 // MARK: - Memory-Aware Streaming Extension
@@ -188,13 +225,12 @@ extension CSVDecoder {
 
             Task {
                 do {
-                    let parser = try StreamingCSVParser(url: url, configuration: configuration)
-                    var iterator = parser.makeAsyncIterator()
+                    var producer = try CSVRowStreamProducer(url: url, configuration: configuration)
                     var processor = StreamingRowProcessor<T>(configuration: configuration)
                     var batchBuffer: [T] = []
                     batchBuffer.reserveCapacity(memoryConfig.batchSize)
 
-                    while let row = try await iterator.next() {
+                    while let row = try producer.nextRow() {
                         guard let value = try processor.process(row) else { continue }
                         batchBuffer.append(value)
 
@@ -250,13 +286,12 @@ extension CSVDecoder {
         AsyncThrowingStream(bufferingPolicy: .bufferingNewest(4)) { continuation in
             Task {
                 do {
-                    let parser = try StreamingCSVParser(url: url, configuration: configuration)
-                    var iterator = parser.makeAsyncIterator()
+                    var producer = try CSVRowStreamProducer(url: url, configuration: configuration)
                     var processor = StreamingRowProcessor<T>(configuration: configuration)
                     var batch: [T] = []
                     batch.reserveCapacity(memoryConfig.batchSize)
 
-                    while let row = try await iterator.next() {
+                    while let row = try producer.nextRow() {
                         guard let value = try processor.process(row) else { continue }
                         batch.append(value)
 
@@ -315,24 +350,23 @@ extension CSVDecoder {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let reader = try MemoryMappedReader(url: url)
-                    let totalBytes = reader.count
+                    let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                    let totalBytes = data.count
 
                     // Estimate total rows using SIMD newline count
-                    let estimatedRows = reader.withUnsafeBytes { buffer -> Int in
+                    let estimatedRows = data.withUnsafeBytes { buffer -> Int in
                         guard let baseAddress = buffer.baseAddress else { return 0 }
                         let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
                         return SIMDScanner.countNewlinesApprox(buffer: bytes, count: totalBytes)
                     }
 
-                    let parser = try StreamingCSVParser(url: url, configuration: configuration)
-                    var iterator = parser.makeAsyncIterator()
+                    var producer = try CSVRowStreamProducer(data: data, configuration: configuration)
                     var processor = StreamingRowProcessor<T>(configuration: configuration)
                     var rowsDecoded = 0
                     var lastReportedRow = 0
                     let reportInterval = max(1, estimatedRows / 100)  // Report ~100 times
 
-                    while let row = try await iterator.next() {
+                    while let row = try producer.nextRow() {
                         guard let value = try processor.process(row) else { continue }
                         continuation.yield(value)
                         rowsDecoded += 1

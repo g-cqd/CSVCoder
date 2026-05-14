@@ -215,17 +215,36 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             )
             try value.encode(to: nestedEncoder)
 
-        case .codable,
-            .json:
-            // Encode as JSON string
-            let jsonEncoder = JSONEncoder()
-            jsonEncoder.outputFormatting = [.sortedKeys]
-            let jsonData = try jsonEncoder.encode(value)
-            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                throw CSVEncodingError.invalidValue("Failed to encode nested type as JSON for key '\(fullKey)'")
-            }
+        case .json(let maxBytes):
+            // Encode as JSON string, enforcing the configured byte budget.
+            let jsonString = try Self.encodeJSON(value, maxBytes: maxBytes, key: fullKey)
+            storage.setValue(jsonString, forKey: fullKey)
+
+        case .codable:
+            // Deprecated alias for `.json` — apply the default 1 MiB bound.
+            let jsonString = try Self.encodeJSON(value, maxBytes: 1 << 20, key: fullKey)
             storage.setValue(jsonString, forKey: fullKey)
         }
+    }
+
+    /// Encodes a value to JSON and asserts the output stays within ``maxBytes``.
+    nonisolated private static func encodeJSON(
+        _ value: some Encodable,
+        maxBytes: Int,
+        key: String,
+    ) throws -> String {
+        let jsonEncoder = JSONEncoder()
+        jsonEncoder.outputFormatting = [.sortedKeys]
+        let jsonData = try jsonEncoder.encode(value)
+        guard jsonData.count <= maxBytes else {
+            throw CSVEncodingError.invalidValue(
+                "Nested JSON for key '\(key)' exceeds \(maxBytes) byte limit (got \(jsonData.count))"
+            )
+        }
+        guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+            throw CSVEncodingError.invalidValue("Failed to encode nested type as JSON for key '\(key)'")
+        }
+        return jsonString
     }
 
     mutating func nestedContainer<NestedKey: CodingKey>(
@@ -253,8 +272,8 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             )
             return KeyedEncodingContainer(nestedContainer)
 
-        case .codable,
-            .json:
+        case .json,
+            .codable:
             return KeyedEncodingContainer(
                 CSVPoisonKeyedEncodingContainer<NestedKey>(
                     error: CSVEncodingError.unsupportedType(

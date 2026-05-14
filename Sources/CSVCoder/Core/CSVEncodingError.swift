@@ -27,7 +27,7 @@ import Foundation
 ///
 /// ```swift
 /// var config = CSVEncoder.Configuration()
-/// config.nestedTypeEncodingStrategy = .json  // Encode as JSON string
+/// config.nestedTypeEncodingStrategy = .json()  // Encode as JSON string (default 1 MiB cap)
 /// // or
 /// config.nestedTypeEncodingStrategy = .flatten(separator: "_")
 /// ```

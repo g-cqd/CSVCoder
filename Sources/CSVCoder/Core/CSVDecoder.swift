@@ -201,9 +201,12 @@ public final class CSVDecoder: Sendable {
         case error
         /// Flatten nested types using a separator (e.g., "address_street").
         case flatten(separator: String)
-        /// Decode the field value as JSON.
-        case json
-        /// Convert field to Data and decode using the type's Decodable conformance.
+        /// Decode the field value as JSON, rejecting cells larger than ``maxBytes``.
+        /// The default 1 MiB cap bounds the cost of `JSONDecoder` on untrusted input.
+        case json(maxBytes: Int = 1 << 20)
+        /// Deprecated alias for ``json``.  Functionally identical; kept for
+        /// source compatibility and will be removed in a future release.
+        @available(*, deprecated, renamed: "json")
         case codable
     }
 

@@ -89,8 +89,8 @@ extension CSVDecoder {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let reader = try MemoryMappedReader(url: url)
-                    try self.decodeFromReader(reader, columnOrder: columnOrder, continuation: continuation)
+                    let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                    try self.decodeFromData(data, columnOrder: columnOrder, continuation: continuation)
                 } catch {
                     continuation.finish(throwing: error)
                 }
@@ -98,12 +98,12 @@ extension CSVDecoder {
         }
     }
 
-    private func decodeFromReader<T: Decodable & Sendable>(
-        _ reader: MemoryMappedReader,
+    private func decodeFromData<T: Decodable & Sendable>(
+        _ data: Data,
         columnOrder: [String]?,
         continuation: AsyncThrowingStream<T, Error>.Continuation,
     ) throws {
-        reader.withUnsafeBytes { buffer in
+        data.withUnsafeBytes { buffer in
             guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else {
                 continuation.finish()
                 return
@@ -144,8 +144,9 @@ extension CSVDecoder {
                     return
                 }
 
-                // Strict mode: validate field count
-                if isStrict, let expected = expectedFieldCount, rowView.count != expected {
+                // expectedFieldCount applies in both strict and lenient modes —
+                // it expresses caller intent regardless of parsing leniency.
+                if let expected = expectedFieldCount, rowView.count != expected {
                     continuation.finish(
                         throwing: CSVDecodingError.parsingError(
                             "Expected \(expected) fields but found \(rowView.count)",
@@ -220,8 +221,7 @@ extension CSVDecoder {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let reader = MemoryMappedReader(data: data)
-                    try self.decodeFromReader(reader, columnOrder: columnOrder, continuation: continuation)
+                    try self.decodeFromData(data, columnOrder: columnOrder, continuation: continuation)
                 } catch {
                     continuation.finish(throwing: error)
                 }

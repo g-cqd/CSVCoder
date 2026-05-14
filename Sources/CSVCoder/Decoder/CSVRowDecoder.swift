@@ -318,11 +318,26 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                 return try T(from: decoder)
             }
 
-        case .codable,
-            .json:
-            // For JSON/codable, the value should exist and be a JSON string
+        case .json(let maxBytes):
+            // For JSON, the value should exist and be a JSON string.
             if keyExists {
                 let value = try getValue(for: key)
+                try assertJSONSize(value, maxBytes: maxBytes, key: key)
+                guard let data = value.data(using: .utf8) else {
+                    throw CSVDecodingError.typeMismatch(
+                        expected: "valid UTF-8 JSON",
+                        actual: value,
+                        location: makeLocation(for: key),
+                    )
+                }
+                return try JSONDecoder().decode(T.self, from: data)
+            }
+
+        case .codable:
+            // Deprecated alias for `.json` — same DoS-bounded behaviour.
+            if keyExists {
+                let value = try getValue(for: key)
+                try assertJSONSize(value, maxBytes: 1 << 20, key: key)
                 guard let data = value.data(using: .utf8) else {
                     throw CSVDecodingError.typeMismatch(
                         expected: "valid UTF-8 JSON",
@@ -412,7 +427,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             )
             return KeyedDecodingContainer(nestedContainer)
 
-        case .json:
+        case .json(let maxBytes):
             // Get the field value and decode as JSON
             guard let jsonString = stringValue(forKey: key) else {
                 throw CSVDecodingError.keyNotFound(
@@ -420,6 +435,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
+            try assertJSONSize(jsonString, maxBytes: maxBytes, key: key)
             guard let jsonData = jsonString.data(using: .utf8) else {
                 throw CSVDecodingError.typeMismatch(
                     expected: "valid UTF-8 JSON string",
@@ -433,13 +449,14 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             return KeyedDecodingContainer(jsonContainer.container)
 
         case .codable:
-            // Get the field value as Data and use it directly
+            // Deprecated alias for `.json` — same DoS-bounded behaviour.
             guard let fieldValue = stringValue(forKey: key) else {
                 throw CSVDecodingError.keyNotFound(
                     key.stringValue,
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
+            try assertJSONSize(fieldValue, maxBytes: 1 << 20, key: key)
             guard let data = fieldValue.data(using: .utf8) else {
                 throw CSVDecodingError.typeMismatch(
                     expected: "valid UTF-8 data",
@@ -451,6 +468,19 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             let jsonDecoder = JSONDecoder()
             let jsonContainer = try jsonDecoder.decode(NestedJSONContainer<NestedKey>.self, from: data)
             return KeyedDecodingContainer(jsonContainer.container)
+        }
+    }
+
+    /// Asserts the JSON cell does not exceed `maxBytes` UTF-8 bytes.
+    /// Throws `CSVDecodingError.parsingError` with row/column context otherwise.
+    private func assertJSONSize(_ value: String, maxBytes: Int, key: some CodingKey) throws {
+        let byteCount = value.utf8.count
+        guard byteCount <= maxBytes else {
+            throw CSVDecodingError.parsingError(
+                "Nested JSON exceeds \(maxBytes) byte limit (got \(byteCount))",
+                line: rowIndex,
+                column: nil,
+            )
         }
     }
 

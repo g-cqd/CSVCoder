@@ -230,13 +230,13 @@ struct CSVCodeReviewFixTests {
         #expect(rows[2].0 == "Bob")
     }
 
-    @Test("StreamingCSVParser handles CR-only line endings")
+    @Test("CSVRowStreamProducer handles CR-only line endings")
     func streamingCROnlyLineEndings() async throws {
         let csv = "name,age\rAlice,30\rBob,25"
         let config = CSVDecoder.Configuration(hasHeaders: false)
-        let parser = StreamingCSVParser(data: Data(csv.utf8), configuration: config)
+        var producer = try CSVRowStreamProducer(data: Data(csv.utf8), configuration: config)
         var rows: [[String]] = []
-        for try await row in parser {
+        while let row = try producer.nextRow() {
             rows.append(row)
         }
         #expect(rows.count == 3)

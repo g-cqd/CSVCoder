@@ -56,7 +56,7 @@ struct CSVEncoderNestedEncodingTests {
             )
         ]
 
-        let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json)
+        let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json())
         let encoder = CSVEncoder(configuration: config)
         let csv = try encoder.encodeToString(records)
 
@@ -116,11 +116,11 @@ struct CSVEncoderNestedEncodingTests {
             )
         ]
 
-        let encoderConfig = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json)
+        let encoderConfig = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json())
         let encoder = CSVEncoder(configuration: encoderConfig)
         let csv = try encoder.encodeToString(original)
 
-        let decoderConfig = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .json)
+        let decoderConfig = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .json())
         let decoder = CSVDecoder(configuration: decoderConfig)
         let decoded = try decoder.decode([PersonWithAddress].self, from: csv)
 
@@ -194,5 +194,24 @@ struct CSVEncoderNestedEncodingTests {
         let decoded = try decoder.decode([PersonWithAddress].self, from: csv)
 
         #expect(decoded == records)
+    }
+
+    // MARK: - JSON Byte Limit (audit A5)
+
+    @Test("Nested JSON encoding rejects oversized payloads")
+    func nestedJSONRejectsOversizedPayloads() throws {
+        let bigString = String(repeating: "Z", count: 4_096)
+        let records = [
+            PersonWithAddress(
+                name: "Mallory",
+                age: 1,
+                address: Address(street: bigString, city: "X", zipCode: "1"),
+            )
+        ]
+        let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .json(maxBytes: 1_024))
+        let encoder = CSVEncoder(configuration: config)
+        #expect(throws: CSVEncodingError.self) {
+            _ = try encoder.encodeToString(records)
+        }
     }
 }

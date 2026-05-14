@@ -115,7 +115,7 @@ struct CSVDecoderNestedTests {
         let json = #"{"street":"789 Pine Rd","city":"Capital City","zipCode":"11111"}"#
         let csv = "name,age,address\nCarol,35,\"\(json.replacingOccurrences(of: "\"", with: "\"\""))\""
 
-        let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .json)
+        let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .json())
         let decoder = CSVDecoder(configuration: config)
         let records = try decoder.decode([PersonWithAddress].self, from: csv)
 
@@ -158,5 +158,37 @@ struct CSVDecoderNestedTests {
         #expect(throws: (any Error).self) {
             _ = try decoder.decode([PersonWithAddress].self, from: csv)
         }
+    }
+
+    // MARK: - JSON Byte Limit (audit A5)
+
+    @Test("Nested JSON strategy rejects cells exceeding maxBytes")
+    func nestedJSONRejectsOversizedCells() throws {
+        // Build a JSON cell larger than the configured limit (1 KiB cap).
+        let bigString = String(repeating: "A", count: 4_096)
+        let json =
+            #"{"street":"\#(bigString)","city":"X","zipCode":"1"}"#
+        let escaped = json.replacingOccurrences(of: "\"", with: "\"\"")
+        let csv = "name,age,address\nMallory,99,\"\(escaped)\""
+
+        let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .json(maxBytes: 1_024))
+        let decoder = CSVDecoder(configuration: config)
+
+        #expect(throws: CSVDecodingError.self) {
+            _ = try decoder.decode([PersonWithAddress].self, from: csv)
+        }
+    }
+
+    @Test("Nested JSON strategy accepts cells within maxBytes")
+    func nestedJSONAcceptsSmallCells() throws {
+        let json = #"{"street":"1 A St","city":"X","zipCode":"1"}"#
+        let escaped = json.replacingOccurrences(of: "\"", with: "\"\"")
+        let csv = "name,age,address\nAlice,30,\"\(escaped)\""
+
+        let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .json(maxBytes: 1 << 20))
+        let decoder = CSVDecoder(configuration: config)
+        let records = try decoder.decode([PersonWithAddress].self, from: csv)
+        #expect(records.count == 1)
+        #expect(records[0].address.street == "1 A St")
     }
 }
