@@ -24,7 +24,6 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  security-events: write
 
 env:
   XCODE_VERSION: '26.1.1'
@@ -250,41 +249,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
   # ============================================================================
-  # STAGE 3: CodeQL, Prepare Release, Documentation (after tests)
+  # STAGE 3: Prepare Release, Documentation (after tests)
   # ============================================================================
-  codeql:
-    name: CodeQL Analysis
-    runs-on: macos-15
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Restore SPM Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            .build
-            ~/Library/Developer/Xcode/DerivedData
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: swift
-          build-mode: manual
-
-      - name: Build for CodeQL
-        run: swift build -c release --arch arm64
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:swift"
+  # NOTE: CodeQL is handled by GitHub's "Default setup" (repo Settings →
+  # Code security and analysis → CodeQL → Default). A workflow-defined
+  # CodeQL job conflicts with the default setup ("CodeQL analyses from
+  # advanced configurations cannot be processed when the default setup
+  # is enabled") and was removed here. To switch back to an advanced
+  # configuration, first disable the default setup in repo settings.
 
   prepare-release:
     name: Prepare Release
