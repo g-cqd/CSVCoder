@@ -233,18 +233,18 @@ nonisolated public final class CSVEncoder: Sendable {
     /// Encodes an array of values to CSV data.
     /// - Parameter values: The values to encode.
     /// - Returns: The encoded CSV data.
-    public func encode(_ values: [some Encodable]) throws -> Data {
+    public func encode<T: Encodable>(_ values: [T]) throws -> Data {
         var buffer: [UInt8] = []
-        try encodeToBuffer(values, into: &buffer)
+        try encodeToBuffer(values, into: &buffer, columnOrder: Self.columnOrder(for: T.self))
         return Data(buffer)
     }
 
     /// Encodes an array of values to a CSV string.
     /// - Parameter values: The values to encode.
     /// - Returns: The encoded CSV string.
-    public func encodeToString(_ values: [some Encodable]) throws -> String {
+    public func encodeToString<T: Encodable>(_ values: [T]) throws -> String {
         var buffer: [UInt8] = []
-        try encodeToBuffer(values, into: &buffer)
+        try encodeToBuffer(values, into: &buffer, columnOrder: Self.columnOrder(for: T.self))
         return String(decoding: buffer, as: UTF8.self)
     }
 
@@ -253,46 +253,59 @@ nonisolated public final class CSVEncoder: Sendable {
     /// - Parameters:
     ///   - values: The values to encode.
     ///   - url: The destination file URL.
-    public func encode(_ values: [some Encodable], to url: URL) throws {
-        // Create file
+    public func encode<T: Encodable>(_ values: [T], to url: URL) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
         var writer = BufferedCSVWriter(handle: handle)
 
-        try encodeToWriter(values, writer: &writer)
+        try encodeToWriter(values, writer: &writer, columnOrder: Self.columnOrder(for: T.self))
         try writer.close()
     }
 
     /// Encodes a single value to a CSV row string (without headers).
+    ///
+    /// Column order honours ``CSVIndexedEncodable`` conformance when present.
+    ///
     /// - Parameter value: The value to encode.
     /// - Returns: A single CSV row string.
-    public func encodeRow(_ value: some Encodable) throws -> String {
+    public func encodeRow<T: Encodable>(_ value: T) throws -> String {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try value.encode(to: encoder)
 
-        let (keys, row) = storage.snapshot()
+        let (encodedKeys, row) = storage.snapshot()
+        let lookupKeys = Self.columnOrder(for: T.self) ?? encodedKeys
         let delimiter = String(configuration.delimiter)
 
-        let values = keys.map { key -> String in
-            let value = row[key] ?? ""
-            return escapeField(value)
-        }
-
-        return values.joined(separator: delimiter)
+        return lookupKeys.map { escapeField(row[$0] ?? "") }.joined(separator: delimiter)
     }
 
-    /// Encodes a single value to a dictionary representation.
+    /// Encodes a single value to a dictionary representation keyed by the configured header names.
+    ///
+    /// Applies ``Configuration/keyEncodingStrategy`` to the output keys for symmetry with batch encoding.
+    ///
     /// - Parameter value: The value to encode.
     /// - Returns: A dictionary of field names to string values.
-    public func encodeToDictionary(_ value: some Encodable) throws -> [String: String] {
+    public func encodeToDictionary<T: Encodable>(_ value: T) throws -> [String: String] {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try value.encode(to: encoder)
-        return storage.allValues()
+
+        let (encodedKeys, row) = storage.snapshot()
+        let lookupKeys = Self.columnOrder(for: T.self) ?? encodedKeys
+
+        var result: [String: String] = [:]
+        result.reserveCapacity(lookupKeys.count)
+        for key in lookupKeys {
+            result[transformKey(key)] = row[key] ?? ""
+        }
+        return result
     }
 
     /// Returns the header row for a given type.
+    ///
+    /// Honours ``CSVIndexedEncodable`` column order and applies ``Configuration/keyEncodingStrategy``.
+    ///
     /// - Parameters:
     ///   - type: The type to get headers for.
     ///   - sample: A sample instance to encode for extracting property names.
@@ -301,10 +314,21 @@ nonisolated public final class CSVEncoder: Sendable {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
         try sample.encode(to: encoder)
-        return storage.allKeys()
+        let encodedKeys = storage.allKeys()
+        let lookupKeys = Self.columnOrder(for: T.self) ?? encodedKeys
+        return lookupKeys.map { transformKey($0) }
     }
 
     // MARK: Internal
+
+    // MARK: - CSVIndexedEncodable Detection
+
+    /// Returns the canonical column order for `T` when the type opts in via
+    /// ``CSVIndexedEncodable`` / `@CSVIndexed`. Returns `nil` for plain `Encodable` types,
+    /// in which case the encoder falls back to the order produced by `encode(to:)`.
+    static func columnOrder<T>(for type: T.Type) -> [String]? {
+        (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
+    }
 
     // MARK: - Key Transformation
 
@@ -340,22 +364,27 @@ nonisolated public final class CSVEncoder: Sendable {
 
     // MARK: - Internal Streaming Helpers
 
-    private func encodeToBuffer(_ values: [some Encodable], into buffer: inout [UInt8]) throws {
+    private func encodeToBuffer(
+        _ values: [some Encodable],
+        into buffer: inout [UInt8],
+        columnOrder: [String]? = nil,
+    ) throws {
         guard !values.isEmpty else { return }
 
-        var headers: [String]?
+        var lookupKeys: [String]?
         let delimiterByte = configuration.delimiter.asciiValue ?? 0x2C
         let lineEndingBytes = Array(configuration.lineEnding.rawValue.utf8)
 
         for (index, value) in values.enumerated() {
-            let (rowData, orderedKeys) = try encodeValue(value)
+            let (rowData, encodedKeys) = try encodeValue(value)
 
-            // Handle Header on first row
-            if headers == nil {
-                let resolvedHeaders = orderedKeys.map { transformKey($0) }
-                headers = resolvedHeaders
+            // First row: resolve lookup keys (raw, used to index rowData) and emit transformed header
+            if lookupKeys == nil {
+                let resolved = columnOrder ?? encodedKeys
+                lookupKeys = resolved
                 if configuration.hasHeaders {
-                    for (i, key) in resolvedHeaders.enumerated() {
+                    let outputHeaders = resolved.map { transformKey($0) }
+                    for (i, key) in outputHeaders.enumerated() {
                         if i > 0 { buffer.append(delimiterByte) }
                         appendEscaped(key, to: &buffer, delimiter: delimiterByte)
                     }
@@ -363,13 +392,11 @@ nonisolated public final class CSVEncoder: Sendable {
                 }
             }
 
-            guard let keys = headers else { continue }
+            guard let keys = lookupKeys else { continue }
 
-            // Write Row
             for (i, key) in keys.enumerated() {
                 if i > 0 { buffer.append(delimiterByte) }
-                let val = rowData[key] ?? ""
-                appendEscaped(val, to: &buffer, delimiter: delimiterByte)
+                appendEscaped(rowData[key] ?? "", to: &buffer, delimiter: delimiterByte)
             }
 
             if index < values.count - 1 || configuration.includesTrailingNewline {
@@ -378,21 +405,26 @@ nonisolated public final class CSVEncoder: Sendable {
         }
     }
 
-    private func encodeToWriter(_ values: [some Encodable], writer: inout BufferedCSVWriter) throws {
+    private func encodeToWriter(
+        _ values: [some Encodable],
+        writer: inout BufferedCSVWriter,
+        columnOrder: [String]? = nil,
+    ) throws {
         guard !values.isEmpty else { return }
 
-        var headers: [String]?
+        var lookupKeys: [String]?
         let delimiter = String(configuration.delimiter)
         let lineEnding = configuration.lineEnding.rawValue
 
         for (index, value) in values.enumerated() {
-            let (rowData, orderedKeys) = try encodeValue(value)
+            let (rowData, encodedKeys) = try encodeValue(value)
 
-            if headers == nil {
-                let resolvedHeaders = orderedKeys.map { transformKey($0) }
-                headers = resolvedHeaders
+            if lookupKeys == nil {
+                let resolved = columnOrder ?? encodedKeys
+                lookupKeys = resolved
                 if configuration.hasHeaders {
-                    for (i, key) in resolvedHeaders.enumerated() {
+                    let outputHeaders = resolved.map { transformKey($0) }
+                    for (i, key) in outputHeaders.enumerated() {
                         if i > 0 { try writer.write(delimiter) }
                         try writer.write(escapeField(key))
                     }
@@ -400,12 +432,11 @@ nonisolated public final class CSVEncoder: Sendable {
                 }
             }
 
-            guard let keys = headers else { continue }
+            guard let keys = lookupKeys else { continue }
 
             for (i, key) in keys.enumerated() {
                 if i > 0 { try writer.write(delimiter) }
-                let val = rowData[key] ?? ""
-                try writer.write(escapeField(val))
+                try writer.write(escapeField(rowData[key] ?? ""))
             }
 
             if index < values.count - 1 || configuration.includesTrailingNewline {

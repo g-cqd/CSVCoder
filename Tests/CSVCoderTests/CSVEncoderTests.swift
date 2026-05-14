@@ -347,6 +347,33 @@ struct CSVEncoderTests {
         #expect(original == decoded)
     }
 
+    // MARK: - @CSVIndexed column order (audit A1)
+
+    @CSVIndexed
+    struct OrderedRecord: Codable, Sendable {
+        @CSVColumn("Z_third") let third: Int
+        @CSVColumn("A_first") let first: Int
+        @CSVColumn("M_second") let second: Int
+    }
+
+    @Test("Sync encode honors CSVIndexedEncodable column order (audit A1)")
+    func syncEncodeHonorsColumnOrder() throws {
+        let records = [OrderedRecord(third: 3, first: 1, second: 2)]
+        let encoder = CSVEncoder()
+        let csv = try encoder.encodeToString(records)
+        #expect(csv == "Z_third,A_first,M_second\n3,1,2")
+    }
+
+    @Test("encodeToDictionary honors CSVIndexedEncodable order keys (audit A1)")
+    func encodeToDictionaryHonorsColumnOrder() throws {
+        let record = OrderedRecord(third: 3, first: 1, second: 2)
+        let encoder = CSVEncoder()
+        let dict = try encoder.encodeToDictionary(record)
+        #expect(dict["Z_third"] == "3")
+        #expect(dict["A_first"] == "1")
+        #expect(dict["M_second"] == "2")
+    }
+
     @Test("CRLF line endings")
     func crlfLineEndings() throws {
         let records = [

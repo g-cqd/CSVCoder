@@ -55,8 +55,8 @@ extension CSVEncoder {
     /// try await encoder.encodeParallel(records, to: fileURL,
     ///     parallelConfig: .init(parallelism: 8, chunkSize: 5_000))
     /// ```
-    public func encodeParallel(
-        _ values: [some Encodable & Sendable],
+    public func encodeParallel<T: Encodable & Sendable>(
+        _ values: [T],
         to url: URL,
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws {
@@ -68,8 +68,8 @@ extension CSVEncoder {
     }
 
     /// Encodes an array in parallel and writes to a file handle.
-    public func encodeParallel(
-        _ values: [some Encodable & Sendable],
+    public func encodeParallel<T: Encodable & Sendable>(
+        _ values: [T],
         to handle: FileHandle,
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws {
@@ -78,25 +78,24 @@ extension CSVEncoder {
         var writer = BufferedCSVWriter(handle: handle, bufferSize: parallelConfig.bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
 
-        // Get headers from first value (must be sync to establish key order)
-        let (_, orderedKeys) = try encodeValue(values[0])
+        // Establish key order from first value (sync).
+        let (_, encodedKeys) = try encodeValue(values[0])
+        let lookupKeys = Self.columnOrder(for: T.self) ?? encodedKeys
 
-        // Write header row
         if configuration.hasHeaders {
+            let outputHeaders = lookupKeys.map { transformKey($0) }
             var headerBuffer: [UInt8] = []
-            rowBuilder.buildHeader(orderedKeys, into: &headerBuffer)
+            rowBuilder.buildHeader(outputHeaders, into: &headerBuffer)
             try writer.write(contentsOf: headerBuffer)
         }
 
-        // Encode all rows in parallel, preserving order
         let encodedRows = try await encodeRowsParallel(
             values,
-            keys: orderedKeys,
+            keys: lookupKeys,
             parallelism: parallelConfig.parallelism,
             chunkSize: parallelConfig.chunkSize,
         )
 
-        // Write rows sequentially (I/O bound)
         var rowBuffer: [UInt8] = []
         rowBuffer.reserveCapacity(1024)
 
@@ -117,37 +116,34 @@ extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: The encoded CSV data.
-    public func encodeParallel(
-        _ values: [some Encodable & Sendable],
+    public func encodeParallel<T: Encodable & Sendable>(
+        _ values: [T],
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> Data {
         guard !values.isEmpty else {
             return Data()
         }
 
-        // Get headers from first value
-        let (_, orderedKeys) = try encodeValue(values[0])
+        let (_, encodedKeys) = try encodeValue(values[0])
+        let lookupKeys = Self.columnOrder(for: T.self) ?? encodedKeys
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
 
-        // Estimate output size
-        let estimatedRowSize = orderedKeys.count * 20  // ~20 bytes per field average
+        let estimatedRowSize = lookupKeys.count * 20
         var output: [UInt8] = []
         output.reserveCapacity(values.count * estimatedRowSize + estimatedRowSize)
 
-        // Write header
         if configuration.hasHeaders {
-            rowBuilder.buildHeader(orderedKeys, into: &output)
+            let outputHeaders = lookupKeys.map { transformKey($0) }
+            rowBuilder.buildHeader(outputHeaders, into: &output)
         }
 
-        // Encode rows in parallel
         let encodedRows = try await encodeRowsParallel(
             values,
-            keys: orderedKeys,
+            keys: lookupKeys,
             parallelism: parallelConfig.parallelism,
             chunkSize: parallelConfig.chunkSize,
         )
 
-        // Append all rows
         for fields in encodedRows {
             rowBuilder.buildRow(fields, into: &output)
         }
@@ -156,8 +152,8 @@ extension CSVEncoder {
     }
 
     /// Encodes an array in parallel and returns a String.
-    public func encodeParallelToString(
-        _ values: [some Encodable & Sendable],
+    public func encodeParallelToString<T: Encodable & Sendable>(
+        _ values: [T],
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) async throws -> String {
         let data = try await encodeParallel(values, parallelConfig: parallelConfig)
@@ -176,8 +172,8 @@ extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: An async stream of encoded row batches.
-    public func encodeParallelBatched(
-        _ values: [some Encodable & Sendable],
+    public func encodeParallelBatched<T: Encodable & Sendable>(
+        _ values: [T],
         parallelConfig: ParallelEncodingConfiguration = .default,
     ) -> AsyncThrowingStream<[String], Error> {
         AsyncThrowingStream { continuation in
@@ -188,16 +184,17 @@ extension CSVEncoder {
                         return
                     }
 
-                    let (_, orderedKeys) = try encodeValue(values[0])
+                    let (_, encodedKeys) = try encodeValue(values[0])
+                    let lookupKeys = Self.columnOrder(for: T.self) ?? encodedKeys
                     let delimiter = String(configuration.delimiter)
 
-                    // Yield header
                     if configuration.hasHeaders {
-                        let header = orderedKeys.map { escapeField($0) }.joined(separator: delimiter)
+                        let outputHeaders = lookupKeys.map { transformKey($0) }
+                        let header = outputHeaders.map { escapeField($0) }
+                            .joined(separator: delimiter)
                         continuation.yield([header])
                     }
 
-                    // Process chunks
                     let chunks = stride(from: 0, to: values.count, by: parallelConfig.chunkSize).map {
                         Array(values[$0 ..< min($0 + parallelConfig.chunkSize, values.count)])
                     }
@@ -205,7 +202,7 @@ extension CSVEncoder {
                     for chunk in chunks {
                         let encoded = try await encodeRowsParallel(
                             chunk,
-                            keys: orderedKeys,
+                            keys: lookupKeys,
                             parallelism: parallelConfig.parallelism,
                             chunkSize: chunk.count,
                         )

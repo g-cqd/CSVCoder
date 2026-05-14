@@ -38,9 +38,30 @@ struct CSVEncoderStrategyTests {
         let encoder = CSVEncoder(configuration: config)
         let csv = try encoder.encodeToString(records)
 
-        #expect(csv.contains("first_name"))
-        #expect(csv.contains("last_name"))
-        #expect(csv.contains("phone_number"))
+        // Regression: ensure data values appear under transformed headers (audit fix)
+        let expected = "first_name,last_name,phone_number\nJohn,Doe,555-1234"
+        #expect(csv == expected)
+    }
+
+    @Test("encodeToDictionary applies keyEncodingStrategy (audit B3)")
+    func encodeToDictionaryAppliesKeyStrategy() throws {
+        let record = CamelCaseRecord(firstName: "Alice", lastName: "Smith", phoneNumber: "0")
+        let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
+        let encoder = CSVEncoder(configuration: config)
+        let dict = try encoder.encodeToDictionary(record)
+        #expect(dict["first_name"] == "Alice")
+        #expect(dict["last_name"] == "Smith")
+        #expect(dict["phone_number"] == "0")
+        #expect(dict["firstName"] == nil)
+    }
+
+    @Test("headers(for:sample:) applies keyEncodingStrategy (audit B3)")
+    func headersAppliesKeyStrategy() throws {
+        let sample = CamelCaseRecord(firstName: "x", lastName: "y", phoneNumber: "z")
+        let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
+        let encoder = CSVEncoder(configuration: config)
+        let headers = try encoder.headers(for: CamelCaseRecord.self, sample: sample)
+        #expect(headers == ["first_name", "last_name", "phone_number"])
     }
 
     @Test("Key encoding with kebab-case")

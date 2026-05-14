@@ -117,6 +117,80 @@ struct CSVEncoderParallelEncodingTests {
         #expect(decoded == records)
     }
 
+    // MARK: - keyEncodingStrategy regression (audit A2)
+
+    struct CamelRecord: Codable, Equatable, Sendable {
+        let firstName: String
+        let lastName: String
+    }
+
+    @Test("Parallel encode applies keyEncodingStrategy to header (audit A2)")
+    func parallelEncodeAppliesKeyStrategy() async throws {
+        let records = [
+            CamelRecord(firstName: "Alice", lastName: "Smith"),
+            CamelRecord(firstName: "Bob", lastName: "Jones"),
+        ]
+        let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
+        let encoder = CSVEncoder(configuration: config)
+        let csv = try await encoder.encodeParallelToString(records)
+        let lines = csv.split(separator: "\n").map(String.init)
+        #expect(lines.first == "first_name,last_name")
+        // Order of data rows is not guaranteed across chunks, so check set membership
+        #expect(lines.contains("Alice,Smith"))
+        #expect(lines.contains("Bob,Jones"))
+    }
+
+    @Test("Parallel batched encode applies keyEncodingStrategy to header (audit A2)")
+    func parallelBatchedEncodeAppliesKeyStrategy() async throws {
+        let records = (0 ..< 50).map { CamelRecord(firstName: "First\($0)", lastName: "Last\($0)") }
+        let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
+        let encoder = CSVEncoder(configuration: config)
+        var batches: [[String]] = []
+        for try await batch in encoder.encodeParallelBatched(records, parallelConfig: .init(chunkSize: 10)) {
+            batches.append(batch)
+        }
+        #expect(batches.first?.first == "first_name,last_name")
+    }
+
+    @Test("Parallel encode to file applies keyEncodingStrategy (audit A2)")
+    func parallelEncodeToFileAppliesKeyStrategy() async throws {
+        let records = (0 ..< 100).map { CamelRecord(firstName: "F\($0)", lastName: "L\($0)") }
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parallel_key_strategy_\(UUID().uuidString).csv")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
+        let encoder = CSVEncoder(configuration: config)
+        try await encoder.encodeParallel(records, to: tempURL)
+        let data = try Data(contentsOf: tempURL)
+        guard let csv = String(data: data, encoding: .utf8) else {
+            Issue.record("Failed to decode written CSV")
+            return
+        }
+        let firstLine = csv.split(separator: "\n", maxSplits: 1).first.map(String.init)
+        #expect(firstLine == "first_name,last_name")
+    }
+
+    // MARK: - @CSVIndexed column order (audit A1)
+
+    @CSVIndexed
+    struct OrderedRecord: Codable, Sendable {
+        @CSVColumn("Z_third") let third: Int
+        @CSVColumn("A_first") let first: Int
+        @CSVColumn("M_second") let second: Int
+    }
+
+    @Test("Parallel encode honors CSVIndexedEncodable column order (audit A1)")
+    func parallelEncodeHonorsColumnOrder() async throws {
+        let records = [OrderedRecord(third: 3, first: 1, second: 2)]
+        let encoder = CSVEncoder()
+        let csv = try await encoder.encodeParallelToString(records)
+        let lines = csv.split(separator: "\n").map(String.init)
+        // Header reflects CodingKeys declaration order, with @CSVColumn rawValues
+        #expect(lines.first == "Z_third,A_first,M_second")
+        #expect(lines.count >= 2)
+        #expect(lines[1] == "3,1,2")
+    }
+
     @Test("Parallel encode is faster than sequential for large data")
     func parallelEncodeFasterThanSequential() async throws {
         let records = (0 ..< 10000).map { i in

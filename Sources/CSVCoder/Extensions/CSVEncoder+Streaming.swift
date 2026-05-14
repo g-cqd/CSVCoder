@@ -57,27 +57,28 @@ extension CSVEncoder {
     ) async throws where S.Element: Encodable & Sendable {
         var writer = BufferedCSVWriter(handle: handle, bufferSize: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+        let columnOrder = Self.columnOrder(for: S.Element.self)
 
-        var keys: [String]?
+        var lookupKeys: [String]?
         var rowBuffer: [UInt8] = []
         rowBuffer.reserveCapacity(1024)
 
         for try await value in values {
-            let (row, orderedKeys) = try encodeValue(value)
+            let (row, encodedKeys) = try encodeValue(value)
 
-            // Write header on first row
-            if keys == nil {
-                let transformedKeys = orderedKeys.map { transformKey($0) }
-                keys = transformedKeys
+            if lookupKeys == nil {
+                let resolved = columnOrder ?? encodedKeys
+                lookupKeys = resolved
                 if configuration.hasHeaders {
-                    rowBuilder.buildHeader(transformedKeys, into: &rowBuffer)
+                    let outputHeaders = resolved.map { transformKey($0) }
+                    rowBuilder.buildHeader(outputHeaders, into: &rowBuffer)
                     try writer.write(contentsOf: rowBuffer)
                     rowBuffer.removeAll(keepingCapacity: true)
                 }
             }
 
-            // Build and write row
-            let fields = orderedKeys.map { row[$0] ?? "" }
+            guard let keys = lookupKeys else { continue }
+            let fields = keys.map { row[$0] ?? "" }
             rowBuilder.buildRow(fields, into: &rowBuffer)
             try writer.write(contentsOf: rowBuffer)
             rowBuffer.removeAll(keepingCapacity: true)
@@ -119,27 +120,30 @@ extension CSVEncoder {
     public func encodeToStream<S: AsyncSequence>(
         _ values: S,
     ) -> AsyncThrowingStream<String, Error> where S.Element: Encodable & Sendable, S: Sendable {
-        AsyncThrowingStream { continuation in
+        let columnOrder = Self.columnOrder(for: S.Element.self)
+        return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    var keys: [String]?
+                    var lookupKeys: [String]?
                     let delimiter = String(configuration.delimiter)
                     let lineEnding = configuration.lineEnding.rawValue
 
                     for try await value in values {
-                        let (row, orderedKeys) = try encodeValue(value)
+                        let (row, encodedKeys) = try encodeValue(value)
 
-                        // Yield header on first row
-                        if keys == nil {
-                            keys = orderedKeys.map { self.transformKey($0) }
+                        if lookupKeys == nil {
+                            let resolved = columnOrder ?? encodedKeys
+                            lookupKeys = resolved
                             if configuration.hasHeaders {
-                                let headerRow = orderedKeys.map { escapeField($0) }.joined(separator: delimiter)
+                                let outputHeaders = resolved.map { self.transformKey($0) }
+                                let headerRow = outputHeaders.map { escapeField($0) }
+                                    .joined(separator: delimiter)
                                 continuation.yield(headerRow + lineEnding)
                             }
                         }
 
-                        // Yield data row
-                        let fields = orderedKeys.map { escapeField(row[$0] ?? "") }
+                        guard let keys = lookupKeys else { continue }
+                        let fields = keys.map { escapeField(row[$0] ?? "") }
                         let rowString = fields.joined(separator: delimiter) + lineEnding
                         continuation.yield(rowString)
                     }
@@ -171,24 +175,25 @@ extension CSVEncoder {
     /// Returns row bytes if successful, writes header on first call.
     internal func processAsyncRow(
         _ value: some Encodable,
-        keys: inout [String]?,
+        lookupKeys: inout [String]?,
+        columnOrder: [String]?,
         rowBuilder: CSVRowBuilder,
-        writer: AsyncCSVWriter
+        writer: AsyncCSVWriter,
     ) async throws -> [UInt8] {
-        let (row, orderedKeys) = try encodeValue(value)
+        let (row, encodedKeys) = try encodeValue(value)
 
-        // Write header on first row
-        if keys == nil {
-            let transformedKeys = orderedKeys.map { transformKey($0) }
-            keys = transformedKeys
+        if lookupKeys == nil {
+            let resolved = columnOrder ?? encodedKeys
+            lookupKeys = resolved
             if configuration.hasHeaders {
-                let headerBytes = rowBuilder.buildHeader(transformedKeys)
+                let outputHeaders = resolved.map { transformKey($0) }
+                let headerBytes = rowBuilder.buildHeader(outputHeaders)
                 try await writer.writeRow(headerBytes)
             }
         }
 
-        // Build row bytes
-        let fields = orderedKeys.map { row[$0] ?? "" }
+        guard let keys = lookupKeys else { return [] }
+        let fields = keys.map { row[$0] ?? "" }
         return rowBuilder.buildRow(fields)
     }
 
@@ -209,11 +214,18 @@ extension CSVEncoder {
     ) async throws where S.Element: Encodable & Sendable {
         let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+        let columnOrder = Self.columnOrder(for: S.Element.self)
 
-        var keys: [String]?
+        var lookupKeys: [String]?
 
         for try await value in values {
-            let rowBytes = try await processAsyncRow(value, keys: &keys, rowBuilder: rowBuilder, writer: writer)
+            let rowBytes = try await processAsyncRow(
+                value,
+                lookupKeys: &lookupKeys,
+                columnOrder: columnOrder,
+                rowBuilder: rowBuilder,
+                writer: writer,
+            )
             try await writer.writeRow(rowBytes)
         }
 
@@ -236,12 +248,19 @@ extension CSVEncoder {
     ) async throws where S.Element: Encodable & Sendable {
         let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+        let columnOrder = Self.columnOrder(for: S.Element.self)
 
-        var keys: [String]?
+        var lookupKeys: [String]?
         var rowCount = 0
 
         for try await value in values {
-            let rowBytes = try await processAsyncRow(value, keys: &keys, rowBuilder: rowBuilder, writer: writer)
+            let rowBytes = try await processAsyncRow(
+                value,
+                lookupKeys: &lookupKeys,
+                columnOrder: columnOrder,
+                rowBuilder: rowBuilder,
+                writer: writer,
+            )
             try await writer.writeRow(rowBytes)
 
             rowCount += 1
@@ -269,16 +288,22 @@ extension CSVEncoder {
     ) async throws where S.Element: Encodable & Sendable {
         let writer = try AsyncCSVWriter(url: url, bufferCapacity: bufferSize)
         let rowBuilder = CSVRowBuilder(delimiter: configuration.delimiter, lineEnding: configuration.lineEnding)
+        let columnOrder = Self.columnOrder(for: S.Element.self)
 
-        var keys: [String]?
+        var lookupKeys: [String]?
         var batch: [[UInt8]] = []
         batch.reserveCapacity(batchSize)
 
         for try await value in values {
-            let rowBytes = try await processAsyncRow(value, keys: &keys, rowBuilder: rowBuilder, writer: writer)
+            let rowBytes = try await processAsyncRow(
+                value,
+                lookupKeys: &lookupKeys,
+                columnOrder: columnOrder,
+                rowBuilder: rowBuilder,
+                writer: writer,
+            )
             batch.append(rowBytes)
 
-            // Flush batch when full
             if batch.count >= batchSize {
                 for row in batch {
                     try await writer.writeRow(row)
@@ -287,7 +312,6 @@ extension CSVEncoder {
             }
         }
 
-        // Flush remaining rows
         for row in batch {
             try await writer.writeRow(row)
         }
