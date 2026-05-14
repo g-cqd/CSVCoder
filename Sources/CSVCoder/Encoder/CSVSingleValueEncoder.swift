@@ -5,7 +5,6 @@
 //  Implements single value encoding for CSV fields.
 //
 
-import Collections
 import Foundation
 import Synchronization
 
@@ -314,54 +313,55 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
 
 // MARK: - CSVEncodingStorage
 
-/// Storage for encoded CSV values during encoding.
+/// Storage for encoded CSV values during a single `encode(to:)` invocation.
 ///
-/// Audit D4: the storage uses `Mutex<OrderedDictionary>` so insertion order is
-/// preserved without a parallel `orderedKeys` array.  Audit D1: `Mutex` is
-/// `Sendable` when its payload is `Copyable`, so no `@unchecked` is needed.
+/// Thread-safe: writes from multiple tasks are serialised through a `Mutex`,
+/// and `snapshot()` returns a consistent view of both `keys` and `values`
+/// under a single lock acquisition. The storage uses a `Dictionary` for
+/// lookup plus a parallel `[String]` to preserve insertion order — this
+/// benchmarks measurably faster than `OrderedDictionary` for the
+/// "insert N distinct keys then read once" access pattern.
 nonisolated final class CSVEncodingStorage: Sendable {
     // MARK: Internal
 
     func setValue(_ value: String, forKey key: String) {
-        state.withLock { storage in
-            storage[key] = value
+        state.withLock { state in
+            if state.values.updateValue(value, forKey: key) == nil {
+                state.orderedKeys.append(key)
+            }
         }
     }
 
     func getValue(forKey key: String) -> String? {
-        state.withLock { storage in
-            storage[key]
-        }
+        state.withLock { state in state.values[key] }
     }
 
     func allKeys() -> [String] {
-        state.withLock { storage in
-            Array(storage.keys)
-        }
+        state.withLock { state in state.orderedKeys }
     }
 
     func allValues() -> [String: String] {
-        state.withLock { storage in
-            Dictionary(uniqueKeysWithValues: storage.elements.map { ($0.key, $0.value) })
-        }
+        state.withLock { state in state.values }
     }
 
     /// Returns a consistent snapshot of keys and values under a single lock acquisition.
     func snapshot() -> (keys: [String], values: [String: String]) {
-        state.withLock { storage in
-            let keys = Array(storage.keys)
-            let values = Dictionary(uniqueKeysWithValues: storage.elements.map { ($0.key, $0.value) })
-            return (keys, values)
-        }
+        state.withLock { state in (state.orderedKeys, state.values) }
     }
 
     func reset() {
-        state.withLock { storage in
-            storage.removeAll()
+        state.withLock { state in
+            state.values.removeAll(keepingCapacity: true)
+            state.orderedKeys.removeAll(keepingCapacity: true)
         }
     }
 
     // MARK: Private
 
-    private let state = Mutex<OrderedDictionary<String, String>>([:])
+    private struct State {
+        var values: [String: String] = [:]
+        var orderedKeys: [String] = []
+    }
+
+    private let state = Mutex(State())
 }
