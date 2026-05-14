@@ -147,7 +147,7 @@ struct CSVDecoderStrategyTests {
             // Leading zero is never a thousands group — "0,100" is the
             // European decimal 0.1, not the integer 100 (audit 4.3).
             ("0,100", 0.100),
-            ("0,250", 0.250)
+            ("0,250", 0.250),
         ]
     )
     func decodeNumbersFlexibleThousandsHeuristic(value: String, expected: Double) throws {
