@@ -107,14 +107,21 @@ enum CSVValueFormatter {
 /// Caches heavyweight Foundation formatters so decoders/encoders that touch
 /// many rows don't pay the per-row construction cost (NumberFormatter and
 /// DateFormatter both go through ICU initialisation, ~5–50µs each).
-/// Thread-safe via Mutex.
+///
+/// Thread safety: the cache itself is `Mutex`-protected, but the cached
+/// instances are `DateFormatter` / `NumberFormatter`, neither of which is
+/// safe for concurrent formatting calls. The cache therefore stores
+/// canonical templates and hands each caller a `.copy()` so the parallel
+/// decode pipeline (which fans out across `TaskGroup`) can format
+/// independently. The copy cost is a small fraction of fresh init —
+/// the ICU pattern is reused.
 enum FormatterCache {
     private static let dateCache = Mutex<[String: DateFormatter]>([:])
     private static let localeNumberCache = Mutex<[String: NumberFormatter]>([:])
     private static let formatDateAutoupdatingCache = Mutex<[String: DateFormatter]>([:])
 
     static func dateFormatter(for format: String) -> DateFormatter {
-        dateCache.withLock { cache in
+        let template = dateCache.withLock { cache -> DateFormatter in
             if let cached = cache[format] {
                 return cached
             }
@@ -125,13 +132,14 @@ enum FormatterCache {
             cache[format] = formatter
             return formatter
         }
+        return (template.copy() as? DateFormatter) ?? template
     }
 
     /// DateFormatter pinned to `Locale.autoupdatingCurrent` / `TimeZone.autoupdatingCurrent`,
     /// for the decoder's `.formatted(_:)` strategy which is expected to honour the user's
     /// locale. Cached separately from the POSIX variant.
     static func userLocaleDateFormatter(for format: String) -> DateFormatter {
-        formatDateAutoupdatingCache.withLock { cache in
+        let template = formatDateAutoupdatingCache.withLock { cache -> DateFormatter in
             if let cached = cache[format] {
                 return cached
             }
@@ -142,13 +150,14 @@ enum FormatterCache {
             cache[format] = formatter
             return formatter
         }
+        return (template.copy() as? DateFormatter) ?? template
     }
 
     /// NumberFormatter for `.locale(_:)` strategies. Keyed on locale identifier so any
-    /// two callers with the same locale share the formatter — the typical case for
-    /// bulk CSV ingest.
+    /// two callers with the same locale share the formatter template — the typical
+    /// case for bulk CSV ingest.
     static func numberFormatter(for locale: Locale) -> NumberFormatter {
-        localeNumberCache.withLock { cache in
+        let template = localeNumberCache.withLock { cache -> NumberFormatter in
             if let cached = cache[locale.identifier] {
                 return cached
             }
@@ -159,5 +168,6 @@ enum FormatterCache {
             cache[locale.identifier] = formatter
             return formatter
         }
+        return (template.copy() as? NumberFormatter) ?? template
     }
 }
