@@ -379,6 +379,42 @@ struct SIMDScanner: Sendable {
         return count
     }
 
+    /// Shared SWAR + scalar tail for the field-quoting byte scan. The
+    /// SIMD-path (after the main 64-byte loop) and the small-field path in
+    /// ``CSVFieldEscaper`` both terminate in this exact loop pair; lifting
+    /// it here keeps one canonical implementation of the unrolled +
+    /// scalar fall-back.
+    @inline(__always)
+    static func scanForQuotingBytes(
+        buffer: UnsafePointer<UInt8>,
+        from startOffset: Int,
+        count: Int,
+        delimiter: UInt8,
+    ) -> Bool {
+        let quote: UInt8 = 0x22
+        let lf: UInt8 = 0x0A
+        let cr: UInt8 = 0x0D
+        var offset = startOffset
+
+        while offset + 8 <= count {
+            let word = SWARUtils.load(buffer.advanced(by: offset))
+            if SWARUtils.hasAnyByte(word, quote, delimiter, lf, cr) {
+                return true
+            }
+            offset += 8
+        }
+
+        while offset < count {
+            let byte = buffer[offset]
+            if byte == quote || byte == delimiter || byte == lf || byte == cr {
+                return true
+            }
+            offset += 1
+        }
+
+        return false
+    }
+
     // MARK: Private
 
     // CSV structural bytes (ASCII)

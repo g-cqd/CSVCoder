@@ -161,24 +161,9 @@ extension SIMDScanner {
             offset += 64
         }
 
-        // SWAR fallback for 8-63 remaining bytes
-        while offset + 8 <= count {
-            let word = SWARUtils.load(buffer.advanced(by: offset))
-            if SWARUtils.hasAnyByte(word, quote, delimiter, lf, cr) {
-                return true
-            }
-            offset += 8
-        }
-
-        // Scalar fallback for remaining 0-7 bytes
-        while offset < count {
-            let byte = buffer[offset]
-            if byte == quote || byte == delimiter || byte == lf || byte == cr {
-                return true
-            }
-            offset += 1
-        }
-
-        return false
+        // SWAR + scalar fallback for the trailing 0-63 bytes lives on
+        // SIMDScanner so the small-field path in CSVFieldEscaper shares
+        // the same implementation.
+        return scanForQuotingBytes(buffer: buffer, from: offset, count: count, delimiter: delimiter)
     }
 }
