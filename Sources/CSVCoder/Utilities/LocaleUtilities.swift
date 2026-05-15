@@ -105,12 +105,7 @@ enum LocaleUtilities {
         // because `kr` is one of the recognised currency tokens.
         let sortedSymbols = allCurrencySymbols.sorted { $0.count > $1.count }
         for symbol in sortedSymbols {
-            if symbol.count == 1, symbol.first?.isLetter == true {
-                // Single letters: same boundary discipline as multi-char symbols.
-                stripIfBoundaryAnchored(&cleaned, symbol: symbol)
-            } else {
-                stripIfBoundaryAnchored(&cleaned, symbol: symbol)
-            }
+            stripIfBoundaryAnchored(&cleaned, symbol: symbol)
         }
 
         return cleaned.trimmingCharacters(in: .whitespaces)
