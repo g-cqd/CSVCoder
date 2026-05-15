@@ -818,6 +818,77 @@ benchmark("Mixed: Filter + Aggregate 100K orders") {
     precondition(totalRevenue > 0)
 }
 
+// MARK: - Codable Hot Path Profiling
+//
+// These benchmarks decompose `Decode 1M rows (simple)` into successive
+// layers so we can attribute the ~1.58s wall time to specific stages:
+//
+//   A. Raw Parse 1M rows (Iterate Only)         — parser-only baseline
+//   B. Raw Parse 1M rows (Iterate + String)     — adds .string(at:) ×3
+//   C. Profile: parse + 3 strings + trim         — adds Foundation trim ×3
+//   D. Profile: parse + 3 strings + trim + Int+Double  — adds stdlib parses
+//   E. Profile: parse + materialize SimpleRecord — full hand-rolled init
+//   F. Decode 1M rows (simple)                  — full Codable path
+//
+// Deltas:
+//   B−A: cost of String materialization
+//   C−B: cost of `.trimmingCharacters(in:.whitespaces)`
+//   D−C: cost of `Int(_:)` + `Double(_:)`
+//   E−D: cost of allocating `SimpleRecord` per row + tiny per-row overhead
+//   F−E: cost of Codable container indirection + headerMap hash lookups
+
+benchmark("Profile: parse + 3 strings + trim (1M)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        for row in parser {
+            _ = row.string(at: 0)?.trimmingCharacters(in: .whitespaces)
+            _ = row.string(at: 1)?.trimmingCharacters(in: .whitespaces)
+            _ = row.string(at: 2)?.trimmingCharacters(in: .whitespaces)
+        }
+    }
+}
+
+benchmark("Profile: parse + 3 strings + trim + Int+Double (1M)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        var skipFirst = true
+        for row in parser {
+            // Skip header row
+            if skipFirst {
+                skipFirst = false
+                continue
+            }
+            _ = row.string(at: 0)?.trimmingCharacters(in: .whitespaces)
+            let ageStr = row.string(at: 1)?.trimmingCharacters(in: .whitespaces) ?? ""
+            _ = Int(ageStr)
+            let scoreStr = row.string(at: 2)?.trimmingCharacters(in: .whitespaces) ?? ""
+            _ = Double(scoreStr)
+        }
+    }
+}
+
+benchmark("Profile: parse + materialize SimpleRecord (1M)") {
+    simple1MData.withUnsafeBytes { buffer in
+        let parser = CSVParser(buffer: buffer.bindMemory(to: UInt8.self), delimiter: 0x2C)
+        var records: [SimpleRecord] = []
+        records.reserveCapacity(1_000_000)
+        var skipFirst = true
+        for row in parser {
+            if skipFirst {
+                skipFirst = false
+                continue
+            }
+            let name = row.string(at: 0)?.trimmingCharacters(in: .whitespaces) ?? ""
+            let ageStr = row.string(at: 1)?.trimmingCharacters(in: .whitespaces) ?? ""
+            let age = Int(ageStr) ?? 0
+            let scoreStr = row.string(at: 2)?.trimmingCharacters(in: .whitespaces) ?? ""
+            let score = Double(scoreStr) ?? 0
+            records.append(SimpleRecord(name: name, age: age, score: score))
+        }
+        precondition(records.count == 1_000_000)
+    }
+}
+
 // MARK: - Entry Point
 
 Benchmark.main()
