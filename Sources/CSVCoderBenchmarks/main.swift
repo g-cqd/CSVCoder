@@ -15,6 +15,19 @@ struct SimpleRecord: Codable, Sendable {
     let score: Double
 }
 
+// MARK: - SimpleRecordDirect (opt-in fast path)
+
+/// Same shape as `SimpleRecord` but annotated with `@CSVRow`, which
+/// makes the decoder dispatch through the ``CSVDirectDecodable`` fast
+/// path. Used by the `Decode 1M rows (fast path)` benchmark to quantify
+/// the speedup over the standard `Codable` path.
+@CSVRow
+struct SimpleRecordDirect: Codable, Sendable {
+    let name: String
+    let age: Int
+    let score: Double
+}
+
 // MARK: - ComplexRecord
 
 struct ComplexRecord: Codable, Sendable {
@@ -865,6 +878,18 @@ benchmark("Profile: parse + 3 strings + trim + Int+Double (1M)") {
             _ = Double(scoreStr)
         }
     }
+}
+
+benchmark("Decode 1M rows (simple, @CSVRow fast path)") {
+    let decoder = CSVDecoder()
+    let result: [SimpleRecordDirect] = try decoder.decode(from: simple1MData)
+    precondition(result.count == 1_000_000)
+}
+
+benchmark("Decode 100K rows (simple, @CSVRow fast path)") {
+    let decoder = CSVDecoder()
+    let result: [SimpleRecordDirect] = try decoder.decode(from: simple100KData)
+    precondition(result.count == 100_000)
 }
 
 benchmark("Profile: parse + materialize SimpleRecord (1M)") {

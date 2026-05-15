@@ -24,6 +24,53 @@ import Testing
             "CSVColumn": CSVColumnMacro.self,
         ]
 
+        // MARK: - Direct-decode fast path
+
+        @Test("Macro synthesizes CSVDirectDecodable when all field types are supported")
+        func macroEmitsDirectDecodable() {
+            assertMacroExpansion(
+                """
+                @CSVRow
+                struct Person: Codable {
+                    let name: String
+                    let age: Int
+                }
+                """,
+                expandedSource: """
+                    struct Person: Codable {
+                        let name: String
+                        let age: Int
+
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case name
+                            case age
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
+                    }
+
+                    extension Person: CSVRowDecodable {
+                    }
+
+                    extension Person: CSVRowEncodable {
+                    }
+
+                    extension Person: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
+                            self.age = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[1], configuration: configuration, key: "age", rowIndex: rowIndex)
+                        }
+                    }
+                    """,
+                macros: testMacros,
+            )
+        }
+
         // MARK: - Backward Compatibility
 
         @Test("Deprecated @CSVIndexed expands identically to @CSVRow")

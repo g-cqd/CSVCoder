@@ -60,6 +60,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Number `.locale(_:)` formatting / parsing now uses `FormatStyle`
   (Sendable, no caching required); `NumberFormatter` cache removed.
 
+### Opt-in fast-path decoding via `CSVDirectDecodable`
+
+Adds a protocol that bypasses `Codable`'s keyed container indirection. The
+`@CSVRow` macro now also synthesizes `CSVDirectDecodable` conformance
+whenever every stored property has a directly-supported type (`String`,
+`Bool`, all `Int`/`UInt` widths, `Double`, `Float`, `Decimal`, `UUID`,
+`URL`, `Date`, and `Optional` of each). The decoder detects the
+conformance at runtime and dispatches to a generated init that reads
+fields by pre-resolved column index — no headerMap hash per field, no
+`KeyedDecodingContainer` boxing.
+
+Measured impact on `Decode 1M rows (simple)`, 5 iterations + 3 warmups,
+Apple M2 Pro:
+
+  Standard Codable path:    1638 ms  (~611K rows/s)
+  CSVDirectDecodable path:   802 ms  (~1.25M rows/s)  → 2.04× faster
+
+Existing call sites are unchanged. Plain `Codable` types that don't
+carry `@CSVRow`, and `@CSVRow` types with unsupported field types,
+keep the standard path. Every configuration option (trim, encoding,
+date/number strategies, nil strategy, error locations) is honoured
+identically by the fast path.
+
 ### Renames
 
 - `@CSVIndexed` macro renamed to `@CSVRow`. Old name kept as a

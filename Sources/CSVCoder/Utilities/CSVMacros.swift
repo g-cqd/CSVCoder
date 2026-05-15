@@ -75,21 +75,28 @@
 /// // Column order is determined by the property declaration order.
 /// ```
 @attached(member, names: named(CodingKeys), named(CSVCodingKeys))
-@attached(extension, conformances: CSVRowDecodable, CSVRowEncodable)
+@attached(
+    extension,
+    conformances: CSVRowDecodable,
+    CSVRowEncodable,
+    CSVDirectDecodable,
+    names: named(init(csvRow:columnIndices:configuration:rowIndex:))
+)
 public macro CSVRow() = #externalMacro(module: "CSVCoderMacros", type: "CSVRowMacro")
 
 /// Deprecated alias for ``CSVRow()``.
 ///
 /// Kept for one release to soften the rename. Migrate to ``CSVRow()``;
 /// `@CSVIndexed` will be removed in a future minor version.
-@available(
-    *,
-    deprecated,
-    renamed: "CSVRow",
-    message: "Use @CSVRow — the rename clarifies the struct represents a CSV row.",
-)
+@available(*, deprecated, renamed: "CSVRow", message: "Use @CSVRow")
 @attached(member, names: named(CodingKeys), named(CSVCodingKeys))
-@attached(extension, conformances: CSVRowDecodable, CSVRowEncodable)
+@attached(
+    extension,
+    conformances: CSVRowDecodable,
+    CSVRowEncodable,
+    CSVDirectDecodable,
+    names: named(init(csvRow:columnIndices:configuration:rowIndex:))
+)
 public macro CSVIndexed() = #externalMacro(module: "CSVCoderMacros", type: "CSVRowMacro")
 
 /// Specifies a custom CSV column name for a property.

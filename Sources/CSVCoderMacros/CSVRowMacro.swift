@@ -95,6 +95,19 @@ public enum CSVRowMacroError: Error, CustomStringConvertible {
 @available(*, deprecated, renamed: "CSVRowMacroError")
 public typealias CSVIndexedMacroError = CSVRowMacroError
 
+// MARK: - Property metadata
+
+/// Per-property metadata collected from the struct's stored declarations
+/// and passed between the macro's internal helpers. File-scope so every
+/// helper signature stays under the `lineLength` cap.
+private typealias Property = (
+    name: String,
+    customName: String?,
+    attribute: AttributeSyntax?,
+    typeName: String?,
+    isOptional: Bool
+)
+
 // MARK: - CSVRowMacro
 
 /// The `@CSVRow` macro generates ``CSVRowDecodable`` and ``CSVRowEncodable``
@@ -159,7 +172,7 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     /// Scans `properties` for duplicate external column names and reports
     /// each collision via the macro expansion context.
     private static func diagnoseDuplicateColumns(
-        _ properties: [(name: String, customName: String?, attribute: AttributeSyntax?)],
+        _ properties: [Property],
         in context: some MacroExpansionContext,
     ) {
         var seen: [String: String] = [:]
@@ -187,16 +200,177 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
 
     public static func expansion(
         of _: AttributeSyntax,
-        attachedTo _: some DeclGroupSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
         providingExtensionsOf type: some TypeSyntaxProtocol,
         conformingTo _: [TypeSyntax],
         in _: some MacroExpansionContext,
     ) throws -> [ExtensionDeclSyntax] {
-        // Generate extensions for protocol conformance.
-        let decodableExt = try ExtensionDeclSyntax("extension \(type): CSVRowDecodable {}")
-        let encodableExt = try ExtensionDeclSyntax("extension \(type): CSVRowEncodable {}")
+        var extensions: [ExtensionDeclSyntax] = []
 
-        return [decodableExt, encodableExt]
+        // Always-emitted conformances. These carry the column-order metadata
+        // and bind the type to the standard `Codable` path.
+        extensions.append(try ExtensionDeclSyntax("extension \(type): CSVRowDecodable {}"))
+        extensions.append(try ExtensionDeclSyntax("extension \(type): CSVRowEncodable {}"))
+
+        // Direct-decode conformance only fires when every stored property has
+        // a type the field decoder knows how to handle. Otherwise the type
+        // falls back to the standard Codable path with no behavioural change.
+        if let structDecl = declaration.as(StructDeclSyntax.self) {
+            let storedProperties = extractStoredProperties(from: structDecl)
+            if shouldEmitDirectDecodable(for: storedProperties) {
+                let initBody = generateDirectInitBody(properties: storedProperties)
+                let directExt = try ExtensionDeclSyntax(
+                    """
+                    extension \(type): CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                    \(raw: initBody)
+                        }
+                    }
+                    """,
+                )
+                extensions.append(directExt)
+            }
+        }
+
+        return extensions
+    }
+
+    // MARK: - Direct-decode synthesis
+
+    /// Types supported by ``CSVDirectFieldDecoder``. The macro consults this
+    /// set to decide whether to emit ``CSVDirectDecodable`` conformance.
+    private static let directlyDecodableTypes: Set<String> = [
+        "String", "Bool", "Double", "Float",
+        "Int", "Int8", "Int16", "Int32", "Int64",
+        "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+        "Decimal", "UUID", "URL", "Date",
+        // Foundation-qualified spellings that may appear in user source.
+        "Foundation.Decimal", "Foundation.UUID", "Foundation.URL", "Foundation.Date",
+        "Swift.String", "Swift.Bool", "Swift.Double", "Swift.Float",
+        "Swift.Int", "Swift.Int8", "Swift.Int16", "Swift.Int32", "Swift.Int64",
+        "Swift.UInt", "Swift.UInt8", "Swift.UInt16", "Swift.UInt32", "Swift.UInt64",
+    ]
+
+    /// Returns `true` when every property has a supported direct-decode type.
+    private static func shouldEmitDirectDecodable(
+        for properties: [Property],
+    ) -> Bool {
+        guard !properties.isEmpty else { return false }
+        for property in properties {
+            guard let typeName = property.typeName else { return false }
+            // No Foundation in the macros target, so trim ASCII whitespace via stdlib.
+            let normalized = String(
+                typeName.drop(while: \.isWhitespace)
+                    .reversed()
+                    .drop(while: \.isWhitespace)
+                    .reversed(),
+            )
+            if !directlyDecodableTypes.contains(normalized) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Generates the body of the direct-decode init by emitting one
+    /// `CSVDirectFieldDecoder.*` call per stored property. Each call captures
+    /// the per-property column index from `columnIndices`, plus the property
+    /// name for error locations.
+    private static func generateDirectInitBody(
+        properties: [Property],
+    ) -> String {
+        var lines: [String] = []
+        for (offset, property) in properties.enumerated() {
+            guard let typeName = property.typeName else { continue }
+            // No Foundation in the macros target, so trim ASCII whitespace via stdlib.
+            let normalized = String(
+                typeName.drop(while: \.isWhitespace)
+                    .reversed()
+                    .drop(while: \.isWhitespace)
+                    .reversed(),
+            )
+            let escapedName = escapeIdentifier(property.name)
+            let helperCall = directDecodeCall(
+                forType: normalized,
+                isOptional: property.isOptional,
+                propertyName: property.name,
+                columnOffset: offset,
+            )
+            lines.append("        self.\(escapedName) = \(helperCall)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Returns the `CSVDirectFieldDecoder.*` invocation that decodes the
+    /// given property type at the supplied column offset. `propertyName` is
+    /// used both for the `key` parameter (error locations) and for the
+    /// stored-property assignment on the caller side.
+    private static func directDecodeCall(
+        forType type: String,
+        isOptional: Bool,
+        propertyName: String,
+        columnOffset: Int,
+    ) -> String {
+        // Strip Swift./Foundation. qualifiers so we match the helper name.
+        // (`String.replacingOccurrences` lives in Foundation, which the macros
+        // target doesn't import — do it with stdlib `dropFirst` instead.)
+        var bare = type
+        if bare.hasPrefix("Foundation.") {
+            bare = String(bare.dropFirst("Foundation.".count))
+        } else if bare.hasPrefix("Swift.") {
+            bare = String(bare.dropFirst("Swift.".count))
+        }
+
+        let index = "columnIndices[\(columnOffset)]"
+        let common =
+            "from: csvRow, index: \(index), configuration: configuration, "
+            + "key: \"\(propertyName)\", rowIndex: rowIndex"
+        let commonNoKey = "from: csvRow, index: \(index), configuration: configuration"
+
+        let optionalCall = isOptional ? "optional" : ""
+        switch (bare, isOptional) {
+        case ("String", true):
+            // optionalString does not throw — no `try`.
+            return "CSVDirectFieldDecoder.optionalString(\(commonNoKey))"
+        case ("String", false):
+            return "try CSVDirectFieldDecoder.string(\(common))"
+        case ("Bool", _):
+            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Bool" : "bool")(\(common))"
+        case ("Double", _):
+            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Double" : "double")(\(common))"
+        case ("Float", _):
+            // No optionalFloat helper — route through optionalDouble for `Float?` and narrow.
+            if isOptional {
+                return "(try CSVDirectFieldDecoder.optionalDouble(\(common))).map(Float.init)"
+            }
+            return "try CSVDirectFieldDecoder.float(\(common))"
+        case ("Decimal", _):
+            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Decimal" : "decimal")(\(common))"
+        case ("UUID", _):
+            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "UUID" : "uuid")(\(common))"
+        case ("URL", _):
+            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "URL" : "url")(\(common))"
+        case ("Date", _):
+            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Date" : "date")(\(common))"
+        case ("UInt64", false):
+            // UInt64 may exceed Int64 range — route through the dedicated helper.
+            return "try CSVDirectFieldDecoder.uInt64(\(common))"
+        case ("UInt64", true):
+            // No optionalUInt64 helper — fall back to optionalInteger which handles Int64-range values.
+            // Values exceeding Int64.max in an Optional context are an unsupported edge case.
+            return "try CSVDirectFieldDecoder.optionalInteger(UInt64.self, \(common))"
+        default:
+            // All other fixed-width integers route through the generic helper.
+            if isOptional {
+                return "try CSVDirectFieldDecoder.optionalInteger(\(bare).self, \(common))"
+            }
+            return "try CSVDirectFieldDecoder.integer(\(bare).self, \(common))"
+        }
     }
 
     // MARK: Private
@@ -245,15 +419,28 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - Helpers
 
-    /// Extracts stored property names from a struct declaration.
-    /// The `attribute` field carries the `@CSVColumn` syntax node when a custom
-    /// name was provided, so diagnostics can point at the offending source.
+    /// Extracts stored property metadata from a struct declaration.
+    /// Each entry captures the property name, an optional `@CSVColumn` rename
+    /// (with the attribute syntax for diagnostics), the declared Swift type
+    /// (as a string, e.g. `"Int"`, `"String?"`, `"[Double]"`), and whether
+    /// that type is `Optional`. Type-less bindings (no annotation, no
+    /// initializer expression we can use) report `typeName == nil`, which
+    /// suppresses the direct-decode synthesis for the whole type.
     private static func extractStoredProperties(from structDecl: StructDeclSyntax) -> [(
         name: String,
         customName: String?,
         attribute: AttributeSyntax?,
+        typeName: String?,
+        isOptional: Bool,
     )] {
-        var properties: [(name: String, customName: String?, attribute: AttributeSyntax?)] = []
+        typealias Property = (
+            name: String,
+            customName: String?,
+            attribute: AttributeSyntax?,
+            typeName: String?,
+            isOptional: Bool
+        )
+        var properties: [Property] = []
 
         for member in structDecl.memberBlock.members {
             guard let varDecl = member.decl.as(VariableDeclSyntax.self) else { continue }
@@ -283,11 +470,47 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
                 // Check for @CSVColumn attribute
                 let (customName, attribute) = extractCSVColumnInfo(from: varDecl.attributes)
 
-                properties.append((name: propertyName, customName: customName, attribute: attribute))
+                let (typeName, isOptional) = extractType(from: binding)
+
+                properties.append(
+                    (
+                        name: propertyName,
+                        customName: customName,
+                        attribute: attribute,
+                        typeName: typeName,
+                        isOptional: isOptional,
+                    ),
+                )
             }
         }
 
         return properties
+    }
+
+    /// Extracts the Swift type spelling from a binding's `: T` annotation,
+    /// trimming whitespace and detecting `Optional` shorthand (`T?`) and
+    /// long-form (`Optional<T>`). Returns `(nil, false)` when no type
+    /// annotation is present — in that case the macro cannot synthesise a
+    /// direct-decode init for this property.
+    private static func extractType(from binding: PatternBindingSyntax) -> (typeName: String?, isOptional: Bool) {
+        guard let typeAnnotation = binding.typeAnnotation else { return (nil, false) }
+        var typeText = typeAnnotation.type.trimmedDescription
+        // Strip a trailing `!` (implicitly unwrapped) and treat it as optional.
+        if typeText.hasSuffix("!") {
+            typeText = String(typeText.dropLast())
+            return (typeText, true)
+        }
+        if typeText.hasSuffix("?") {
+            let inner = String(typeText.dropLast())
+            return (inner, true)
+        }
+        // Detect `Optional<T>` long-form.
+        if typeText.hasPrefix("Optional<"), typeText.hasSuffix(">") {
+            let start = typeText.index(typeText.startIndex, offsetBy: "Optional<".count)
+            let end = typeText.index(before: typeText.endIndex)
+            return (String(typeText[start ..< end]), true)
+        }
+        return (typeText, false)
     }
 
     /// Extracts the custom column name and the originating attribute syntax
@@ -331,7 +554,7 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     /// Property names that collide with Swift reserved keywords are
     /// backtick-escaped so `init` / `class` / `default` etc. compile cleanly.
     private static func generateCodingKeys(
-        properties: [(name: String, customName: String?, attribute: AttributeSyntax?)],
+        properties: [Property],
         accessLevel: AccessLevel,
     ) -> DeclSyntax {
         var lines: [String] = []

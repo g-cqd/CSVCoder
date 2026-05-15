@@ -518,6 +518,13 @@ public final class CSVDecoder: Sendable {
             effectiveEncoding = encoding
         }
 
+        // If `T` opts into the direct-decode fast path, dispatch to it once
+        // headers are resolved. The fast path bypasses the `Codable` keyed
+        // container indirection but otherwise honours every configuration
+        // option (trim, encoding, strategies, error locations) of the
+        // standard path.
+        let directType = T.self as? any CSVDirectDecodable.Type
+
         return try effectiveData.withUnsafeBytes { buffer in
             guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else { return [] }
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
@@ -528,6 +535,11 @@ public final class CSVDecoder: Sendable {
             let expectedFieldCount = configuration.expectedFieldCount
 
             var headerMap: [String: Int]?
+            // Pre-resolved column indices for the direct-decode path, populated
+            // once after the header row is read.  Each entry is the index into
+            // the row view for the corresponding column in `T.csvColumnOrder`,
+            // or `-1` if the column was absent from the CSV header.
+            var directColumnIndices: [Int]?
             var results: [T] = []
             var rowIndex = 0
 
@@ -568,7 +580,7 @@ public final class CSVDecoder: Sendable {
                         if let s = row.string(at: i, encoding: effectiveEncoding) {
                             rawHeaders.append(
                                 configuration.trimWhitespace
-                                    ? s.trimmingCharacters(in: .whitespaces) : s
+                                    ? s.trimmingCharacters(in: .whitespaces) : s,
                             )
                         } else {
                             rawHeaders.append("column\(i)")
@@ -586,11 +598,41 @@ public final class CSVDecoder: Sendable {
                     }
                     headerMap = map
 
+                    // Pre-resolve the column indices once for the fast path.
+                    if let directType {
+                        directColumnIndices = directType._csvColumnOrder.map { map[$0] ?? -1 }
+                    }
+
                     // Skip the header row itself when the source carries one.
                     if configuration.hasHeaders { continue }
                 }
 
                 guard let map = headerMap else { continue }
+
+                if let directType, let indices = directColumnIndices {
+                    // Fast path: direct init, no Codable container indirection.
+                    let value = try directType.init(
+                        csvRow: row,
+                        columnIndices: indices,
+                        configuration: configuration,
+                        rowIndex: rowIndex,
+                    )
+                    // `directType` came from `T.self as? any CSVDirectDecodable.Type`,
+                    // so the concrete type of `value` is `T`. We still guard with
+                    // `as?` to avoid `as!` per the codebase's safety policy; the
+                    // throw is a defensive safety-net rather than a reachable
+                    // failure mode.
+                    guard let typed = value as? T else {
+                        throw CSVDecodingError.parsingError(
+                            "Fast-path decoded value of unexpected dynamic type",
+                            line: rowIndex,
+                            column: nil,
+                        )
+                    }
+                    results.append(typed)
+                    continue
+                }
+
                 let decoder = CSVRowDecoder(
                     view: row,
                     headerMap: map,
