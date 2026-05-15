@@ -55,101 +55,29 @@ nonisolated struct CSVSingleValueEncoder: Encoder {
 nonisolated struct CSVThrowingKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
     let codingPath: [CodingKey]
 
-    mutating func encodeNil(forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
+    /// Single error every protocol-required `encode(_:forKey:)` overload
+    /// raises. Hoisted to a constant so the 15 typed entry points stay
+    /// one-liners.
+    private static var nestedError: CSVEncodingError {
+        .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
     }
 
-    mutating func encode(_ value: Bool, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: String, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Double, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Float, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Int, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Int8, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Int16, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Int32, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: Int64, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: UInt, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: UInt8, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: UInt16, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: UInt32, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: UInt64, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
-
-    mutating func encode(_ value: some Encodable, forKey key: Key) throws {
-        throw
-            CSVEncodingError
-            .unsupportedType("Nested types are not supported. Configure nestedTypeEncodingStrategy to enable.")
-    }
+    mutating func encodeNil(forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Bool, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: String, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Double, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Float, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Int, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Int8, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Int16, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Int32, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: Int64, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: UInt, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: UInt8, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: UInt16, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: UInt32, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: UInt64, forKey key: Key) throws { throw Self.nestedError }
+    mutating func encode(_ value: some Encodable, forKey key: Key) throws { throw Self.nestedError }
 
     mutating func nestedContainer<NestedKey: CodingKey>(
         keyedBy _: NestedKey.Type,
@@ -229,45 +157,16 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
         storage.setValue(String(value), forKey: currentKey)
     }
 
-    mutating func encode(_ value: Int) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: Int8) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: Int16) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: Int32) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: Int64) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: UInt) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: UInt8) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: UInt16) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: UInt32) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
-
-    mutating func encode(_ value: UInt64) throws {
-        storage.setValue(String(value), forKey: currentKey)
-    }
+    mutating func encode(_ value: Int) throws { encodeInteger(value) }
+    mutating func encode(_ value: Int8) throws { encodeInteger(value) }
+    mutating func encode(_ value: Int16) throws { encodeInteger(value) }
+    mutating func encode(_ value: Int32) throws { encodeInteger(value) }
+    mutating func encode(_ value: Int64) throws { encodeInteger(value) }
+    mutating func encode(_ value: UInt) throws { encodeInteger(value) }
+    mutating func encode(_ value: UInt8) throws { encodeInteger(value) }
+    mutating func encode(_ value: UInt16) throws { encodeInteger(value) }
+    mutating func encode(_ value: UInt32) throws { encodeInteger(value) }
+    mutating func encode(_ value: UInt64) throws { encodeInteger(value) }
 
     mutating func encode(_ value: some Encodable) throws {
         // Handle Date specially
@@ -304,6 +203,13 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
 
     private var currentKey: String {
         codingPath.last?.stringValue ?? ""
+    }
+
+    /// Shared write path for every `FixedWidthInteger`. `String(value)` uses
+    /// the type's own `LosslessStringConvertible` conformance, identical to
+    /// the per-type bodies it replaces.
+    private mutating func encodeInteger<T: FixedWidthInteger>(_ value: T) {
+        storage.setValue(String(value), forKey: currentKey)
     }
 
     private func encodeDate(_ date: Date) throws -> String {

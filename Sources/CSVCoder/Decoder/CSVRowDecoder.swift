@@ -197,108 +197,30 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
         return Float(result)
     }
 
-    func decode(_ type: Int.Type, forKey key: Key) throws -> Int {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = Int(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
-    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = Int8(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
-    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = Int16(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
-    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = Int32(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
-    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 {
-        let value = try getValue(for: key)
-        guard let result = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy) else {
-            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
-    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = UInt(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
-    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = UInt8(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: value, location: makeLocation(for: key))
-        }
-        return result
-    }
-
+    func decode(_ type: Int.Type, forKey key: Key) throws -> Int { try decodeFixedWidthInteger(type, forKey: key) }
+    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 { try decodeFixedWidthInteger(type, forKey: key) }
+    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 { try decodeFixedWidthInteger(type, forKey: key) }
+    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 { try decodeFixedWidthInteger(type, forKey: key) }
+    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 { try decodeFixedWidthInteger(type, forKey: key) }
+    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt { try decodeFixedWidthInteger(type, forKey: key) }
+    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 { try decodeFixedWidthInteger(type, forKey: key) }
     func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = UInt16(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: value, location: makeLocation(for: key))
-        }
-        return result
+        try decodeFixedWidthInteger(type, forKey: key)
     }
-
     func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 {
-        let value = try getValue(for: key)
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = UInt32(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: value, location: makeLocation(for: key))
-        }
-        return result
+        try decodeFixedWidthInteger(type, forKey: key)
     }
 
     func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 {
+        // UInt64.max exceeds Int64.max, so the generic helper would
+        // round-trip through Int64 and lose half the range. Standard
+        // strategy parses unsigned directly; other strategies fall
+        // back to the shared signed path with narrowing.
         let value = try getValue(for: key)
-        // UInt64 may exceed Int64 range; parse via parseInt64 only when the
-        // value fits in signed Int64. For larger values, fall back to direct
-        // parsing under `.standard`, or unsupported under other strategies.
         if case .standard = configuration.numberDecodingStrategy, let direct = UInt64(value) {
             return direct
         }
-        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
-            let result = UInt64(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: value, location: makeLocation(for: key))
-        }
-        return result
+        return try decodeFixedWidthInteger(type, forKey: key)
     }
 
     func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
@@ -558,6 +480,27 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             row: rowIndex,
             column: key.stringValue,
         )
+    }
+
+    /// Shared parse-then-narrow path for `FixedWidthInteger` types. Parses
+    /// the field as `Int64`, then narrows via `T(exactly:)`. The type name
+    /// in the diagnostic comes from `T` itself so adding a new integer
+    /// width never drifts from the error message.
+    private func decodeFixedWidthInteger<T: FixedWidthInteger>(
+        _ type: T.Type,
+        forKey key: Key
+    ) throws -> T {
+        let value = try getValue(for: key)
+        guard let raw = CSVValueParser.parseInt64(value, strategy: configuration.numberDecodingStrategy),
+            let result = T(exactly: raw)
+        else {
+            throw CSVDecodingError.typeMismatch(
+                expected: String(describing: type),
+                actual: value,
+                location: makeLocation(for: key),
+            )
+        }
+        return result
     }
 
     /// Creates a source filtered to keys with the given prefix, stripping the prefix.

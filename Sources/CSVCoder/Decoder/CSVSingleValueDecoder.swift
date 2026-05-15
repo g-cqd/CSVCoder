@@ -79,96 +79,25 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
         return Float(result)
     }
 
-    func decode(_ type: Int.Type) throws -> Int {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = Int(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: Int8.Type) throws -> Int8 {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = Int8(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int8", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: Int16.Type) throws -> Int16 {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = Int16(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int16", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: Int32.Type) throws -> Int32 {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = Int32(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int32", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: Int64.Type) throws -> Int64 {
-        guard let result = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "Int64", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: UInt.Type) throws -> UInt {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = UInt(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: UInt8.Type) throws -> UInt8 {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = UInt8(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt8", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: UInt16.Type) throws -> UInt16 {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = UInt16(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt16", actual: trimmedValue, location: location)
-        }
-        return result
-    }
-
-    func decode(_ type: UInt32.Type) throws -> UInt32 {
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = UInt32(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt32", actual: trimmedValue, location: location)
-        }
-        return result
-    }
+    func decode(_ type: Int.Type) throws -> Int { try decodeFixedWidthInteger(type) }
+    func decode(_ type: Int8.Type) throws -> Int8 { try decodeFixedWidthInteger(type) }
+    func decode(_ type: Int16.Type) throws -> Int16 { try decodeFixedWidthInteger(type) }
+    func decode(_ type: Int32.Type) throws -> Int32 { try decodeFixedWidthInteger(type) }
+    func decode(_ type: Int64.Type) throws -> Int64 { try decodeFixedWidthInteger(type) }
+    func decode(_ type: UInt.Type) throws -> UInt { try decodeFixedWidthInteger(type) }
+    func decode(_ type: UInt8.Type) throws -> UInt8 { try decodeFixedWidthInteger(type) }
+    func decode(_ type: UInt16.Type) throws -> UInt16 { try decodeFixedWidthInteger(type) }
+    func decode(_ type: UInt32.Type) throws -> UInt32 { try decodeFixedWidthInteger(type) }
 
     func decode(_ type: UInt64.Type) throws -> UInt64 {
+        // UInt64.max exceeds Int64.max, so the generic helper would
+        // round-trip through Int64 and lose half the range. Standard
+        // strategy parses unsigned directly; other strategies fall
+        // back to the shared signed path with narrowing.
         if case .standard = configuration.numberDecodingStrategy, let direct = UInt64(trimmedValue) {
             return direct
         }
-        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
-            let result = UInt64(exactly: raw)
-        else {
-            throw CSVDecodingError.typeMismatch(expected: "UInt64", actual: trimmedValue, location: location)
-        }
-        return result
+        return try decodeFixedWidthInteger(type)
     }
 
     func decode<T: Decodable>(_ type: T.Type) throws -> T {
@@ -225,5 +154,22 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
             strategy: configuration.dateDecodingStrategy,
             codingPath: codingPath,
         )
+    }
+
+    /// Shared parse-then-narrow path for `FixedWidthInteger` types. Parses
+    /// the trimmed field as `Int64`, then narrows via `T(exactly:)`. The
+    /// type name in the diagnostic comes from `T` itself so adding a new
+    /// integer width never drifts from the error message.
+    private func decodeFixedWidthInteger<T: FixedWidthInteger>(_ type: T.Type) throws -> T {
+        guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
+            let result = T(exactly: raw)
+        else {
+            throw CSVDecodingError.typeMismatch(
+                expected: String(describing: type),
+                actual: trimmedValue,
+                location: location,
+            )
+        }
+        return result
     }
 }

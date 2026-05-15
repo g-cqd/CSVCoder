@@ -118,45 +118,16 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         storage.setValue(stringValue, forKey: prefixedKey(key))
     }
 
-    mutating func encode(_ value: Int, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: Int8, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: Int16, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: Int32, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: Int64, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: UInt, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: UInt8, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: UInt16, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: UInt32, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
-
-    mutating func encode(_ value: UInt64, forKey key: Key) throws {
-        storage.setValue(String(value), forKey: prefixedKey(key))
-    }
+    mutating func encode(_ value: Int, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: Int8, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: Int16, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: Int32, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: Int64, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: UInt, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: UInt8, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: UInt16, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: UInt32, forKey key: Key) throws { encodeInteger(value, forKey: key) }
+    mutating func encode(_ value: UInt64, forKey key: Key) throws { encodeInteger(value, forKey: key) }
 
     mutating func encode(_ value: some Encodable, forKey key: Key) throws {
         let fullKey = prefixedKey(key)
@@ -330,43 +301,34 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     mutating func encodeIfPresent(_ value: Int?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: Int8?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: Int16?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: Int32?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: Int64?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: UInt?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: UInt8?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: UInt16?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: UInt32?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
-
     mutating func encodeIfPresent(_ value: UInt64?, forKey key: Key) throws {
-        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
+        encodeIntegerIfPresent(value, forKey: key)
     }
 
     mutating func encodeIfPresent(_ value: (some Encodable)?, forKey key: Key) throws {
@@ -393,6 +355,18 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
 
     private func encodeDate(_ date: Date) throws -> String {
         try CSVValueFormatter.formatDate(date, strategy: configuration.dateEncodingStrategy)
+    }
+
+    /// Shared write path for required `FixedWidthInteger` keyed encoding.
+    private mutating func encodeInteger<T: FixedWidthInteger>(_ value: T, forKey key: Key) {
+        storage.setValue(String(value), forKey: prefixedKey(key))
+    }
+
+    /// Shared write path for optional `FixedWidthInteger` keyed encoding.
+    /// `nil` becomes the empty CSV field, matching Swift's synthesized
+    /// `encodeIfPresent` semantics for missing data.
+    private mutating func encodeIntegerIfPresent<T: FixedWidthInteger>(_ value: T?, forKey key: Key) {
+        storage.setValue(value.map { String($0) } ?? "", forKey: prefixedKey(key))
     }
 }
 
