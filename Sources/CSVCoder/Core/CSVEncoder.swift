@@ -267,7 +267,7 @@ nonisolated public final class CSVEncoder: Sendable {
 
     /// Encodes a single value to a CSV row string (without headers).
     ///
-    /// Column order honours ``CSVIndexedEncodable`` conformance when present.
+    /// Column order honours ``CSVRowEncodable`` conformance when present.
     ///
     /// - Parameter value: The value to encode.
     /// - Returns: A single CSV row string.
@@ -307,7 +307,7 @@ nonisolated public final class CSVEncoder: Sendable {
 
     /// Returns the header row for a given type.
     ///
-    /// Honours ``CSVIndexedEncodable`` column order and applies ``Configuration/keyEncodingStrategy``.
+    /// Honours ``CSVRowEncodable`` column order and applies ``Configuration/keyEncodingStrategy``.
     ///
     /// - Parameters:
     ///   - type: The type to get headers for.
@@ -324,13 +324,13 @@ nonisolated public final class CSVEncoder: Sendable {
 
     // MARK: Internal
 
-    // MARK: - CSVIndexedEncodable Detection
+    // MARK: - CSVRowEncodable Detection
 
     /// Returns the canonical column order for `T` when the type opts in via
-    /// ``CSVIndexedEncodable`` / `@CSVIndexed`. Returns `nil` for plain `Encodable` types,
+    /// ``CSVRowEncodable`` / `@CSVRow`. Returns `nil` for plain `Encodable` types,
     /// in which case the encoder falls back to the order produced by `encode(to:)`.
     static func columnOrder<T>(for type: T.Type) -> [String]? {
-        (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
+        (T.self as? _CSVRowMarker.Type)?._csvColumnOrder
     }
 
     // MARK: - Key Transformation

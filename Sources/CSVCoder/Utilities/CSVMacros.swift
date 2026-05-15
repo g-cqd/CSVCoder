@@ -5,17 +5,21 @@
 //  Public macro declarations for CSVCoder.
 //
 
-/// Automatically generates `CSVIndexedDecodable` and `CSVIndexedEncodable` conformance.
+/// Declares that a struct represents a single CSV row, generating the
+/// boilerplate needed for headerless decoding and ordered encoding.
 ///
-/// This macro eliminates boilerplate by generating:
-/// - `CodingKeys` enum with `CaseIterable` conformance (if not already present)
-/// - `typealias CSVCodingKeys = CodingKeys`
-/// - Protocol conformance extensions
+/// The macro expands to:
+/// - `CodingKeys` enum with `CaseIterable` conformance (if not already
+///   present, so the column order is enumerable)
+/// - `typealias CSVCodingKeys = CodingKeys` (the bridge protocol's
+///   associated type)
+/// - Conformance to ``CSVRowDecodable`` and ``CSVRowEncodable`` via
+///   extensions
 ///
 /// ## Usage
 ///
 /// ```swift
-/// @CSVIndexed
+/// @CSVRow
 /// struct Person: Codable {
 ///     let name: String
 ///     let age: Int
@@ -23,7 +27,7 @@
 /// }
 /// ```
 ///
-/// This expands to:
+/// expands to:
 ///
 /// ```swift
 /// struct Person: Codable {
@@ -39,16 +43,16 @@
 ///     typealias CSVCodingKeys = CodingKeys
 /// }
 ///
-/// extension Person: CSVIndexedDecodable {}
-/// extension Person: CSVIndexedEncodable {}
+/// extension Person: CSVRowDecodable {}
+/// extension Person: CSVRowEncodable {}
 /// ```
 ///
 /// ## With Custom Column Names
 ///
-/// Use `@CSVColumn` to map properties to different CSV column names:
+/// Use ``CSVColumn(_:)`` to map a property to a different CSV column name:
 ///
 /// ```swift
-/// @CSVIndexed
+/// @CSVRow
 /// struct Product: Codable {
 ///     let id: Int
 ///
@@ -62,26 +66,41 @@
 ///
 /// ## Headerless CSV Decoding
 ///
-/// Once a type conforms to `CSVIndexedDecodable`, it can be decoded from headerless CSV:
+/// Once a type carries `@CSVRow`, it can be decoded from headerless CSV:
 ///
 /// ```swift
 /// let config = CSVDecoder.Configuration(hasHeaders: false)
 /// let decoder = CSVDecoder(configuration: config)
 /// let people = try decoder.decode([Person].self, from: csv)
-/// // Column order is determined by CodingKeys case order
+/// // Column order is determined by the property declaration order.
 /// ```
 @attached(member, names: named(CodingKeys), named(CSVCodingKeys))
-@attached(extension, conformances: CSVIndexedDecodable, CSVIndexedEncodable)
-public macro CSVIndexed() = #externalMacro(module: "CSVCoderMacros", type: "CSVIndexedMacro")
+@attached(extension, conformances: CSVRowDecodable, CSVRowEncodable)
+public macro CSVRow() = #externalMacro(module: "CSVCoderMacros", type: "CSVRowMacro")
+
+/// Deprecated alias for ``CSVRow()``.
+///
+/// Kept for one release to soften the rename. Migrate to ``CSVRow()``;
+/// `@CSVIndexed` will be removed in a future minor version.
+@available(
+    *,
+    deprecated,
+    renamed: "CSVRow",
+    message: "Use @CSVRow — the rename clarifies the struct represents a CSV row.",
+)
+@attached(member, names: named(CodingKeys), named(CSVCodingKeys))
+@attached(extension, conformances: CSVRowDecodable, CSVRowEncodable)
+public macro CSVIndexed() = #externalMacro(module: "CSVCoderMacros", type: "CSVRowMacro")
 
 /// Specifies a custom CSV column name for a property.
 ///
-/// Use this macro with `@CSVIndexed` to map a property to a different column name in the CSV file.
+/// Use this macro with ``CSVRow()`` to map a property to a different column
+/// name in the CSV file.
 ///
 /// ## Usage
 ///
 /// ```swift
-/// @CSVIndexed
+/// @CSVRow
 /// struct Transaction: Codable {
 ///     let id: UUID
 ///

@@ -2,95 +2,110 @@
 //  CSVIndexedCodable.swift
 //  CSVCoder
 //
-//  Protocol for types that define column order via CaseIterable CodingKeys.
-//  Eliminates the need for manual indexMapping configuration.
+//  Protocols and aliases that let a `Codable` type declare its CSV row layout.
 //
 
 import Foundation
 
-// MARK: - _CSVIndexedMarker
+// MARK: - _CSVRowMarker
 
 /// Internal marker protocol for runtime conformance detection.
-/// Has no associated types, enabling `as?` casting at runtime.
-/// Public to allow protocol refinement but prefixed with underscore to signal internal use.
-public protocol _CSVIndexedMarker {
+///
+/// Carries no associated types so `as?` casting works at runtime — this is how
+/// the decoder discovers a type's declared column order without requiring
+/// callers to thread a generic constraint through every API.
+///
+/// The leading underscore signals "internal contract, not a stable API"; the
+/// protocol is `public` only because the `@CSVRow` macro emits conformances
+/// in user modules.
+public protocol _CSVRowMarker {
     static var _csvColumnOrder: [String] { get }
 }
 
-// MARK: - CSVIndexedBase
+// MARK: - CSVRowConvertible
 
-/// Base protocol providing the common requirements for CSV indexed types.
-/// Both CSVIndexedDecodable and CSVIndexedEncodable refine this protocol.
-public protocol CSVIndexedBase: _CSVIndexedMarker {
-    /// The CodingKeys type, which must be CaseIterable to define column order.
+/// Base protocol shared by ``CSVRowDecodable`` and ``CSVRowEncodable``.
+///
+/// Provides the canonical column order derived from a `CaseIterable`
+/// `CodingKeys` enum. Conformers rarely write this by hand — the `@CSVRow`
+/// macro generates everything needed.
+public protocol CSVRowConvertible: _CSVRowMarker {
+    /// The `CodingKeys` type, which must be `CaseIterable` so the library can
+    /// enumerate column positions.
     associatedtype CSVCodingKeys: CodingKey, CaseIterable
 
-    /// Returns the ordered column names derived from CodingKeys.
-    /// Default implementation uses `CSVCodingKeys.allCases`.
+    /// The CSV column order, derived by default from `CSVCodingKeys.allCases`.
     static var csvColumnOrder: [String] { get }
 }
 
-extension CSVIndexedBase {
-    /// Default implementation: extracts column names from CodingKeys.allCases in order.
+extension CSVRowConvertible {
+    /// Default implementation: extracts column names from `CSVCodingKeys.allCases`
+    /// in declaration order.
     public static var csvColumnOrder: [String] {
         CSVCodingKeys.allCases.map(\.stringValue)
     }
 
-    /// Internal marker implementation for runtime detection.
+    /// Marker-protocol bridge used by the decoder's runtime dispatch.
     public static var _csvColumnOrder: [String] { csvColumnOrder }
 }
 
-// MARK: - CSVIndexedDecodable
+// MARK: - CSVRowDecodable
 
-/// A type that can be decoded from headerless CSV using the order of its CodingKeys.
+/// A `Decodable` type that maps to a single CSV row with explicit column
+/// ordering.
 ///
-/// Conform to this protocol when decoding CSV files without headers. The order of
-/// cases in your `CodingKeys` enum defines the column order.
+/// Conform when decoding **headerless** CSV files: the order of cases in your
+/// `CodingKeys` enum determines which CSV column populates which property.
+/// With a header row, the conformance is harmless — the decoder uses the
+/// header names as usual.
 ///
 /// ```swift
-/// struct Person: CSVIndexedDecodable {
+/// struct Person: CSVRowDecodable {
 ///     let name: String
 ///     let age: Int
 ///     let score: Double
 ///
 ///     enum CodingKeys: String, CodingKey, CaseIterable {
-///         case name, age, score  // Column 0, 1, 2
+///         case name, age, score
 ///     }
 ///     typealias CSVCodingKeys = CodingKeys
 /// }
 ///
-/// // Decode headerless CSV - no indexMapping needed
+/// // No `indexMapping` needed — the decoder detects the conformance at runtime.
 /// let config = CSVDecoder.Configuration(hasHeaders: false)
 /// let decoder = CSVDecoder(configuration: config)
 /// let people = try decoder.decode([Person].self, from: csv)
 /// ```
 ///
-/// - Note: The decoder automatically detects conformance at runtime.
-///   You can use the standard `decode([T].self, from:)` method.
-public protocol CSVIndexedDecodable: Decodable, CSVIndexedBase {}
+/// The `@CSVRow` macro generates this conformance automatically.
+public protocol CSVRowDecodable: Decodable, CSVRowConvertible {}
 
-// MARK: - CSVIndexedEncodable
+// MARK: - CSVRowEncodable
 
-/// A type that can be encoded to CSV with columns in the order of its CodingKeys.
+/// An `Encodable` type whose CSV column order is declared via its
+/// `CodingKeys`.
 ///
-/// The encoding order matches the order of cases in your `CodingKeys` enum.
-public protocol CSVIndexedEncodable: Encodable, CSVIndexedBase {}
+/// The order of cases in `CodingKeys` defines the column order produced by
+/// any encode entry point (sync, streaming, parallel). The `@CSVRow` macro
+/// generates this conformance automatically.
+public protocol CSVRowEncodable: Encodable, CSVRowConvertible {}
 
-// MARK: - Combined Protocol
+// MARK: - Combined alias
 
-/// A type that can be both encoded and decoded with ordered CSV columns.
-public typealias CSVIndexedCodable = CSVIndexedDecodable & CSVIndexedEncodable
+/// A `Codable` type that maps to a CSV row in either direction.
+public typealias CSVRowCodable = CSVRowDecodable & CSVRowEncodable
 
-// MARK: - Internal Helpers
+// MARK: - Internal helpers
 
 extension CSVDecoder {
-    /// Extracts column order from a CSVIndexedDecodable type.
-    func columnOrder<T: CSVIndexedDecodable>(for type: T.Type) -> [String] {
+    /// Extracts column order from a ``CSVRowDecodable`` type.
+    func columnOrder<T: CSVRowDecodable>(for type: T.Type) -> [String] {
         T.csvColumnOrder
     }
 
-    /// Builds index mapping from CSVIndexedDecodable column order.
-    func indexMapping<T: CSVIndexedDecodable>(for type: T.Type) -> [Int: String] {
+    /// Builds an `[Int: String]` mapping from a ``CSVRowDecodable`` type's
+    /// column order, for callers that prefer the dictionary shape.
+    func indexMapping<T: CSVRowDecodable>(for type: T.Type) -> [Int: String] {
         let columns = T.csvColumnOrder
         var mapping: [Int: String] = [:]
         for (index, column) in columns.enumerated() {
@@ -99,3 +114,20 @@ extension CSVDecoder {
         return mapping
     }
 }
+
+// MARK: - Deprecated aliases (one-cycle migration)
+
+@available(*, deprecated, renamed: "_CSVRowMarker")
+public typealias _CSVIndexedMarker = _CSVRowMarker
+
+@available(*, deprecated, renamed: "CSVRowConvertible")
+public typealias CSVIndexedBase = CSVRowConvertible
+
+@available(*, deprecated, renamed: "CSVRowDecodable")
+public typealias CSVIndexedDecodable = CSVRowDecodable
+
+@available(*, deprecated, renamed: "CSVRowEncodable")
+public typealias CSVIndexedEncodable = CSVRowEncodable
+
+@available(*, deprecated, renamed: "CSVRowCodable")
+public typealias CSVIndexedCodable = CSVRowCodable

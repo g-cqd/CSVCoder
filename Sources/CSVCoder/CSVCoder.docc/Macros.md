@@ -6,12 +6,12 @@ Eliminate boilerplate for headerless CSV with Swift macros.
 
 CSVCoder provides macros to automatically generate `CodingKeys` and protocol conformance for index-based CSV decoding.
 
-## @CSVIndexed Macro
+## @CSVRow Macro
 
-Apply `@CSVIndexed` to your type to enable automatic column mapping:
+Apply `@CSVRow` to your type to enable automatic column mapping:
 
 ```swift
-@CSVIndexed
+@CSVRow
 struct Person: Codable {
     let name: String
     let age: Int
@@ -22,11 +22,11 @@ struct Person: Codable {
 The macro generates:
 - `CodingKeys` enum based on property order
 - `CSVCodingKeys` typealias
-- `CSVIndexedDecodable` conformance
+- `CSVRowDecodable` conformance
 
 ## Decode Headerless CSV
 
-With `@CSVIndexed`, columns are mapped by position:
+With `@CSVRow`, columns are mapped by position:
 
 ```swift
 let csv = """
@@ -45,7 +45,7 @@ let people = try decoder.decode([Person].self, from: csv)
 Map properties to different header names:
 
 ```swift
-@CSVIndexed
+@CSVRow
 struct Product: Codable {
     let id: Int
 
@@ -57,12 +57,12 @@ struct Product: Codable {
 }
 ```
 
-## Manual CSVIndexedDecodable
+## Manual CSVRowDecodable
 
 For more control, conform manually:
 
 ```swift
-struct Person: CSVIndexedDecodable {
+struct Person: CSVRowDecodable {
     let name: String
     let age: Int
     let score: Double
@@ -79,5 +79,5 @@ struct Person: CSVIndexedDecodable {
 
 ### Related
 
-- ``CSVIndexedDecodable``
+- ``CSVRowDecodable``
 - ``CSVDecoder``

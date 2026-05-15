@@ -60,6 +60,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Number `.locale(_:)` formatting / parsing now uses `FormatStyle`
   (Sendable, no caching required); `NumberFormatter` cache removed.
 
+### Renames
+
+- `@CSVIndexed` macro renamed to `@CSVRow`. Old name kept as a
+  `@available(*, deprecated)` alias for one release cycle.
+- `CSVIndexedDecodable` → `CSVRowDecodable`
+- `CSVIndexedEncodable` → `CSVRowEncodable`
+- `CSVIndexedCodable` → `CSVRowCodable`
+- `CSVIndexedBase` → `CSVRowConvertible`
+- `_CSVIndexedMarker` → `_CSVRowMarker`
+- All old spellings remain as deprecated `typealias` so existing code
+  compiles with a single rename warning per declaration site.
+
 ### Follow-up (post-audit perf + safety)
 
 #### Performance

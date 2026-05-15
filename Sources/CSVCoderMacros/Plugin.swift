@@ -11,7 +11,7 @@ import SwiftSyntaxMacros
 @main
 struct CSVCoderMacrosPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
-        CSVIndexedMacro.self,
+        CSVRowMacro.self,
         CSVColumnMacro.self,
     ]
 }

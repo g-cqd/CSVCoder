@@ -27,7 +27,7 @@ let csv = try encoder.encodeToString(people)
 ## Features
 
 - **Type-safe encoding/decoding** via Swift's `Codable` protocol
-- **Zero-boilerplate macros** (`@CSVIndexed`, `@CSVColumn`) for headerless CSV
+- **Zero-boilerplate macros** (`@CSVRow`, `@CSVColumn`) for headerless CSV
 - **Streaming** for O(1) memory with gigabyte-scale files
 - **Parallel processing** for multi-core performance
 - **Flexible parsing** with automatic date, number, and boolean detection
@@ -83,7 +83,7 @@ For maximum throughput on large datasets, use ``CSVParser`` directly with the ze
 ### Macros & Index-Based Decoding
 
 - <doc:Macros>
-- ``CSVIndexedDecodable``
+- ``CSVRowDecodable``
 
 ### Streaming
 

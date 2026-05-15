@@ -1,8 +1,9 @@
 //
-//  CSVIndexedMacro.swift
+//  CSVRowMacro.swift
 //  CSVCoder
 //
-//  Macro implementation for @CSVIndexed that generates CSVIndexedDecodable conformance.
+//  Macro implementation for @CSVRow that generates CSVRowDecodable / CSVRowEncodable
+//  conformance.
 //
 
 import SwiftDiagnostics
@@ -13,7 +14,7 @@ import SwiftSyntaxMacros
 // MARK: - Diagnostics
 
 /// Diagnostic message emitted when two `@CSVColumn` attributes claim the
-/// same external column name on the same `@CSVIndexed` struct.
+/// same external column name on the same `@CSVRow` struct.
 private struct DuplicateColumnDiagnostic: DiagnosticMessage {
     let columnName: String
     let firstProperty: String
@@ -31,11 +32,12 @@ private struct DuplicateColumnDiagnostic: DiagnosticMessage {
 }
 
 /// Diagnostic message emitted when `@CSVColumn` is applied to a property
-/// whose parent struct lacks `@CSVIndexed` — the column rename will silently
-/// have no effect, which is almost always a bug.
+/// whose parent struct lacks `@CSVRow` (or the deprecated `@CSVIndexed`).
+/// Without the row-level macro to read it, the column rename silently has
+/// no effect — surface that as a warning at expansion time.
 private struct OrphanCSVColumnDiagnostic: DiagnosticMessage {
     var message: String {
-        "@CSVColumn has no effect without @CSVIndexed on the containing struct"
+        "@CSVColumn has no effect without @CSVRow on the containing struct"
     }
 
     var diagnosticID: MessageID {
@@ -64,10 +66,10 @@ private func escapeIdentifier(_ name: String) -> String {
     swiftReservedWords.contains(name) ? "`\(name)`" : name
 }
 
-// MARK: - CSVIndexedMacroError
+// MARK: - CSVRowMacroError
 
 /// Error types for macro diagnostics.
-public enum CSVIndexedMacroError: Error, CustomStringConvertible {
+public enum CSVRowMacroError: Error, CustomStringConvertible {
     case notAStruct
     case noStoredProperties
     case existingCodingKeysNotCaseIterable
@@ -77,26 +79,35 @@ public enum CSVIndexedMacroError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .notAStruct:
-            "@CSVIndexed can only be applied to structs"
+            "@CSVRow can only be applied to structs"
 
         case .noStoredProperties:
-            "@CSVIndexed requires at least one stored property"
+            "@CSVRow requires at least one stored property"
 
         case .existingCodingKeysNotCaseIterable:
-            "Existing CodingKeys must conform to CaseIterable for @CSVIndexed"
+            "Existing CodingKeys must conform to CaseIterable for @CSVRow"
         }
     }
 }
 
-// MARK: - CSVIndexedMacro
+/// Deprecated alias retained for one release cycle so external code that
+/// caught `CSVIndexedMacroError` still compiles.
+@available(*, deprecated, renamed: "CSVRowMacroError")
+public typealias CSVIndexedMacroError = CSVRowMacroError
 
-/// The @CSVIndexed macro generates CSVIndexedDecodable conformance.
+// MARK: - CSVRowMacro
+
+/// The `@CSVRow` macro generates ``CSVRowDecodable`` and ``CSVRowEncodable``
+/// conformance.
 ///
 /// It creates:
-/// - CodingKeys enum with CaseIterable conformance (if not already present)
-/// - typealias CSVCodingKeys = CodingKeys
-/// - CSVIndexedDecodable and CSVIndexedEncodable conformance via extensions
-public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
+/// - `CodingKeys` enum with `CaseIterable` conformance (if not already present)
+/// - `typealias CSVCodingKeys = CodingKeys`
+/// - Extensions conforming to `CSVRowDecodable` and `CSVRowEncodable`
+///
+/// The legacy `@CSVIndexed` macro routes to the same implementation; the two
+/// expand identically.
+public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     // MARK: Public
 
     // MARK: - MemberMacro
@@ -109,7 +120,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     ) throws -> [DeclSyntax] {
         // Ensure we're attached to a struct
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
-            throw CSVIndexedMacroError.notAStruct
+            throw CSVRowMacroError.notAStruct
         }
 
         // Determine access level from struct modifiers
@@ -118,13 +129,13 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         // Extract stored properties
         let storedProperties = extractStoredProperties(from: structDecl)
         guard !storedProperties.isEmpty else {
-            throw CSVIndexedMacroError.noStoredProperties
+            throw CSVRowMacroError.noStoredProperties
         }
 
-        // Audit D5: emit a diagnostic for duplicate @CSVColumn names.  Two
-        // properties resolving to the same external column produce a
-        // `case foo = "x"` / `case bar = "x"` enum, which the Swift compiler
-        // rejects with a much less actionable error.
+        // Emit a diagnostic for duplicate @CSVColumn names. Two properties
+        // resolving to the same external column produce a `case foo = "x"`
+        // / `case bar = "x"` enum, which the Swift compiler rejects with a
+        // less actionable error.
         diagnoseDuplicateColumns(storedProperties, in: context)
 
         // Check if CodingKeys already exists
@@ -181,9 +192,9 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
         conformingTo _: [TypeSyntax],
         in _: some MacroExpansionContext,
     ) throws -> [ExtensionDeclSyntax] {
-        // Generate extensions for protocol conformance
-        let decodableExt = try ExtensionDeclSyntax("extension \(type): CSVIndexedDecodable {}")
-        let encodableExt = try ExtensionDeclSyntax("extension \(type): CSVIndexedEncodable {}")
+        // Generate extensions for protocol conformance.
+        let decodableExt = try ExtensionDeclSyntax("extension \(type): CSVRowDecodable {}")
+        let encodableExt = try ExtensionDeclSyntax("extension \(type): CSVRowEncodable {}")
 
         return [decodableExt, encodableExt]
     }
@@ -282,7 +293,7 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     /// Extracts the custom column name and the originating attribute syntax
     /// from `@CSVColumn("…")`, if present.
     private static func extractCSVColumnInfo(
-        from attributes: AttributeListSyntax
+        from attributes: AttributeListSyntax,
     ) -> (name: String?, attribute: AttributeSyntax?) {
         for attribute in attributes {
             guard case .attribute(let attr) = attribute else { continue }
@@ -342,15 +353,21 @@ public struct CSVIndexedMacro: MemberMacro, ExtensionMacro {
     }
 }
 
+/// Deprecated alias retained for source compatibility with consumers that
+/// referenced `CSVIndexedMacro` directly.  Routes to ``CSVRowMacro``.
+@available(*, deprecated, renamed: "CSVRowMacro")
+public typealias CSVIndexedMacro = CSVRowMacro
+
 // MARK: - CSVColumnMacro
 
-/// The @CSVColumn macro marks a property with a custom CSV column name.
-/// This is a peer macro that doesn't generate any code itself;
-/// it's read by @CSVIndexed to customize CodingKeys.
+/// The `@CSVColumn` macro marks a property with a custom CSV column name.
+/// This is a peer macro that doesn't generate any code itself; it's read by
+/// ``CSVRowMacro`` to customize `CodingKeys`.
 ///
-/// Audit D5: when applied to a property whose parent struct is not annotated
-/// with `@CSVIndexed`, the rename is silently dropped.  Emit a warning so the
-/// mistake surfaces during macro expansion rather than at runtime.
+/// When applied to a property whose parent struct is not annotated with
+/// `@CSVRow` (or the deprecated `@CSVIndexed`), the rename is silently
+/// dropped. Emit a warning so the mistake surfaces during macro expansion
+/// rather than at runtime.
 public struct CSVColumnMacro: PeerMacro {
     public static func expansion(
         of attribute: AttributeSyntax,
@@ -361,15 +378,17 @@ public struct CSVColumnMacro: PeerMacro {
         var parent: Syntax? = declaration.parent
         while let node = parent {
             if let structDecl = node.as(StructDeclSyntax.self) {
-                let hasCSVIndexed = structDecl.attributes.contains { element in
+                let hasRowMacro = structDecl.attributes.contains { element in
                     guard case .attribute(let attr) = element,
                         let identifier = attr.attributeName.as(IdentifierTypeSyntax.self)
                     else { return false }
-                    return identifier.name.text == "CSVIndexed"
+                    let name = identifier.name.text
+                    // Accept both the new `@CSVRow` and the legacy `@CSVIndexed`.
+                    return name == "CSVRow" || name == "CSVIndexed"
                 }
-                if !hasCSVIndexed {
+                if !hasRowMacro {
                     context.diagnose(
-                        Diagnostic(node: Syntax(attribute), message: OrphanCSVColumnDiagnostic())
+                        Diagnostic(node: Syntax(attribute), message: OrphanCSVColumnDiagnostic()),
                     )
                 }
                 break
@@ -377,7 +396,7 @@ public struct CSVColumnMacro: PeerMacro {
             parent = node.parent
         }
 
-        // This macro doesn't generate any code; it's a marker that @CSVIndexed reads.
+        // This macro doesn't generate any code; it's a marker that @CSVRow reads.
         return []
     }
 }

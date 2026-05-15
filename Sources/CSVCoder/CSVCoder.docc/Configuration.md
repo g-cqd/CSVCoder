@@ -10,7 +10,7 @@ mechanisms: ``CSVDecoder/Configuration-swift.struct/indexMapping``,
 ``CSVDecoder/Configuration-swift.struct/hasHeaders`` combined with
 ``CSVDecoder/Configuration-swift.struct/keyDecodingStrategy``,
 ``CSVDecoder/Configuration-swift.struct/columnMapping``, and runtime
-detection of ``CSVIndexedDecodable``.
+detection of ``CSVRowDecodable``.
 
 Understanding the precedence order lets you mix-and-match without surprises.
 
@@ -24,7 +24,7 @@ The decoder picks the first rule that applies:
    first row as headers and run them through
    ``CSVDecoder/Configuration-swift.struct/keyDecodingStrategy`` (and any
    ``CSVDecoder/Configuration-swift.struct/columnMapping`` overrides).
-3. The decoded type conforms to ``CSVIndexedDecodable`` (typically via
+3. The decoded type conforms to ``CSVRowDecodable`` (typically via
    ``CSVIndexed()``) — use the type's declared `CodingKeys` order.
 4. Generate `column0`, `column1`, … as last-resort names.
 
@@ -58,10 +58,10 @@ let config = CSVDecoder.Configuration(
 can keep snake-case conversion for the rest of the file while overriding
 the handful of awkward headers.
 
-### Headerless input with `@CSVIndexed`
+### Headerless input with `@CSVRow`
 
 ```swift
-@CSVIndexed
+@CSVRow
 struct Record: Codable {
     let id: Int
     @CSVColumn("price_usd") let priceUSD: Double
@@ -96,4 +96,4 @@ emits columns in a stable but arbitrary order and you only need a subset.
 - ``CSVDecoder/KeyDecodingStrategy``
 - ``CSVDecoder/Configuration-swift.struct/columnMapping``
 - ``CSVDecoder/Configuration-swift.struct/indexMapping``
-- ``CSVIndexedDecodable``
+- ``CSVRowDecodable``

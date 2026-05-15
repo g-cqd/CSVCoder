@@ -170,16 +170,16 @@ struct CSVEncoderParallelEncodingTests {
         #expect(firstLine == "first_name,last_name")
     }
 
-    // MARK: - @CSVIndexed column order (audit A1)
+    // MARK: - @CSVRow column order (audit A1)
 
-    @CSVIndexed
+    @CSVRow
     struct OrderedRecord: Codable, Sendable {
         @CSVColumn("Z_third") let third: Int
         @CSVColumn("A_first") let first: Int
         @CSVColumn("M_second") let second: Int
     }
 
-    @Test("Parallel encode honors CSVIndexedEncodable column order (audit A1)")
+    @Test("Parallel encode honors CSVRowEncodable column order (audit A1)")
     func parallelEncodeHonorsColumnOrder() async throws {
         let records = [OrderedRecord(third: 3, first: 1, second: 2)]
         let encoder = CSVEncoder()

@@ -5,7 +5,7 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 ## Features
 
 - **Type-safe CSV encoding/decoding** via Swift's `Codable` protocol
-- **Zero-boilerplate macros** (`@CSVIndexed`, `@CSVColumn`) for headerless CSV
+- **Zero-boilerplate macros** (`@CSVRow`, `@CSVColumn`) for headerless CSV
 - **Streaming encoding/decoding** for O(1) memory with large files
 - **Parallel encoding/decoding** for multi-core performance
 - **Smart error suggestions** with typo detection and strategy hints
@@ -14,7 +14,7 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 - **Flexible decoding strategies** for dates, numbers, and booleans with auto-detection
 - **Key decoding strategies** (snake_case, kebab-case, PascalCase conversion)
 - **Index-based decoding** for headerless CSV files
-- **CSVIndexedDecodable** for automatic column ordering via CodingKeys
+- **CSVRowDecodable** for automatic column ordering via CodingKeys
 - **Rich error diagnostics** with row/column location information
 - **Optional value handling** with configurable nil encoding
 - **SIMD-accelerated** parsing and field scanning
@@ -46,6 +46,12 @@ source-breaking changes worth highlighting:
 - **`expectedFieldCount` is enforced in both lenient and strict modes.**
   Previously a `expectedFieldCount: 5` setting silently no-op'd outside
   strict mode.  Mixed-width CSV will now surface a parsing error.
+- **`@CSVIndexed` renamed to `@CSVRow`** (and related protocols renamed
+  to `CSVRowDecodable`/`CSVRowEncodable`/`CSVRowCodable`). The old
+  spellings remain as deprecated aliases for one release cycle — code
+  that uses `@CSVIndexed` keeps compiling with a deprecation warning;
+  the rename names the value (the struct *is* a CSV row) rather than
+  the mechanism.
 
 ## Installation
 
@@ -246,12 +252,12 @@ let decoder = CSVDecoder(configuration: config)
 let records = try decoder.decode([Person].self, from: csv)
 ```
 
-### @CSVIndexed Macro (Zero Boilerplate)
+### @CSVRow Macro (Zero Boilerplate)
 
-Eliminate all boilerplate for headerless CSV with the `@CSVIndexed` macro:
+Eliminate all boilerplate for headerless CSV with the `@CSVRow` macro:
 
 ```swift
-@CSVIndexed
+@CSVRow
 struct Person: Codable {
     let name: String
     let age: Int
@@ -276,7 +282,7 @@ entry points.
 Map properties to different CSV column names:
 
 ```swift
-@CSVIndexed
+@CSVRow
 struct Product: Codable {
     let id: Int
 
@@ -290,15 +296,15 @@ struct Product: Codable {
 
 The macro emits a compile-time error for duplicate `@CSVColumn` names on
 the same struct, and a warning when `@CSVColumn` is applied to a property
-whose parent struct lacks `@CSVIndexed` (the rename would silently do
+whose parent struct lacks `@CSVRow` (the rename would silently do
 nothing without the macro to read it).
 
-### CSVIndexedDecodable (Manual Protocol)
+### CSVRowDecodable (Manual Protocol)
 
-For more control, conform to `CSVIndexedDecodable` manually:
+For more control, conform to `CSVRowDecodable` manually:
 
 ```swift
-struct Person: CSVIndexedDecodable {
+struct Person: CSVRowDecodable {
     let name: String
     let age: Int
     let score: Double
@@ -311,13 +317,13 @@ struct Person: CSVIndexedDecodable {
     typealias CSVCodingKeys = CodingKeys
 }
 
-// No indexMapping needed - decoder auto-detects CSVIndexedDecodable conformance
+// No indexMapping needed - decoder auto-detects CSVRowDecodable conformance
 let config = CSVDecoder.Configuration(hasHeaders: false)
 let decoder = CSVDecoder(configuration: config)
 let people = try decoder.decode([Person].self, from: csv)
 ```
 
-The order of cases in `CodingKeys` determines the column mapping automatically. The decoder detects `CSVIndexedDecodable` conformance at runtime, so you use the same `decode()` method as regular `Codable` types.
+The order of cases in `CodingKeys` determines the column mapping automatically. The decoder detects `CSVRowDecodable` conformance at runtime, so you use the same `decode()` method as regular `Codable` types.
 
 ### Flexible Decoding Strategies
 

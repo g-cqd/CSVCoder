@@ -1,8 +1,8 @@
 //
-//  CSVIndexedMacroTests.swift
+//  CSVRowMacroTests.swift
 //  CSVCoder
 //
-//  Tests for @CSVIndexed and @CSVColumn macros.
+//  Tests for @CSVRow and @CSVColumn macros.
 //
 
 import SwiftSyntax
@@ -13,12 +13,51 @@ import Testing
 #if canImport(CSVCoderMacros)
     @testable import CSVCoderMacros
 
-    @Suite("CSVIndexed Macro Tests")
-    struct CSVIndexedMacroTests {
+    @Suite("CSVRow Macro Tests")
+    struct CSVRowMacroTests {
         let testMacros: [String: Macro.Type] = [
-            "CSVIndexed": CSVIndexedMacro.self,
+            "CSVRow": CSVRowMacro.self,
+            // The deprecated `@CSVIndexed` spelling maps to the same
+            // implementation as `@CSVRow` so existing source keeps compiling
+            // through the rename cycle. Tested explicitly below.
+            "CSVIndexed": CSVRowMacro.self,
             "CSVColumn": CSVColumnMacro.self,
         ]
+
+        // MARK: - Backward Compatibility
+
+        @Test("Deprecated @CSVIndexed expands identically to @CSVRow")
+        func deprecatedCSVIndexedStillExpands() {
+            assertMacroExpansion(
+                """
+                @CSVIndexed
+                struct LegacyRecord: Codable {
+                    let id: Int
+                    let label: String
+                }
+                """,
+                expandedSource: """
+                    struct LegacyRecord: Codable {
+                        let id: Int
+                        let label: String
+
+                        enum CodingKeys: String, CodingKey, CaseIterable {
+                            case id
+                            case label
+                        }
+
+                        typealias CSVCodingKeys = CodingKeys
+                    }
+
+                    extension LegacyRecord: CSVRowDecodable {
+                    }
+
+                    extension LegacyRecord: CSVRowEncodable {
+                    }
+                    """,
+                macros: testMacros,
+            )
+        }
 
         // MARK: - Basic Expansion Tests
 
@@ -26,7 +65,7 @@ import Testing
         func basicMacroExpansion() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct Person: Codable {
                     let name: String
                     let age: Int
@@ -45,10 +84,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension Person: CSVIndexedDecodable {
+                    extension Person: CSVRowDecodable {
                     }
 
-                    extension Person: CSVIndexedEncodable {
+                    extension Person: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -59,7 +98,7 @@ import Testing
         func macroWithOptionalProperty() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct User: Codable {
                     let id: Int
                     let name: String
@@ -81,10 +120,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension User: CSVIndexedDecodable {
+                    extension User: CSVRowDecodable {
                     }
 
-                    extension User: CSVIndexedEncodable {
+                    extension User: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -97,7 +136,7 @@ import Testing
         func macroWithCSVColumn() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct Product: Codable {
                     let id: Int
 
@@ -125,10 +164,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension Product: CSVIndexedDecodable {
+                    extension Product: CSVRowDecodable {
                     }
 
-                    extension Product: CSVIndexedEncodable {
+                    extension Product: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -141,7 +180,7 @@ import Testing
         func macroPreservesPropertyOrder() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct Record: Codable {
                     let third: Double
                     let first: String
@@ -163,10 +202,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension Record: CSVIndexedDecodable {
+                    extension Record: CSVRowDecodable {
                     }
 
-                    extension Record: CSVIndexedEncodable {
+                    extension Record: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -179,7 +218,7 @@ import Testing
         func macroFailsOnClass() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 class NotAStruct: Codable {
                     let value: Int
                 }
@@ -190,7 +229,7 @@ import Testing
                     }
                     """,
                 diagnostics: [
-                    DiagnosticSpec(message: "@CSVIndexed can only be applied to structs", line: 1, column: 1)
+                    DiagnosticSpec(message: "@CSVRow can only be applied to structs", line: 1, column: 1)
                 ],
                 macros: testMacros,
             )
@@ -202,7 +241,7 @@ import Testing
         func macroSkipsComputedProperties() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct WithComputed: Codable {
                     let stored: Int
 
@@ -226,10 +265,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension WithComputed: CSVIndexedDecodable {
+                    extension WithComputed: CSVRowDecodable {
                     }
 
-                    extension WithComputed: CSVIndexedEncodable {
+                    extension WithComputed: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -262,7 +301,7 @@ import Testing
         func macroHandlesManyProperties() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct LargeRecord: Codable {
                     let a: String
                     let b: Int
@@ -290,10 +329,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension LargeRecord: CSVIndexedDecodable {
+                    extension LargeRecord: CSVRowDecodable {
                     }
 
-                    extension LargeRecord: CSVIndexedEncodable {
+                    extension LargeRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -306,7 +345,7 @@ import Testing
         func macroHandlesPublicStruct() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 public struct PublicRecord: Codable {
                     public let name: String
                     public let value: Int
@@ -325,10 +364,10 @@ import Testing
                         public typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension PublicRecord: CSVIndexedDecodable {
+                    extension PublicRecord: CSVRowDecodable {
                     }
 
-                    extension PublicRecord: CSVIndexedEncodable {
+                    extension PublicRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -339,7 +378,7 @@ import Testing
         func macroHandlesPublicStructWithCSVColumn() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 public struct PublicProduct: Codable, Sendable {
                     @CSVColumn("Product Name")
                     public let name: String
@@ -362,10 +401,10 @@ import Testing
                         public typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension PublicProduct: CSVIndexedDecodable {
+                    extension PublicProduct: CSVRowDecodable {
                     }
 
-                    extension PublicProduct: CSVIndexedEncodable {
+                    extension PublicProduct: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -376,7 +415,7 @@ import Testing
         func macroHandlesInternalStruct() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 internal struct InternalRecord: Codable {
                     let name: String
                 }
@@ -392,10 +431,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension InternalRecord: CSVIndexedDecodable {
+                    extension InternalRecord: CSVRowDecodable {
                     }
 
-                    extension InternalRecord: CSVIndexedEncodable {
+                    extension InternalRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -406,7 +445,7 @@ import Testing
         func macroHandlesFileprivateStruct() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 fileprivate struct FileprivateRecord: Codable {
                     let name: String
                 }
@@ -422,10 +461,10 @@ import Testing
                         fileprivate typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension FileprivateRecord: CSVIndexedDecodable {
+                    extension FileprivateRecord: CSVRowDecodable {
                     }
 
-                    extension FileprivateRecord: CSVIndexedEncodable {
+                    extension FileprivateRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -436,7 +475,7 @@ import Testing
         func macroHandlesPrivateStruct() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 private struct PrivateRecord: Codable {
                     let name: String
                 }
@@ -452,10 +491,10 @@ import Testing
                         private typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension PrivateRecord: CSVIndexedDecodable {
+                    extension PrivateRecord: CSVRowDecodable {
                     }
 
-                    extension PrivateRecord: CSVIndexedEncodable {
+                    extension PrivateRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -468,7 +507,7 @@ import Testing
             // that no access modifier means internal (no prefix)
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct DefaultRecord: Codable {
                     let value: Int
                 }
@@ -484,10 +523,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension DefaultRecord: CSVIndexedDecodable {
+                    extension DefaultRecord: CSVRowDecodable {
                     }
 
-                    extension DefaultRecord: CSVIndexedEncodable {
+                    extension DefaultRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,
@@ -500,7 +539,7 @@ import Testing
         func macroReportsDuplicateColumns() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct R: Codable {
                     @CSVColumn("x")
                     let a: Int
@@ -523,10 +562,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension R: CSVIndexedDecodable {
+                    extension R: CSVRowDecodable {
                     }
 
-                    extension R: CSVIndexedEncodable {
+                    extension R: CSVRowEncodable {
                     }
                     """,
                 diagnostics: [
@@ -540,7 +579,7 @@ import Testing
             )
         }
 
-        @Test("Macro warns on orphan @CSVColumn (no @CSVIndexed on container)")
+        @Test("Macro warns on orphan @CSVColumn (no @CSVRow on container)")
         func macroWarnsOnOrphanCSVColumn() {
             assertMacroExpansion(
                 """
@@ -557,7 +596,7 @@ import Testing
                     """,
                 diagnostics: [
                     DiagnosticSpec(
-                        message: "@CSVColumn has no effect without @CSVIndexed on the containing struct",
+                        message: "@CSVColumn has no effect without @CSVRow on the containing struct",
                         line: 2,
                         column: 5,
                         severity: .warning,
@@ -571,7 +610,7 @@ import Testing
         func macroEscapesKeywords() {
             assertMacroExpansion(
                 """
-                @CSVIndexed
+                @CSVRow
                 struct K: Codable {
                     let `init`: Int
                     let `class`: String
@@ -590,10 +629,10 @@ import Testing
                         typealias CSVCodingKeys = CodingKeys
                     }
 
-                    extension K: CSVIndexedDecodable {
+                    extension K: CSVRowDecodable {
                     }
 
-                    extension K: CSVIndexedEncodable {
+                    extension K: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,

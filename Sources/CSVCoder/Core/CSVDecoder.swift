@@ -94,7 +94,7 @@ public final class CSVDecoder: Sendable {
     /// Header resolution follows this precedence:
     /// 1. ``indexMapping`` - Explicit column index → property name mapping
     /// 2. ``hasHeaders`` with ``keyDecodingStrategy`` - Transform header names
-    /// 3. `CSVIndexedDecodable` conformance - Use type's `CodingKeys` order
+    /// 3. `CSVRowDecodable` conformance - Use type's `CodingKeys` order
     /// 4. Generated column names (`column0`, `column1`, ...)
     public struct Configuration: Sendable {
         // MARK: Lifecycle
@@ -325,7 +325,7 @@ public final class CSVDecoder: Sendable {
 
     /// Decodes an array of values from the given CSV data.
     ///
-    /// For headerless CSV, the decoder automatically detects `CSVIndexedDecodable`
+    /// For headerless CSV, the decoder automatically detects `CSVRowDecodable`
     /// conformance and uses the type's `CodingKeys` order for column mapping.
     ///
     /// - Parameters:
@@ -333,8 +333,8 @@ public final class CSVDecoder: Sendable {
     ///   - data: The CSV data to decode.
     /// - Returns: An array of decoded values.
     public func decode<T: Decodable>(_ type: [T].Type, from data: Data) throws -> [T] {
-        // Runtime detection of CSVIndexedDecodable conformance
-        let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
+        // Runtime detection of CSVRowDecodable conformance
+        let columnOrder = (T.self as? _CSVRowMarker.Type)?._csvColumnOrder
 
         // Fast path: Zero-copy decoding for UTF-8 data
         return try decodeRowsFromBytes(type, from: data, columnOrder: columnOrder)
@@ -342,7 +342,7 @@ public final class CSVDecoder: Sendable {
 
     /// Decodes an array of values from the given CSV string.
     ///
-    /// For headerless CSV, the decoder automatically detects `CSVIndexedDecodable`
+    /// For headerless CSV, the decoder automatically detects `CSVRowDecodable`
     /// conformance and uses the type's `CodingKeys` order for column mapping.
     ///
     /// - Parameters:
@@ -350,8 +350,8 @@ public final class CSVDecoder: Sendable {
     ///   - string: The CSV string to decode.
     /// - Returns: An array of decoded values.
     public func decode<T: Decodable>(_ type: [T].Type, from string: String) throws -> [T] {
-        // Runtime detection of CSVIndexedDecodable conformance
-        let columnOrder = (T.self as? _CSVIndexedMarker.Type)?._csvColumnOrder
+        // Runtime detection of CSVRowDecodable conformance
+        let columnOrder = (T.self as? _CSVRowMarker.Type)?._csvColumnOrder
         return try decodeRows(type, from: string, columnOrder: columnOrder)
     }
 
@@ -447,7 +447,7 @@ public final class CSVDecoder: Sendable {
     ///
     /// - Parameters:
     ///   - rawHeaders: The raw header strings from the first row (or generated column names).
-    ///   - columnOrder: Optional column order from CSVIndexedDecodable conformance.
+    ///   - columnOrder: Optional column order from CSVRowDecodable conformance.
     ///   - columnCount: Number of columns in the data (used for generation if needed).
     /// - Returns: The resolved header names.
     func resolveHeaders(
@@ -466,7 +466,7 @@ public final class CSVDecoder: Sendable {
             return rawHeaders.map { transformKey($0) }
         }
 
-        // 3. If CSVIndexedDecodable provides column order, use it
+        // 3. If CSVRowDecodable provides column order, use it
         if let columnOrder = columnOrder {
             return columnOrder
         }
@@ -478,7 +478,7 @@ public final class CSVDecoder: Sendable {
 
     // MARK: Private
 
-    /// Internal method that handles both regular Decodable and CSVIndexedDecodable.
+    /// Internal method that handles both regular Decodable and CSVRowDecodable.
     /// Uses CSVParser for consistent zero-copy performance.
     private func decodeRows<T: Decodable>(
         _ type: [T].Type,
