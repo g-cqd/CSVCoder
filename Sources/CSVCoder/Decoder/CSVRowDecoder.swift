@@ -540,7 +540,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     }
 
     private func getValue(for key: Key) throws -> String {
-        let trim = configuration.trimWhitespace
+        let rawValue: String
         switch source {
         case .dictionary(let row):
             guard let value = row[key.stringValue] else {
@@ -549,8 +549,7 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
-            // Dictionary source has pre-materialised strings; apply trim via stdlib.
-            return trim ? value.trimmingCharacters(in: .whitespaces) : value
+            rawValue = value
 
         case .view(let view, let headerMap):
             guard let index = headerMap[key.stringValue], index < view.count else {
@@ -559,16 +558,20 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
-            // Byte-level trim is performed inside `string(at:encoding:trim:)`
-            // before the String is materialised — skips one allocation.
-            guard let value = view.string(at: index, encoding: encoding, trim: trim) else {
+            // Decode string on demand using the effective encoding
+            guard let value = view.string(at: index, encoding: encoding) else {
                 throw CSVDecodingError.keyNotFound(
                     key.stringValue,
                     location: makeLocation(for: key, includeAvailableKeys: true),
                 )
             }
-            return value
+            rawValue = value
         }
+
+        // Apply trimWhitespace via Foundation's `.whitespaces` — same semantics
+        // regardless of source (dictionary vs view) so callers see consistent
+        // behaviour, and Unicode whitespace is handled per Foundation's rules.
+        return configuration.trimWhitespace ? rawValue.trimmingCharacters(in: .whitespaces) : rawValue
     }
 
     /// Returns the string value for a key, or nil if not present.

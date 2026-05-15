@@ -420,9 +420,6 @@ CSVCoder is compatible with projects using `SWIFT_DEFAULT_ACTOR_ISOLATION = Main
 - **SIMD scanning.** 64-byte vector compares find structural bytes (`"`,
   delimiter, `\r`, `\n`); SWAR (8-byte register operations) covers the
   tail. Falls back to scalar for the last 0–7 bytes.
-- **Byte-level trim.** `trimWhitespace` runs over a `Span<UInt8>` view
-  with bounds-checked-at-compile-time semantics; no second `String`
-  allocation per field.
 - **Mutex-serialized encoder storage.** Encoder cells are deposited
   through `Synchronization.Mutex` so the same `CSVEncoder` can drive
   multiple concurrent encodes without coordination from the caller.
@@ -431,48 +428,48 @@ CSVCoder is compatible with projects using `SWIFT_DEFAULT_ACTOR_ISOLATION = Main
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows (simple) | 1.3 ms | ~770K rows/s |
-| 10K rows (simple) | 13 ms | ~750K rows/s |
-| 100K rows (simple) | 132 ms | ~760K rows/s |
-| 1M rows (simple) | 1.33 s | ~754K rows/s |
-| 10K rows (complex, 8 fields) | 29 ms | ~344K rows/s |
-| 10K rows (quoted fields) | 15 ms | ~660K rows/s |
-| 100K rows (numeric fields) | 138 ms | ~725K rows/s |
+| 1K rows (simple) | 1.6 ms | ~617K rows/s |
+| 10K rows (simple) | 16 ms | ~630K rows/s |
+| 100K rows (simple) | 158 ms | ~633K rows/s |
+| 1M rows (simple) | 1.58 s | ~632K rows/s |
+| 10K rows (complex, 8 fields) | 36 ms | ~281K rows/s |
+| 10K rows (quoted fields) | 17 ms | ~585K rows/s |
+| 100K rows (numeric fields) | 161 ms | ~622K rows/s |
 
 ### Real-World Scenarios
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 50K orders (18 fields, optionals) | 283 ms | ~177K rows/s |
-| 100K transactions (13 fields) | 447 ms | ~224K rows/s |
+| 50K orders (18 fields, optionals) | 344 ms | ~146K rows/s |
+| 100K transactions (13 fields) | 514 ms | ~194K rows/s |
 
 ### Encoding
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| 1K rows | 1.3 ms | ~770K rows/s |
-| 10K rows | 13 ms | ~770K rows/s |
-| 100K rows | 146 ms | ~685K rows/s |
-| 1M rows | 1.28 s | ~779K rows/s |
-| 50K orders (18 fields, optionals) | 220 ms | ~227K rows/s |
-| 100K rows to Data | 145 ms | ~690K rows/s |
-| 100K rows to String | 132 ms | ~758K rows/s |
+| 1K rows | 1.3 ms | ~759K rows/s |
+| 10K rows | 13 ms | ~787K rows/s |
+| 100K rows | 126 ms | ~793K rows/s |
+| 1M rows | 1.27 s | ~786K rows/s |
+| 50K orders (18 fields, optionals) | 227 ms | ~220K rows/s |
+| 100K rows to Data | 126 ms | ~795K rows/s |
+| 100K rows to String | 126 ms | ~796K rows/s |
 
 ### Parallel Processing
 
 | Benchmark | Sequential | Parallel | Speedup |
 |-----------|-----------:|---------:|--------:|
-| Decode 100K rows | 132 ms | 97 ms | **1.36×** |
-| Decode 1M rows | 1.33 s | 919 ms | **1.44×** |
-| Encode 100K rows | 146 ms | 41 ms | **3.54×** |
-| Encode 1M rows | 1.28 s | 423 ms | **3.04×** |
+| Decode 100K rows | 158 ms | 89 ms | **1.77×** |
+| Decode 1M rows | 1.58 s | 886 ms | **1.79×** |
+| Encode 100K rows | 126 ms | 37 ms | **3.39×** |
+| Encode 1M rows | 1.27 s | 365 ms | **3.48×** |
 
 ### Mixed Workloads
 
 | Benchmark | Time |
 |-----------|------|
-| Decode + Transform + Encode 10K | 27 ms |
-| Filter + Aggregate 100K orders | 290 ms |
+| Decode + Transform + Encode 10K | 29 ms |
+| Filter + Aggregate 100K orders | 350 ms |
 
 ### Raw High-Performance API (Codable Bypass)
 
@@ -499,10 +496,10 @@ let count = try CSVParser.parse(data: data) { parser in
 
 | Benchmark | Time | Throughput |
 |-----------|------|------------|
-| Raw Parse 1M rows (Iterate Only) | 85 ms | **~11.78M rows/s** |
-| Raw Parse 1M rows (Iterate + String) | 214 ms | **~4.69M rows/s** |
-| Raw Parse 100K Quoted (Iterate Only) | 9 ms | **~11.24M rows/s** |
-| Raw Parse 100K Quoted (Iterate + String) | 37 ms | **~2.70M rows/s** |
+| Raw Parse 1M rows (Iterate Only) | 83 ms | **~12.02M rows/s** |
+| Raw Parse 1M rows (Iterate + String) | 207 ms | **~4.83M rows/s** |
+| Raw Parse 100K Quoted (Iterate Only) | 9 ms | **~11.56M rows/s** |
+| Raw Parse 100K Quoted (Iterate + String) | 37 ms | **~2.74M rows/s** |
 
 Run benchmarks locally:
 

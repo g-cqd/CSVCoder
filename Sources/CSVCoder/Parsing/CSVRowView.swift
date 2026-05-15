@@ -196,31 +196,6 @@ public struct CSVRowView {
     /// - Returns: The decoded string value, or `nil` if the index is out of bounds or conversion fails.
     /// - Complexity: O(1) for unquoted UTF-8 fields; O(n) for quoted fields with escaped quotes or non-UTF-8 encodings.
     public func string(at index: Int, encoding: String.Encoding) -> String? {
-        string(at: index, encoding: encoding, trim: false)
-    }
-
-    /// Decodes the string value for the field at `index`, optionally trimming
-    /// ASCII whitespace at the byte level before string materialization.
-    ///
-    /// Passing `trim: true` is equivalent to applying
-    /// `.trimmingCharacters(in: .whitespaces)` afterwards but avoids the
-    /// second String allocation — the trim is performed by adjusting the
-    /// byte range used to build the String.
-    ///
-    /// Internally the trim runs over a `Span<UInt8>` view (Swift 6.2,
-    /// iOS 12.2+) for compile-time bounds and lifetime safety; the hot
-    /// loop uses `subscript(unchecked:)` so the safety has no runtime
-    /// cost.
-    ///
-    /// - Parameters:
-    ///   - index: The zero-based field index.
-    ///   - encoding: The string encoding to use for conversion.
-    ///   - trim: When `true`, strip leading and trailing ASCII whitespace
-    ///     bytes (`0x09`, `0x0A`, `0x0B`, `0x0C`, `0x0D`, `0x20`) before
-    ///     materializing the String.
-    /// - Returns: The decoded string value, or `nil` if the index is out of
-    ///   bounds or encoding conversion fails.
-    public func string(at index: Int, encoding: String.Encoding, trim: Bool) -> String? {
         guard index < fields.count else { return nil }
 
         let field = fields[index]
@@ -234,62 +209,22 @@ public struct CSVRowView {
         let ptr = base.advanced(by: start)
         let fieldBuffer = UnsafeBufferPointer(start: ptr, count: length)
 
-        // Compute the trimmed byte range using a Span view, then re-derive
-        // an UnsafeBufferPointer of the matching sub-range. This keeps the
-        // existing CSVUnescaper / String constructor call sites unchanged.
-        let (trimOffset, trimCount): (Int, Int)
-        if trim {
-            (trimOffset, trimCount) = Self.trimASCIIRange(fieldBuffer.span)
-        } else {
-            (trimOffset, trimCount) = (0, length)
-        }
-        let trimmedBuffer = UnsafeBufferPointer(
-            start: ptr.advanced(by: trimOffset),
-            count: trimCount,
-        )
-
         // Fast path for UTF-8 (most common case)
         if encoding == .utf8 {
             guard isQuoted, hasEscapedQuote else {
-                return String(decoding: trimmedBuffer, as: UTF8.self)
+                // No unescaping needed - direct decode
+                return String(decoding: fieldBuffer, as: UTF8.self)
             }
-            return CSVUnescaper.unescape(buffer: trimmedBuffer)
+            // Use zero-allocation unescaper
+            return CSVUnescaper.unescape(buffer: fieldBuffer)
         }
 
         // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)
         if isQuoted, hasEscapedQuote {
-            return CSVUnescaper.unescape(buffer: trimmedBuffer, encoding: encoding)
+            return CSVUnescaper.unescape(buffer: fieldBuffer, encoding: encoding)
         }
 
-        guard let trimmedBase = trimmedBuffer.baseAddress else { return "" }
-        let data = Data(bytes: trimmedBase, count: trimmedBuffer.count)
+        let data = Data(bytes: ptr, count: length)
         return String(data: data, encoding: encoding)
-    }
-
-    /// Returns the `(offset, count)` of the sub-range of `span` with leading
-    /// and trailing ASCII whitespace removed. `Span` provides compile-time
-    /// bounds checking for the loop; `subscript(unchecked:)` keeps the hot
-    /// path free of redundant bounds-check codegen. Whitespace is the
-    /// ASCII set: `0x09` (TAB), `0x0A` (LF), `0x0B` (VT), `0x0C` (FF),
-    /// `0x0D` (CR), `0x20` (SP).
-    @inlinable
-    static func trimASCIIRange(_ span: Span<UInt8>) -> (offset: Int, count: Int) {
-        guard !span.isEmpty else { return (0, 0) }
-        var start = 0
-        var end = span.count
-        while start < end, Self.isASCIIWhitespace(span[unchecked: start]) {
-            start &+= 1
-        }
-        while end > start, Self.isASCIIWhitespace(span[unchecked: end &- 1]) {
-            end &-= 1
-        }
-        return (start, end - start)
-    }
-
-    @inlinable
-    static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
-        // 0x09..=0x0D and 0x20 — same set as Foundation's CharacterSet.whitespaces
-        // restricted to ASCII (which CSV fields are at this layer).
-        byte == 0x20 || (byte >= 0x09 && byte <= 0x0D)
     }
 }

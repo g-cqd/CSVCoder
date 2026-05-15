@@ -63,24 +63,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Follow-up (post-audit perf + safety)
 
 #### Performance
-- `CSVRowView.string(at:encoding:trim:)` performs byte-level whitespace
-  trimming on a `Span<UInt8>` view before materializing the `String`,
-  eliminating the second allocation per field. Decoder hot path is ~17%
-  faster on representative workloads:
-  - Decode 100K simple rows: 160 ms → 132 ms
-  - Decode 100K transactions: 506 ms → 447 ms
-  - Decode 50K orders: 341 ms → 283 ms
 - Reverted the audit's `OrderedDictionary` adoption in
   `CSVEncodingStorage` back to a `Dictionary + [String]` pair (still
   under `Mutex` for thread-safety). `OrderedDictionary` measured 3-6%
   slower for the storage's insert-once / read-once access pattern.
   `swift-collections` is no longer a dependency.
 
-#### Safety
-- Migrated the internal byte-trim helper from `UnsafeBufferPointer<UInt8>`
-  to `Span<UInt8>` (SE-0447, available on iOS 12.2+). Hot loops use
-  `subscript(unchecked:)` so the compile-time bounds and lifetime
-  guarantees come at zero runtime cost.
+#### Notes
+- A byte-level whitespace trim (`Span<UInt8>` based) was prototyped in
+  `CSVRowView.string(at:encoding:trim:)` for a ~17% decoder speedup on
+  simple-record benchmarks, then **reverted**. The custom trim set
+  `0x09..=0x0D + 0x20` diverged from Foundation's
+  `CharacterSet.whitespaces` (Zs + `0x09`) in two directions: it
+  stripped legitimate LF/CR/VT/FF from quoted fields, and missed
+  Unicode space separators. The behavioural divergence between this
+  path (view source) and the existing dictionary-source path made the
+  same input produce different trims depending on which decode entry
+  point was called — a correctness bug outweighing the throughput win.
+  The decoder again uses Foundation's `.trimmingCharacters(in: .whitespaces)`
+  uniformly.
 
 ### Added
 
