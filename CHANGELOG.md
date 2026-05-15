@@ -60,6 +60,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Number `.locale(_:)` formatting / parsing now uses `FormatStyle`
   (Sendable, no caching required); `NumberFormatter` cache removed.
 
+### Investigated and rejected: Substring-based whitespace trim
+
+The pre-`Codable` round-trip currently calls `String.trimmingCharacters(in: .whitespaces)`,
+which allocates a new `String`. A `Substring`-returning equivalent was prototyped
+to remove that allocation, then **abandoned** after property-based testing
+caught a fundamental incompatibility: Foundation's `.trimmingCharacters` cuts
+at **Unicode scalar boundaries**, but `Substring` indices must lie on
+**grapheme cluster boundaries**. For inputs like `" <ZWNJ>X"` (where SPACE
+and ZERO WIDTH NON-JOINER combine into a single cluster) Foundation strips
+the SPACE scalar — producing `<ZWNJ>X` — but no `Substring` can represent
+that mid-cluster cut. Matching Foundation precisely therefore requires
+allocating a fresh `String` from the scalar slice, which costs the same as
+Foundation's own implementation. The hot-path trim stays on Foundation's
+`.trimmingCharacters(in: .whitespaces)`; the investigation lives here so the
+trade-off doesn't get re-litigated next time.
+
 ### Opt-in fast-path decoding via `CSVDirectDecodable`
 
 Adds a protocol that bypasses `Codable`'s keyed container indirection. The
