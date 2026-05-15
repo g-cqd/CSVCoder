@@ -177,7 +177,7 @@ struct CSVEncoderNestedEncodingTests {
         #expect(decoded == records)
     }
 
-    // MARK: - JSON Byte Limit (audit A5)
+    // MARK: - JSON Byte Limit
 
     @Test("Nested JSON encoding rejects oversized payloads")
     func nestedJSONRejectsOversizedPayloads() throws {

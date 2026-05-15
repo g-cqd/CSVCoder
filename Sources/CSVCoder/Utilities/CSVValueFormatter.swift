@@ -62,7 +62,7 @@ enum CSVValueFormatter {
         case .locale(let locale):
             // `FloatingPointFormatStyle` is `Sendable` and value-typed, so no
             // cross-thread cache is needed — Foundation's internal ICU cache
-            // amortises pattern parsing per locale (audit C5).
+            // amortises pattern parsing per locale.
             return value.formatted(
                 .number
                     .locale(locale)

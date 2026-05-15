@@ -127,7 +127,7 @@ enum CSVValueParser {
 
         case .locale(let locale):
             // `FloatingPointFormatStyle.ParseStrategy` is Sendable and value-typed,
-            // so no per-call NumberFormatter caching is needed (audit C5).
+            // so no per-call NumberFormatter caching is needed.
             return try? FloatingPointFormatStyle<Double>.number
                 .locale(locale)
                 .parseStrategy
@@ -236,7 +236,7 @@ enum CSVValueParser {
             // Exception: a leading "0" is never a thousands group ("0,100"
             // is read as decimal 0.100, not as integer 100). Without this
             // guard the heuristic mis-classified small fractional values
-            // such as "0,100" L or "0,250" L as 100 / 250 (audit 4.3).
+            // such as "0,100" L or "0,250" L as 100 / 250.
             let parts = cleaned.split(separator: ",")
             if parts.count == 2, parts[1].count == 3, parts[0] != "0" {
                 cleaned = cleaned.replacingOccurrences(of: ",", with: "")

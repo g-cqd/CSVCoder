@@ -127,7 +127,7 @@ struct CSVDecoderKeyMappingTests {
         #expect(records[0].firstName == "Carol")
     }
 
-    @Test("Snake-case decoder is the inverse of the JSON-style encoder (audit B7)")
+    @Test("Snake-case decoder is the inverse of the JSON-style encoder")
     func snakeCaseRoundTripWithAcronyms() throws {
         // JSONEncoder/Decoder's documented round-trip behaviour: snake_case
         // collapses acronyms to lower-case (`my_url_property`), and decoding

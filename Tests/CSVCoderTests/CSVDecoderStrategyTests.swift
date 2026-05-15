@@ -145,7 +145,7 @@ struct CSVDecoderStrategyTests {
             ("1,234", 1234.0),
             ("12,345", 12345.0),
             // Leading zero is never a thousands group — "0,100" is the
-            // European decimal 0.1, not the integer 100 (audit 4.3).
+            // European decimal 0.1, not the integer 100.
             ("0,100", 0.100),
             ("0,250", 0.250),
         ]
@@ -164,7 +164,7 @@ struct CSVDecoderStrategyTests {
         #expect(records[0].price == expected)
     }
 
-    @Test("Decode Int with flexible strategy strips currency and grouping (audit B2)")
+    @Test("Decode Int with flexible strategy strips currency and grouping")
     func decodeIntFlexible() throws {
         struct CountRecord: Codable {
             let name: String
@@ -187,7 +187,7 @@ struct CSVDecoderStrategyTests {
         #expect(records[2].count == 1234)
     }
 
-    @Test("Flexible Int rejects fractional values (audit B2)")
+    @Test("Flexible Int rejects fractional values")
     func decodeIntFlexibleRejectsFractions() {
         struct Row: Codable {
             let n: Int

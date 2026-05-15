@@ -44,12 +44,11 @@ enum LocaleUtilities {
 
     /// Hand-curated set of common currency symbols and ISO codes.
     ///
-    /// Audit C6: the previous implementation enumerated
-    /// `Locale.availableIdentifiers` (~900 entries on macOS 15), constructed
-    /// one `Locale` per identifier and queried `currencySymbol`, costing
-    /// 10–45 ms on first use of `.flexible` / `.currency` parsing.  The
-    /// curated set covers the symbols actually encountered in real-world
-    /// CSV data without the cold-start tax.
+    /// Enumerating `Locale.availableIdentifiers` (~900 entries on macOS 15)
+    /// to derive symbols at runtime cost 10–45 ms on first use of
+    /// `.flexible` / `.currency` parsing.  This curated set covers the
+    /// symbols actually encountered in real-world CSV data without the
+    /// cold-start tax.
     static let allCurrencySymbols: Set<String> = [
         // Single-character symbols
         "$", "€", "£", "¥", "¢", "₹", "₽", "₩", "₪", "₫", "₦", "₱", "₴", "₸",
@@ -99,8 +98,8 @@ enum LocaleUtilities {
         }
 
         // Then strip currency symbols (longest first to handle "R$" before "$").
-        // Audit C7: only strip symbols anchored at the start or end of the
-        // trimmed string.  Stripping anywhere in the middle (`replacingOccurrences`)
+        // Only strip symbols anchored at the start or end of the trimmed
+        // string.  Stripping anywhere in the middle (`replacingOccurrences`)
         // mis-handles property values that legitimately contain currency-symbol
         // substrings — e.g., `"Krakow,123"` should not become `"akow,123"`
         // because `kr` is one of the recognised currency tokens.

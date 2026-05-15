@@ -38,12 +38,12 @@ struct CSVEncoderStrategyTests {
         let encoder = CSVEncoder(configuration: config)
         let csv = try encoder.encodeToString(records)
 
-        // Regression: ensure data values appear under transformed headers (audit fix)
+        // Regression: ensure data values appear under transformed headers
         let expected = "first_name,last_name,phone_number\nJohn,Doe,555-1234"
         #expect(csv == expected)
     }
 
-    @Test("encodeToDictionary applies keyEncodingStrategy (audit B3)")
+    @Test("encodeToDictionary applies keyEncodingStrategy")
     func encodeToDictionaryAppliesKeyStrategy() throws {
         let record = CamelCaseRecord(firstName: "Alice", lastName: "Smith", phoneNumber: "0")
         let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
@@ -55,7 +55,7 @@ struct CSVEncoderStrategyTests {
         #expect(dict["firstName"] == nil)
     }
 
-    @Test("headers(for:sample:) applies keyEncodingStrategy (audit B3)")
+    @Test("headers(for:sample:) applies keyEncodingStrategy")
     func headersAppliesKeyStrategy() throws {
         let sample = CamelCaseRecord(firstName: "x", lastName: "y", phoneNumber: "z")
         let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
@@ -90,7 +90,7 @@ struct CSVEncoderStrategyTests {
         #expect(csv.contains("PHONE_NUMBER"))
     }
 
-    @Test("Snake-case algorithm matches JSONEncoder acronym rules (audit B7)")
+    @Test("Snake-case algorithm matches JSONEncoder acronym rules")
     func snakeCaseAcronymParity() {
         // The new converter follows JSONEncoder._convertToSnakeCase semantics:
         // consecutive uppercase letters form a single acronym word.

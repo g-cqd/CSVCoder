@@ -347,7 +347,7 @@ struct CSVEncoderTests {
         #expect(original == decoded)
     }
 
-    // MARK: - @CSVRow column order (audit A1)
+    // MARK: - @CSVRow column order
 
     @CSVRow
     struct OrderedRecord: Codable, Sendable {
@@ -356,7 +356,7 @@ struct CSVEncoderTests {
         @CSVColumn("M_second") let second: Int
     }
 
-    @Test("Sync encode honors CSVRowEncodable column order (audit A1)")
+    @Test("Sync encode honors CSVRowEncodable column order")
     func syncEncodeHonorsColumnOrder() throws {
         let records = [OrderedRecord(third: 3, first: 1, second: 2)]
         let encoder = CSVEncoder()
@@ -364,7 +364,7 @@ struct CSVEncoderTests {
         #expect(csv == "Z_third,A_first,M_second\n3,1,2")
     }
 
-    @Test("encodeToDictionary honors CSVRowEncodable order keys (audit A1)")
+    @Test("encodeToDictionary honors CSVRowEncodable order keys")
     func encodeToDictionaryHonorsColumnOrder() throws {
         let record = OrderedRecord(third: 3, first: 1, second: 2)
         let encoder = CSVEncoder()

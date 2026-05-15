@@ -541,7 +541,7 @@ import Testing
             )
         }
 
-        // MARK: - Diagnostics (audit D5)
+        // MARK: - Diagnostics
 
         @Test("Macro reports duplicate @CSVColumn names")
         func macroReportsDuplicateColumns() {

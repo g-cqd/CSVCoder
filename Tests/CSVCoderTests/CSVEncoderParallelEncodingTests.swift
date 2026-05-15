@@ -117,14 +117,14 @@ struct CSVEncoderParallelEncodingTests {
         #expect(decoded == records)
     }
 
-    // MARK: - keyEncodingStrategy regression (audit A2)
+    // MARK: - keyEncodingStrategy regression
 
     struct CamelRecord: Codable, Equatable, Sendable {
         let firstName: String
         let lastName: String
     }
 
-    @Test("Parallel encode applies keyEncodingStrategy to header (audit A2)")
+    @Test("Parallel encode applies keyEncodingStrategy to header")
     func parallelEncodeAppliesKeyStrategy() async throws {
         let records = [
             CamelRecord(firstName: "Alice", lastName: "Smith"),
@@ -140,7 +140,7 @@ struct CSVEncoderParallelEncodingTests {
         #expect(lines.contains("Bob,Jones"))
     }
 
-    @Test("Parallel batched encode applies keyEncodingStrategy to header (audit A2)")
+    @Test("Parallel batched encode applies keyEncodingStrategy to header")
     func parallelBatchedEncodeAppliesKeyStrategy() async throws {
         let records = (0 ..< 50).map { CamelRecord(firstName: "First\($0)", lastName: "Last\($0)") }
         let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
@@ -152,7 +152,7 @@ struct CSVEncoderParallelEncodingTests {
         #expect(batches.first?.first == "first_name,last_name")
     }
 
-    @Test("Parallel encode to file applies keyEncodingStrategy (audit A2)")
+    @Test("Parallel encode to file applies keyEncodingStrategy")
     func parallelEncodeToFileAppliesKeyStrategy() async throws {
         let records = (0 ..< 100).map { CamelRecord(firstName: "F\($0)", lastName: "L\($0)") }
         let tempURL = FileManager.default.temporaryDirectory
@@ -170,7 +170,7 @@ struct CSVEncoderParallelEncodingTests {
         #expect(firstLine == "first_name,last_name")
     }
 
-    // MARK: - @CSVRow column order (audit A1)
+    // MARK: - @CSVRow column order
 
     @CSVRow
     struct OrderedRecord: Codable, Sendable {
@@ -179,7 +179,7 @@ struct CSVEncoderParallelEncodingTests {
         @CSVColumn("M_second") let second: Int
     }
 
-    @Test("Parallel encode honors CSVRowEncodable column order (audit A1)")
+    @Test("Parallel encode honors CSVRowEncodable column order")
     func parallelEncodeHonorsColumnOrder() async throws {
         let records = [OrderedRecord(third: 3, first: 1, second: 2)]
         let encoder = CSVEncoder()

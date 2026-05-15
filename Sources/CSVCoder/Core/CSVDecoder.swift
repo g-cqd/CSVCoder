@@ -540,9 +540,8 @@ public final class CSVDecoder: Sendable {
             var rowIndex = 0
 
             // Fused parse + validate + decode loop.  Each row view exists only
-            // for the duration of one iteration, eliminating the
-            // `[CSVRowView]` materialization that previously held all row
-            // metadata in memory simultaneously (audit C3).
+            // for the duration of one iteration, so we never hold every row's
+            // metadata in memory simultaneously.
             while let row = iterator.next() {
                 rowIndex += 1
 

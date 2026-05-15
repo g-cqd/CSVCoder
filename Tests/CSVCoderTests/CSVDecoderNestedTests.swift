@@ -143,7 +143,7 @@ struct CSVDecoderNestedTests {
         }
     }
 
-    // MARK: - JSON Byte Limit (audit A5)
+    // MARK: - JSON Byte Limit
 
     @Test("Nested JSON strategy rejects cells exceeding maxBytes")
     func nestedJSONRejectsOversizedCells() throws {

@@ -114,9 +114,8 @@ struct SIMDScanner: Sendable {
     ) -> [StructuralPosition] {
         var positions: [StructuralPosition] = []
         // Empirically ~1 structural per 32 bytes for typical CSV with average
-        // field widths.  `count / 8` over-reserved by 4× on text-heavy data
-        // (audit C4) — the array will grow if needed; cache locality matters
-        // more than avoiding one realloc.
+        // field widths.  The array will grow if needed; cache locality matters
+        // more than avoiding one realloc on text-heavy data.
         positions.reserveCapacity(count / 32)
 
         var offset = 0
@@ -144,8 +143,8 @@ struct SIMDScanner: Sendable {
             // bit-packed `UInt64`, and the alternatives (per-lane bit
             // construction via `unsafeBitCast` over `SIMD64<Int8>` + a series
             // of ANDs) measured no faster than the simple loop on Apple
-            // silicon at audit time.  Keep the loop for portability; revisit
-            // when stdlib gains a stable `bitPattern` accessor.
+            // silicon.  Keep the loop for portability; revisit when stdlib
+            // gains a stable `bitPattern` accessor.
             for i in 0 ..< 64 where structuralMask[i] {
                 positions.append(StructuralPosition(offset: offset + i, byte: buffer[offset + i]))
             }

@@ -57,12 +57,11 @@ let usdConfig = CSVDecoder.Configuration(
 
 ## Integer parsing under flexible strategies
 
-As of the breaking change tracked in audit B2, every integer overload
-(`Int`, `Int8`, ..., `UInt64`) routes through the same strategy as
-floating-point decoding.  `Int(value)` with
-``CSVDecoder/NumberDecodingStrategy/flexible`` now correctly strips
-currency symbols and grouping separators, and rejects fractional values
-(`"1.5"` does not silently become `1`).
+Every integer overload (`Int`, `Int8`, ..., `UInt64`) routes through
+the same strategy as floating-point decoding.  `Int(value)` with
+``CSVDecoder/NumberDecodingStrategy/flexible`` strips currency symbols
+and grouping separators, and rejects fractional values (`"1.5"` does
+not silently become `1`).
 
 ```swift
 struct Row: Codable { let count: Int }
