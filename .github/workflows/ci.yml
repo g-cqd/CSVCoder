@@ -280,12 +280,12 @@ jobs:
       - name: Determine Version
         id: version
         run: |
-          if [[ -f ".version" ]]; then
-            VERSION="$(tr -d '[:space:]' < .version)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
           elif [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
-          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ -f ".version" ]]; then
+            VERSION="$(tr -d '[:space:]' < .version)"
           else
             echo "No version source found"
             exit 1
@@ -295,7 +295,10 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
-          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "Tag-push trigger for ${TAG} - will create release"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          elif git rev-parse "${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists - skipping release"
             echo "should_release=false" >> $GITHUB_OUTPUT
           else
