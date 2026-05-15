@@ -357,21 +357,6 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
                 return try JSONDecoder().decode(T.self, from: data)
             }
 
-        case .codable:
-            // Deprecated alias for `.json` — same DoS-bounded behaviour.
-            if keyExists {
-                let value = try getValue(for: key)
-                try assertJSONSize(value, maxBytes: 1 << 20, key: key)
-                guard let data = value.data(using: .utf8) else {
-                    throw CSVDecodingError.typeMismatch(
-                        expected: "valid UTF-8 JSON",
-                        actual: value,
-                        location: makeLocation(for: key),
-                    )
-                }
-                return try JSONDecoder().decode(T.self, from: data)
-            }
-
         case .error:
             break
         }
@@ -472,27 +457,6 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
             let jsonDecoder = JSONDecoder()
             // Create a wrapper that returns a keyed container from JSON
             let jsonContainer = try jsonDecoder.decode(NestedJSONContainer<NestedKey>.self, from: jsonData)
-            return KeyedDecodingContainer(jsonContainer.container)
-
-        case .codable:
-            // Deprecated alias for `.json` — same DoS-bounded behaviour.
-            guard let fieldValue = stringValue(forKey: key) else {
-                throw CSVDecodingError.keyNotFound(
-                    key.stringValue,
-                    location: makeLocation(for: key, includeAvailableKeys: true),
-                )
-            }
-            try assertJSONSize(fieldValue, maxBytes: 1 << 20, key: key)
-            guard let data = fieldValue.data(using: .utf8) else {
-                throw CSVDecodingError.typeMismatch(
-                    expected: "valid UTF-8 data",
-                    actual: fieldValue,
-                    location: makeLocation(for: key),
-                )
-            }
-            // Try JSON first as the most common Codable format
-            let jsonDecoder = JSONDecoder()
-            let jsonContainer = try jsonDecoder.decode(NestedJSONContainer<NestedKey>.self, from: data)
             return KeyedDecodingContainer(jsonContainer.container)
         }
     }

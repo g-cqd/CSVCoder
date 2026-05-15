@@ -25,7 +25,7 @@ The decoder picks the first rule that applies:
    ``CSVDecoder/Configuration-swift.struct/keyDecodingStrategy`` (and any
    ``CSVDecoder/Configuration-swift.struct/columnMapping`` overrides).
 3. The decoded type conforms to ``CSVRowDecodable`` (typically via
-   ``CSVIndexed()``) — use the type's declared `CodingKeys` order.
+   ``CSVRow()``) — use the type's declared `CodingKeys` order.
 4. Generate `column0`, `column1`, … as last-resort names.
 
 ## Worked examples

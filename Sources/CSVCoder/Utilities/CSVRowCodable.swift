@@ -1,8 +1,8 @@
 //
-//  CSVIndexedCodable.swift
+//  CSVRowCodable.swift
 //  CSVCoder
 //
-//  Protocols and aliases that let a `Codable` type declare its CSV row layout.
+//  Protocols that let a `Codable` type declare its CSV row layout.
 //
 
 import Foundation
@@ -176,20 +176,3 @@ extension CSVDecoder {
         return mapping
     }
 }
-
-// MARK: - Deprecated aliases (one-cycle migration)
-
-@available(*, deprecated, renamed: "_CSVRowMarker")
-public typealias _CSVIndexedMarker = _CSVRowMarker
-
-@available(*, deprecated, renamed: "CSVRowConvertible")
-public typealias CSVIndexedBase = CSVRowConvertible
-
-@available(*, deprecated, renamed: "CSVRowDecodable")
-public typealias CSVIndexedDecodable = CSVRowDecodable
-
-@available(*, deprecated, renamed: "CSVRowEncodable")
-public typealias CSVIndexedEncodable = CSVRowEncodable
-
-@available(*, deprecated, renamed: "CSVRowCodable")
-public typealias CSVIndexedCodable = CSVRowCodable

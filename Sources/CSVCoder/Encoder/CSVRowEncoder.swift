@@ -219,11 +219,6 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             // Encode as JSON string, enforcing the configured byte budget.
             let jsonString = try Self.encodeJSON(value, maxBytes: maxBytes, key: fullKey)
             storage.setValue(jsonString, forKey: fullKey)
-
-        case .codable:
-            // Deprecated alias for `.json` — apply the default 1 MiB bound.
-            let jsonString = try Self.encodeJSON(value, maxBytes: 1 << 20, key: fullKey)
-            storage.setValue(jsonString, forKey: fullKey)
         }
     }
 
@@ -272,12 +267,11 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
             )
             return KeyedEncodingContainer(nestedContainer)
 
-        case .json,
-            .codable:
+        case .json:
             return KeyedEncodingContainer(
                 CSVPoisonKeyedEncodingContainer<NestedKey>(
                     error: CSVEncodingError.unsupportedType(
-                        "JSON/Codable nested encoding requires using encode(_:forKey:) with the nested value directly"
+                        "JSON nested encoding requires using encode(_:forKey:) with the nested value directly"
                     ),
                     codingPath: codingPath + [key],
                 )

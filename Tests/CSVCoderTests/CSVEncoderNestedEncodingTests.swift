@@ -66,28 +66,6 @@ struct CSVEncoderNestedEncodingTests {
         #expect(csv.contains("street"))
     }
 
-    @Test("Nested encoding with deprecated codable strategy is functional alias for json")
-    @available(*, deprecated, message: "Exercises the deprecated .codable case to verify the alias still works.")
-    func nestedEncodingCodable() throws {
-        // .codable is deprecated as a renamed alias for .json — this test
-        // exists only to confirm the alias still encodes successfully.
-        let records = [
-            PersonWithAddress(
-                name: "Carol",
-                age: 35,
-                address: Address(street: "789 Pine Rd", city: "Capital City", zipCode: "11111"),
-            )
-        ]
-
-        let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .codable)
-        let encoder = CSVEncoder(configuration: config)
-        let csv = try encoder.encodeToString(records)
-
-        #expect(csv.contains("Carol"))
-        #expect(csv.contains("35"))
-        #expect(csv.contains("city") || csv.contains("Capital City"))
-    }
-
     @Test("Nested encoding roundtrip with flatten strategy")
     func nestedEncodingRoundtripFlatten() throws {
         let original = [

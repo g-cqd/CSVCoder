@@ -151,10 +151,6 @@ nonisolated public final class CSVEncoder: Sendable {
         /// Encode nested types as JSON strings, rejecting outputs larger than ``maxBytes``.
         /// The default 1 MiB cap bounds the cost of `JSONEncoder` per cell.
         case json(maxBytes: Int = 1 << 20)
-        /// Deprecated alias for ``json``.  Functionally identical; kept for
-        /// source compatibility and will be removed in a future release.
-        @available(*, deprecated, renamed: "json")
-        case codable
     }
 
     /// Strategies for encoding dates.

@@ -17,10 +17,6 @@ import Testing
     struct CSVRowMacroTests {
         let testMacros: [String: Macro.Type] = [
             "CSVRow": CSVRowMacro.self,
-            // The deprecated `@CSVIndexed` spelling maps to the same
-            // implementation as `@CSVRow` so existing source keeps compiling
-            // through the rename cycle. Tested explicitly below.
-            "CSVIndexed": CSVRowMacro.self,
             "CSVColumn": CSVColumnMacro.self,
         ]
 
@@ -65,41 +61,6 @@ import Testing
                             self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
                             self.age = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[1], configuration: configuration, key: "age", rowIndex: rowIndex)
                         }
-                    }
-                    """,
-                macros: testMacros,
-            )
-        }
-
-        // MARK: - Backward Compatibility
-
-        @Test("Deprecated @CSVIndexed expands identically to @CSVRow")
-        func deprecatedCSVIndexedStillExpands() {
-            assertMacroExpansion(
-                """
-                @CSVIndexed
-                struct LegacyRecord: Codable {
-                    let id: Int
-                    let label: String
-                }
-                """,
-                expandedSource: """
-                    struct LegacyRecord: Codable {
-                        let id: Int
-                        let label: String
-
-                        enum CodingKeys: String, CodingKey, CaseIterable {
-                            case id
-                            case label
-                        }
-
-                        typealias CSVCodingKeys = CodingKeys
-                    }
-
-                    extension LegacyRecord: CSVRowDecodable {
-                    }
-
-                    extension LegacyRecord: CSVRowEncodable {
                     }
                     """,
                 macros: testMacros,

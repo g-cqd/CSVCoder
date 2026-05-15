@@ -125,25 +125,6 @@ struct CSVDecoderNestedTests {
         #expect(records[0].address.city == "Capital City")
     }
 
-    // MARK: - Codable Strategy Tests
-
-    @Test("Nested decoding with deprecated codable strategy is functional alias for json")
-    @available(*, deprecated, message: "Exercises the deprecated .codable case to verify the alias still works.")
-    func nestedDecodingCodable() throws {
-        // .codable is deprecated as a renamed alias for .json — this test
-        // exists only to confirm the alias still decodes successfully.
-        let json = #"{"street":"321 Elm St","city":"Townsville","zipCode":"22222"}"#
-        let csv = "name,age,address\nDave,40,\"\(json.replacingOccurrences(of: "\"", with: "\"\""))\""
-
-        let config = CSVDecoder.Configuration(nestedTypeDecodingStrategy: .codable)
-        let decoder = CSVDecoder(configuration: config)
-        let records = try decoder.decode([PersonWithAddress].self, from: csv)
-
-        #expect(records.count == 1)
-        #expect(records[0].name == "Dave")
-        #expect(records[0].address.street == "321 Elm St")
-    }
-
     // MARK: - Error Strategy Tests
 
     @Test("Nested decoding error strategy throws for nested types")

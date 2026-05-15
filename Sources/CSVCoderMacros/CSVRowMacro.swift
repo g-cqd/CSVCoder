@@ -32,9 +32,9 @@ private struct DuplicateColumnDiagnostic: DiagnosticMessage {
 }
 
 /// Diagnostic message emitted when `@CSVColumn` is applied to a property
-/// whose parent struct lacks `@CSVRow` (or the deprecated `@CSVIndexed`).
-/// Without the row-level macro to read it, the column rename silently has
-/// no effect — surface that as a warning at expansion time.
+/// whose parent struct lacks `@CSVRow`. Without the row-level macro to
+/// read it, the column rename silently has no effect — surface that as a
+/// warning at expansion time.
 private struct OrphanCSVColumnDiagnostic: DiagnosticMessage {
     var message: String {
         "@CSVColumn has no effect without @CSVRow on the containing struct"
@@ -90,11 +90,6 @@ public enum CSVRowMacroError: Error, CustomStringConvertible {
     }
 }
 
-/// Deprecated alias retained for one release cycle so external code that
-/// caught `CSVIndexedMacroError` still compiles.
-@available(*, deprecated, renamed: "CSVRowMacroError")
-public typealias CSVIndexedMacroError = CSVRowMacroError
-
 // MARK: - Property metadata
 
 /// Per-property metadata collected from the struct's stored declarations
@@ -116,10 +111,8 @@ private typealias Property = (
 /// It creates:
 /// - `CodingKeys` enum with `CaseIterable` conformance (if not already present)
 /// - `typealias CSVCodingKeys = CodingKeys`
-/// - Extensions conforming to `CSVRowDecodable` and `CSVRowEncodable`
-///
-/// The legacy `@CSVIndexed` macro routes to the same implementation; the two
-/// expand identically.
+/// - Extensions conforming to `CSVRowDecodable` and `CSVRowEncodable`,
+///   plus `CSVDirectDecodable` when every field has a supported direct type
 public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     // MARK: Public
 
@@ -576,11 +569,6 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     }
 }
 
-/// Deprecated alias retained for source compatibility with consumers that
-/// referenced `CSVIndexedMacro` directly.  Routes to ``CSVRowMacro``.
-@available(*, deprecated, renamed: "CSVRowMacro")
-public typealias CSVIndexedMacro = CSVRowMacro
-
 // MARK: - CSVColumnMacro
 
 /// The `@CSVColumn` macro marks a property with a custom CSV column name.
@@ -588,9 +576,8 @@ public typealias CSVIndexedMacro = CSVRowMacro
 /// ``CSVRowMacro`` to customize `CodingKeys`.
 ///
 /// When applied to a property whose parent struct is not annotated with
-/// `@CSVRow` (or the deprecated `@CSVIndexed`), the rename is silently
-/// dropped. Emit a warning so the mistake surfaces during macro expansion
-/// rather than at runtime.
+/// `@CSVRow`, the rename is silently dropped. Emit a warning so the
+/// mistake surfaces during macro expansion rather than at runtime.
 public struct CSVColumnMacro: PeerMacro {
     public static func expansion(
         of attribute: AttributeSyntax,
@@ -605,9 +592,7 @@ public struct CSVColumnMacro: PeerMacro {
                     guard case .attribute(let attr) = element,
                         let identifier = attr.attributeName.as(IdentifierTypeSyntax.self)
                     else { return false }
-                    let name = identifier.name.text
-                    // Accept both the new `@CSVRow` and the legacy `@CSVIndexed`.
-                    return name == "CSVRow" || name == "CSVIndexed"
+                    return identifier.name.text == "CSVRow"
                 }
                 if !hasRowMacro {
                     context.diagnose(

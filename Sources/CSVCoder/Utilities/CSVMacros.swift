@@ -84,21 +84,6 @@
 )
 public macro CSVRow() = #externalMacro(module: "CSVCoderMacros", type: "CSVRowMacro")
 
-/// Deprecated alias for ``CSVRow()``.
-///
-/// Kept for one release to soften the rename. Migrate to ``CSVRow()``;
-/// `@CSVIndexed` will be removed in a future minor version.
-@available(*, deprecated, renamed: "CSVRow", message: "Use @CSVRow")
-@attached(member, names: named(CodingKeys), named(CSVCodingKeys))
-@attached(
-    extension,
-    conformances: CSVRowDecodable,
-    CSVRowEncodable,
-    CSVDirectDecodable,
-    names: named(init(csvRow:columnIndices:configuration:rowIndex:))
-)
-public macro CSVIndexed() = #externalMacro(module: "CSVCoderMacros", type: "CSVRowMacro")
-
 /// Specifies a custom CSV column name for a property.
 ///
 /// Use this macro with ``CSVRow()`` to map a property to a different column

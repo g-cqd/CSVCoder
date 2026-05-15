@@ -326,7 +326,7 @@ struct CSVDecoderKeyMappingTests {
     }
 
     @Test("CSVRowDecodable with headers still works")
-    func csvIndexedDecodableWithHeaders() throws {
+    func csvRowDecodableWithHeaders() throws {
         let csv = """
             name,age,score
             Alice,30,95.5
@@ -340,13 +340,13 @@ struct CSVDecoderKeyMappingTests {
     }
 
     @Test("CSVRowDecodable column order is correct")
-    func csvIndexedDecodableColumnOrder() {
+    func csvRowDecodableColumnOrder() {
         let order = IndexedRecord.csvColumnOrder
         #expect(order == ["name", "age", "score"])
     }
 
     @Test("Explicit indexMapping overrides CSVRowDecodable")
-    func explicitIndexMappingOverridesCSVIndexed() throws {
+    func explicitIndexMappingOverridesCSVRow() throws {
         let csv = """
             95.5,30,Alice
             """
@@ -366,7 +366,7 @@ struct CSVDecoderKeyMappingTests {
     }
 
     @Test("CSVRowDecodable respects CodingKeys case order")
-    func csvIndexedDecodableRespectsOrder() throws {
+    func csvRowDecodableRespectsOrder() throws {
         // CSV columns match CodingKeys order: third, first, second
         let csv = """
             99.9,hello,42
