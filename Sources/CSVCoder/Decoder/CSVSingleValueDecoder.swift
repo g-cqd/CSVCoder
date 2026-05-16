@@ -160,6 +160,11 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
     /// the trimmed field as `Int64`, then narrows via `T(exactly:)`. The
     /// type name in the diagnostic comes from `T` itself so adding a new
     /// integer width never drifts from the error message.
+    ///
+    /// `@inline(__always)` is required: without it the bench measured a
+    /// +5% regression on numeric-heavy decode paths because the generic
+    /// helper wasn't fully specialised through all nine call sites.
+    @inline(__always)
     private func decodeFixedWidthInteger<T: FixedWidthInteger>(_ type: T.Type) throws -> T {
         guard let raw = CSVValueParser.parseInt64(trimmedValue, strategy: configuration.numberDecodingStrategy),
             let result = T(exactly: raw)

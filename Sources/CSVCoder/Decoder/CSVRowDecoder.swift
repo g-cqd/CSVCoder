@@ -486,6 +486,11 @@ struct CSVKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol
     /// the field as `Int64`, then narrows via `T(exactly:)`. The type name
     /// in the diagnostic comes from `T` itself so adding a new integer
     /// width never drifts from the error message.
+    ///
+    /// `@inline(__always)` is required: without it the bench measured a
+    /// +5% regression on numeric-heavy decode paths because the generic
+    /// helper wasn't fully specialised through all nine call sites.
+    @inline(__always)
     private func decodeFixedWidthInteger<T: FixedWidthInteger>(
         _ type: T.Type,
         forKey key: Key
