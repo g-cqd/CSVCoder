@@ -157,9 +157,9 @@ struct CSVDecoderKeyMappingTests {
         let config = CSVDecoder.Configuration(
             keyDecodingStrategy: .custom { key in
                 switch key {
-                case "fn": "firstName"
-                case "ln": "lastName"
-                default: key + "Address"
+                    case "fn": "firstName"
+                    case "ln": "lastName"
+                    default: key + "Address"
                 }
             },
         )

@@ -108,31 +108,31 @@ enum CSVUtilities {
     @inline(__always)
     static func isASCIICompatible(_ encoding: String.Encoding) -> Bool {
         switch encoding {
-        case .ascii,
-            .isoLatin1,
-            .isoLatin2,
-            .macOSRoman,
-            .nextstep,
-            .utf8,
-            .windowsCP1250,
-            .windowsCP1251,
-            .windowsCP1252,
-            .windowsCP1253,
-            .windowsCP1254:
-            true
+            case .ascii,
+                .isoLatin1,
+                .isoLatin2,
+                .macOSRoman,
+                .nextstep,
+                .utf8,
+                .windowsCP1250,
+                .windowsCP1251,
+                .windowsCP1252,
+                .windowsCP1253,
+                .windowsCP1254:
+                true
 
-        case .unicode,
-            .utf16,
-            .utf16BigEndian,
-            .utf16LittleEndian,
-            .utf32,
-            .utf32BigEndian,
-            .utf32LittleEndian:
-            false
+            case .unicode,
+                .utf16,
+                .utf16BigEndian,
+                .utf16LittleEndian,
+                .utf32,
+                .utf32BigEndian,
+                .utf32LittleEndian:
+                false
 
-        default:
-            // For unknown encodings, assume not ASCII-compatible for safety
-            false
+            default:
+                // For unknown encodings, assume not ASCII-compatible for safety
+                false
         }
     }
 
@@ -180,11 +180,13 @@ enum CSVUtilities {
 // MARK: - CSVUnescaper
 
 /// Zero-allocation field unescaper for quoted CSV fields.
+///
 /// Converts `""` sequences to single `"` without intermediate string allocations.
 enum CSVUnescaper: Sendable {
     // MARK: Internal
 
     /// Checks if a buffer contains escaped quotes (`""`).
+    ///
     /// Uses SWAR for medium-sized buffers, SIMD for large ones.
     ///
     /// - Parameters:
@@ -209,7 +211,7 @@ enum CSVUnescaper: Sendable {
             // Consecutive quotes exist if we have a quote followed by a quote
             if quoteMask1 != 0, quoteMask2 != 0 {
                 // Check byte-by-byte in this region
-                for i in 0 ..< 8 {
+                for i in 0..<8 {
                     if buffer[offset + i] == quote, buffer[offset + i + 1] == quote {
                         return true
                     }
@@ -230,6 +232,7 @@ enum CSVUnescaper: Sendable {
     }
 
     /// Unescapes a quoted CSV field, converting `""` to `"`.
+    ///
     /// Returns the string directly if no escaping is needed (fast path).
     ///
     /// - Parameter buffer: Buffer containing the field content (without outer quotes).
@@ -306,11 +309,13 @@ enum CSVUnescaper: Sendable {
 // MARK: - CSVFieldEscaper
 
 /// RFC 4180 compliant field escaper.
+///
 /// Handles quoting of fields containing delimiters, quotes, or newlines.
 enum CSVFieldEscaper: Sendable {
     // MARK: Internal
 
     /// Checks if a field needs quoting per RFC 4180 using raw pointer.
+    ///
     /// Uses SWAR for medium-sized fields, SIMD for large ones.
     ///
     /// - Parameters:
@@ -342,6 +347,7 @@ enum CSVFieldEscaper: Sendable {
     }
 
     /// Appends an escaped field to a byte buffer.
+    ///
     /// Quotes the field if it contains delimiters, quotes, or newlines.
     /// Uses contiguous UTF-8 storage for efficient access.
     ///
@@ -362,7 +368,7 @@ enum CSVFieldEscaper: Sendable {
 
             if needsQuotes {
                 buffer.append(quote)
-                for i in 0 ..< count {
+                for i in 0..<count {
                     let byte = baseAddress[i]
                     if byte == quote {
                         buffer.append(quote)  // Escape quote by doubling
@@ -396,6 +402,7 @@ enum CSVFieldEscaper: Sendable {
     }
 
     /// Escapes a field value for CSV output per RFC 4180.
+    ///
     /// Returns a quoted string if the value contains special characters.
     /// - Parameters:
     ///   - value: The string value to escape.
@@ -426,6 +433,7 @@ enum CSVFieldEscaper: Sendable {
 // MARK: - CSVRowBuilder
 
 /// A builder for constructing CSV rows directly into byte buffers.
+///
 /// Avoids intermediate String allocations for better performance.
 struct CSVRowBuilder: Sendable {
     // MARK: Lifecycle

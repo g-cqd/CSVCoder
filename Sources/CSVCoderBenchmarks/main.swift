@@ -17,7 +17,8 @@ struct SimpleRecord: Codable, Sendable {
 
 // MARK: - SimpleRecordDirect (opt-in fast path)
 
-/// Same shape as `SimpleRecord` but annotated with `@CSVRow`, which
+/// Same shape as `SimpleRecord` but annotated with `@CSVRow`, which.
+///
 /// makes the decoder dispatch through the ``CSVDirectDecodable`` fast
 /// path. Used by the `Decode 1M rows (fast path)` benchmark to quantify
 /// the speedup over the standard `Codable` path.
@@ -102,7 +103,7 @@ struct FlexibleNumberRecord: Codable, Sendable {
 
 nonisolated func generateSimpleCSV(rows: Int) -> String {
     var csv = "name,age,score\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         csv += "Person\(i),\(20 + i % 50),\(Double(i) * 0.1)\n"
     }
     return csv
@@ -110,7 +111,7 @@ nonisolated func generateSimpleCSV(rows: Int) -> String {
 
 nonisolated func generateComplexCSV(rows: Int) -> String {
     var csv = "id,firstName,lastName,email,age,salary,isActive,notes\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         csv +=
             "\(i),John,Doe\(i),john\(i)@example.com,\(25 + i % 40),\(50000.0 + Double(i) * 100),\(i % 2 == 0),\"Some notes here with text\"\n"
     }
@@ -119,16 +120,16 @@ nonisolated func generateComplexCSV(rows: Int) -> String {
 
 nonisolated func generateQuotedCSV(rows: Int) -> String {
     var csv = "name,description,value\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         csv += "\"Item \(i)\",\"A description with, commas and \"\"quotes\"\"\",\(i * 10)\n"
     }
     return csv
 }
 
 nonisolated func generateWideCSV(rows: Int, columns: Int) -> String {
-    var csv = (0 ..< columns).map { "col\($0)" }.joined(separator: ",") + "\n"
-    for i in 0 ..< rows {
-        csv += (0 ..< columns).map { _ in "value\(i)" }.joined(separator: ",") + "\n"
+    var csv = (0..<columns).map { "col\($0)" }.joined(separator: ",") + "\n"
+    for i in 0..<rows {
+        csv += (0..<columns).map { _ in "value\(i)" }.joined(separator: ",") + "\n"
     }
     return csv
 }
@@ -136,7 +137,7 @@ nonisolated func generateWideCSV(rows: Int, columns: Int) -> String {
 nonisolated func generateLongFieldCSV(rows: Int, fieldLength: Int) -> String {
     let longValue = String(repeating: "x", count: fieldLength)
     var csv = "id,data\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         csv += "\(i),\(longValue)\n"
     }
     return csv
@@ -144,7 +145,7 @@ nonisolated func generateLongFieldCSV(rows: Int, fieldLength: Int) -> String {
 
 nonisolated func generateNumericCSV(rows: Int) -> String {
     var csv = "intVal,doubleVal,floatVal\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         csv += "\(i),\(Double(i) * 1.5),\(Float(i) * 0.5)\n"
     }
     return csv
@@ -155,7 +156,7 @@ nonisolated func generateOrderCSV(rows: Int) -> String {
         "orderId,customerId,customerName,email,productId,productName,quantity,unitPrice,discount,taxRate,shippingCost,totalAmount,currency,paymentMethod,orderDate,shipDate,status,notes\n"
     let statuses = ["pending", "processing", "shipped", "delivered", "cancelled"]
     let payments = ["credit_card", "paypal", "bank_transfer", "crypto"]
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         let hasDiscount = i % 3 == 0
         let hasNotes = i % 5 == 0
         let hasShipDate = i % 2 == 0
@@ -189,7 +190,7 @@ nonisolated func generateTransactionCSV(rows: Int) -> String {
         "transactionId,accountFrom,accountTo,amount,currency,exchangeRate,fee,timestamp,category,description,reference,status,processedBy\n"
     let categories = ["transfer", "payment", "refund", "withdrawal", "deposit"]
     let currencies = ["USD", "EUR", "GBP", "JPY", "CHF"]
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         let hasExchange = i % 4 == 0
         let hasRef = i % 3 == 0
         let hasProcessor = i % 2 == 0
@@ -220,7 +221,7 @@ nonisolated func generateLogCSV(rows: Int) -> String {
     let levels = ["DEBUG", "INFO", "WARN", "ERROR"]
     let services = ["api-gateway", "auth-service", "user-service", "order-service", "payment-service"]
     let actions = ["GET", "POST", "PUT", "DELETE", "PATCH"]
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         let hasRequestId = i % 2 == 0
         let hasUserId = i % 3 == 0
         let hasDuration = i % 2 == 0
@@ -252,7 +253,7 @@ nonisolated func generateLogCSV(rows: Int) -> String {
 // Stress test: deeply quoted and escaped content
 nonisolated func generateStressQuotedCSV(rows: Int) -> String {
     var csv = "id,content\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         // Create content with multiple levels of quotes, commas, and newlines
         let content = "\"Field with \"\"nested quotes\"\", commas, and\nnewlines at row \(i)\""
         csv += "\(i),\(content)\n"
@@ -273,7 +274,7 @@ nonisolated func generateUnicodeCSV(rows: Int) -> String {
         "Ñoño español",
     ]
     var csv = "id,text,category\n"
-    for i in 0 ..< rows {
+    for i in 0..<rows {
         csv += "\(i),\"\(unicodeStrings[i % unicodeStrings.count]) - item \(i)\",cat\(i % 10)\n"
     }
     return csv
@@ -346,10 +347,10 @@ let veryWide200Col1K = generateWideCSV(rows: 1000, columns: 200)
 let veryWide200Col1KData = Data(veryWide200Col1K.utf8)
 
 // Pre-generated records for encoding benchmarks
-let simpleRecords1K = (0 ..< 1000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-let simpleRecords10K = (0 ..< 10000)
+let simpleRecords1K = (0..<1000).map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
+let simpleRecords10K = (0..<10000)
     .map { SimpleRecord(name: "Person\($0)", age: 20 + $0 % 50, score: Double($0) * 0.1) }
-let simpleRecords100K = (0 ..< 100_000).map {
+let simpleRecords100K = (0..<100_000).map {
     SimpleRecord(
         name: "Person\($0)",
         age: 20 + $0 % 50,
@@ -357,7 +358,7 @@ let simpleRecords100K = (0 ..< 100_000).map {
     )
 }
 
-let simpleRecords1M = (0 ..< 1_000_000).map {
+let simpleRecords1M = (0..<1_000_000).map {
     SimpleRecord(
         name: "Person\($0)",
         age: 20 + $0 % 50,
@@ -365,11 +366,11 @@ let simpleRecords1M = (0 ..< 1_000_000).map {
     )
 }
 
-let quotedRecords10K = (0 ..< 10000).map { i in
+let quotedRecords10K = (0..<10000).map { i in
     QuotedRecord(name: "Item \(i)", description: "A \"description\" with, commas", value: i * 10)
 }
 
-let longFieldRecords10K = (0 ..< 10000).map { LongFieldRecord(id: $0, data: String(repeating: "x", count: 500)) }
+let longFieldRecords10K = (0..<10000).map { LongFieldRecord(id: $0, data: String(repeating: "x", count: 500)) }
 
 let orderPaymentMethods = ["credit_card", "paypal", "bank_transfer", "crypto"]
 let orderStatuses = ["pending", "processing", "shipped", "delivered", "cancelled"]
@@ -400,12 +401,12 @@ func makeOrderRecord(_ i: Int) -> Order {
     )
 }
 
-let orderRecords50K: [Order] = (0 ..< 50_000).map(makeOrderRecord)
+let orderRecords50K: [Order] = (0..<50_000).map(makeOrderRecord)
 
 // Strategy test datasets
 let snakeCaseCSV1K: String = {
     var csv = "first_name,last_name,email_address\n"
-    for i in 0 ..< 1000 {
+    for i in 0..<1000 {
         csv += "John\(i),Doe\(i),john\(i)@example.com\n"
     }
     return csv
@@ -416,7 +417,7 @@ let snakeCaseCSV1KData = Data(snakeCaseCSV1K.utf8)
 let flexibleDateCSV1K: String = {
     var csv = "id,date\n"
     let formats = ["2024-01-15", "15/01/2024", "01-15-2024", "2024-01-15T10:30:00Z"]
-    for i in 0 ..< 1000 {
+    for i in 0..<1000 {
         csv += "\(i),\(formats[i % formats.count])\n"
     }
     return csv
@@ -427,7 +428,7 @@ let flexibleDateCSV1KData = Data(flexibleDateCSV1K.utf8)
 let flexibleNumberCSV1K: String = {
     var csv = "id,value\n"
     let formats = ["1,234.56", "1.234,56", "$1,234.56", "€1.234,56"]
-    for i in 0 ..< 1000 {
+    for i in 0..<1000 {
         csv += "\(i),\"\(formats[i % formats.count])\"\n"
     }
     return csv

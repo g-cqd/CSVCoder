@@ -361,7 +361,7 @@ struct CSVDecoderBasicTests {
     func asciiCompatibleEncodingPerformance() throws {
         // Large CSV to ensure we're testing actual parsing
         var csv = "name,value\n"
-        for i in 0 ..< 1000 {
+        for i in 0..<1000 {
             csv += "Item\(i),Value\(i)\n"
         }
 

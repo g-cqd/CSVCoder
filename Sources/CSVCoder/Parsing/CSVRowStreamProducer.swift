@@ -10,7 +10,8 @@
 
 import Foundation
 
-/// Produces CSV rows on demand from already-mapped data using the shared
+/// Produces CSV rows on demand from already-mapped data using the shared.
+///
 /// ``CSVParser`` engine.  Each call to ``nextRow()`` re-enters
 /// `Data.withUnsafeBytes`, resumes the parser from the last persisted offset,
 /// materialises a row to `[String]`, and exits the closure — keeping the
@@ -53,7 +54,8 @@ struct CSVRowStreamProducer: Sendable {
 
     // MARK: Internal
 
-    /// Returns the next CSV row as a fully materialised `[String]`, or `nil`
+    /// Returns the next CSV row as a fully materialised `[String]`, or `nil`.
+    ///
     /// at end of input.  Throws `CSVDecodingError.parsingError` if strict
     /// mode (or unterminated-quote enforcement) is violated.
     mutating func nextRow() throws -> [String]? {
@@ -113,7 +115,7 @@ struct CSVRowStreamProducer: Sendable {
 
             var fields: [String] = []
             fields.reserveCapacity(view.count)
-            for i in 0 ..< view.count {
+            for i in 0..<view.count {
                 let raw = try materialiseField(view: view, index: i, isStrict: isStrict)
                 fields.append(configuration.trimWhitespace ? raw.trimmingCharacters(in: .whitespaces) : raw)
             }
@@ -130,7 +132,8 @@ struct CSVRowStreamProducer: Sendable {
     private var offset: Int = -1  // -1 sentinel: BOM-skip pending
     private var rowIndex: Int = 0
 
-    /// Materialises a single field from the row view, enforcing strict-mode
+    /// Materialises a single field from the row view, enforcing strict-mode.
+    ///
     /// invalid-UTF-8 rejection.  Lenient mode keeps `String(decoding:as:)`
     /// behaviour, which substitutes U+FFFD for invalid bytes.
     private func materialiseField(view: CSVRowView, index: Int, isStrict: Bool) throws -> String {

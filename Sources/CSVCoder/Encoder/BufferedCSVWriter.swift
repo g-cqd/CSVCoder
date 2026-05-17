@@ -11,6 +11,7 @@ import Foundation
 // MARK: - BufferedCSVWriter
 
 /// A buffered writer for efficient CSV file output.
+///
 /// Accumulates bytes in a buffer and writes in optimal-sized chunks.
 struct BufferedCSVWriter: ~Copyable {
     // MARK: Lifecycle
@@ -29,6 +30,7 @@ struct BufferedCSVWriter: ~Copyable {
     // MARK: Internal
 
     /// Writes bytes to the buffer, flushing if necessary.
+    ///
     /// Optimized for contiguous collections using batch append.
     mutating func write(_ bytes: some Sequence<UInt8>) throws {
         // Fast path for contiguous collections
@@ -125,6 +127,7 @@ struct BufferedCSVWriter: ~Copyable {
 
 extension SIMDScanner {
     /// Checks if a field needs quoting using SIMD acceleration.
+    ///
     /// Uses bitmask extraction for O(1) detection instead of O(64) loop.
     @inline(__always)
     static func needsQuoting(
@@ -154,7 +157,7 @@ extension SIMDScanner {
 
             // Combine masks and check if any match found
             let combinedMask = quoteMask .| delimMask .| lfMask .| crMask
-            for i in 0 ..< 64 where combinedMask[i] {
+            for i in 0..<64 where combinedMask[i] {
                 return true
             }
 

@@ -30,16 +30,22 @@ extension CSVDecoder {
 
         // MARK: Public
 
-        /// Number of concurrent decoding tasks. Default uses all available processors.
+        /// Number of concurrent decoding tasks.
+        ///
+        /// Default uses all available processors.
         public var parallelism: Int
 
-        /// Target chunk size in bytes. Actual chunks may be larger to align with row boundaries.
+        /// Target chunk size in bytes.
+        ///
+        /// Actual chunks may be larger to align with row boundaries.
         public var chunkSize: Int
 
         /// Maximum number of rows to buffer before applying backpressure.
         public var maxBufferedRows: Int
 
-        /// Whether to preserve original row order. Disabling may improve performance.
+        /// Whether to preserve original row order.
+        ///
+        /// Disabling may improve performance.
         public var preserveOrder: Bool
     }
 }
@@ -58,6 +64,7 @@ extension CSVDecoder {
     ///   - url: The file URL to read CSV data from.
     ///   - parallelConfig: Configuration for parallel processing.
     /// - Returns: An array of all decoded values in original order.
+    /// - Throws: An error if encoding or decoding fails.
     public func decodeParallel<T: Decodable & Sendable>(
         _ type: [T].Type,
         from url: URL,
@@ -100,7 +107,9 @@ extension CSVDecoder {
 
     // MARK: - Phase 1: Sequential Parse
 
-    /// Parses CSV data into string rows. Runs sequentially since parsing
+    /// Parses CSV data into string rows.
+    ///
+    /// Runs sequentially since parsing
     /// is memory-bound and already SIMD-accelerated.
     private func parseToStringRows(
         data: Data,
@@ -141,7 +150,7 @@ extension CSVDecoder {
                     // Extract headers
                     var rawHeaders: [String] = []
                     rawHeaders.reserveCapacity(rowView.count)
-                    for i in 0 ..< rowView.count {
+                    for i in 0..<rowView.count {
                         if let s = rowView.string(at: i) {
                             rawHeaders.append(
                                 configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s
@@ -180,7 +189,7 @@ extension CSVDecoder {
     private func extractStringRow(from rowView: CSVRowView, fieldCount: Int) -> [String] {
         var row: [String] = []
         row.reserveCapacity(fieldCount)
-        for i in 0 ..< rowView.count {
+        for i in 0..<rowView.count {
             if let s = rowView.string(at: i) {
                 row.append(configuration.trimWhitespace ? s.trimmingCharacters(in: .whitespaces) : s)
             } else {
@@ -225,10 +234,10 @@ extension CSVDecoder {
             var collected: [ChunkResult] = []
             collected.reserveCapacity(chunkCount)
 
-            for chunkIndex in 0 ..< chunkCount {
+            for chunkIndex in 0..<chunkCount {
                 let start = chunkIndex * chunkSize
                 let end = min(start + chunkSize, rows.count)
-                let slice = rows[start ..< end]
+                let slice = rows[start..<end]
 
                 group.addTask {
                     var decoded: [T] = []
@@ -286,6 +295,7 @@ extension CSVDecoder {
 
 extension CSVDecoder {
     /// Decodes CSV data in parallel, yielding batches of decoded values.
+    ///
     /// Provides backpressure through AsyncThrowingStream buffering.
     ///
     /// - Parameters:
@@ -317,10 +327,10 @@ extension CSVDecoder {
                         var pendingResults: [Int: [T]] = [:]
                         var nextExpectedIndex = 0
 
-                        for chunkIndex in 0 ..< chunkCount {
+                        for chunkIndex in 0..<chunkCount {
                             let start = chunkIndex * chunkSize
                             let end = min(start + chunkSize, rows.count)
-                            let slice = Array(rows[start ..< end])
+                            let slice = Array(rows[start..<end])
 
                             group.addTask {
                                 var decoded: [T] = []

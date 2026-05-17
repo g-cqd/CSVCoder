@@ -24,24 +24,24 @@ enum CSVValueFormatter {
     /// - Throws: `CSVEncodingError` if the strategy is unsupported.
     static func formatDate(_ date: Date, strategy: CSVEncoder.DateEncodingStrategy) throws -> String {
         switch strategy {
-        case .deferredToDate:
-            throw CSVEncodingError.unsupportedType("deferredToDate requires a date encoding strategy")
+            case .deferredToDate:
+                throw CSVEncodingError.unsupportedType("deferredToDate requires a date encoding strategy")
 
-        case .secondsSince1970:
-            return String(date.timeIntervalSince1970)
+            case .secondsSince1970:
+                return String(date.timeIntervalSince1970)
 
-        case .millisecondsSince1970:
-            return String(date.timeIntervalSince1970 * 1000)
+            case .millisecondsSince1970:
+                return String(date.timeIntervalSince1970 * 1000)
 
-        case .iso8601:
-            return date.formatted(.iso8601)
+            case .iso8601:
+                return date.formatted(.iso8601)
 
-        case .formatted(let format):
-            let formatter = makeDateFormatter(format: format)
-            return formatter.string(from: date)
+            case .formatted(let format):
+                let formatter = makeDateFormatter(format: format)
+                return formatter.string(from: date)
 
-        case .custom(let closure):
-            return try closure(date)
+            case .custom(let closure):
+                return try closure(date)
         }
     }
 
@@ -56,21 +56,21 @@ enum CSVValueFormatter {
     /// - Throws: `CSVEncodingError` if custom transform fails.
     static func formatNumber(_ value: Double, strategy: CSVEncoder.NumberEncodingStrategy) throws -> String {
         switch strategy {
-        case .standard:
-            return String(value)
+            case .standard:
+                return String(value)
 
-        case .locale(let locale):
-            // `FloatingPointFormatStyle` is `Sendable` and value-typed, so no
-            // cross-thread cache is needed — Foundation's internal ICU cache
-            // amortises pattern parsing per locale.
-            return value.formatted(
-                .number
-                    .locale(locale)
-                    .precision(.fractionLength(0 ... 15))
-            )
+            case .locale(let locale):
+                // `FloatingPointFormatStyle` is `Sendable` and value-typed, so no
+                // cross-thread cache is needed — Foundation's internal ICU cache
+                // amortises pattern parsing per locale.
+                return value.formatted(
+                    .number
+                        .locale(locale)
+                        .precision(.fractionLength(0...15))
+                )
 
-        case .custom(let transform):
-            return try transform(value)
+            case .custom(let transform):
+                return try transform(value)
         }
     }
 
@@ -84,17 +84,17 @@ enum CSVValueFormatter {
     /// - Returns: The formatted boolean string.
     static func formatBool(_ value: Bool, strategy: CSVEncoder.BoolEncodingStrategy) -> String {
         switch strategy {
-        case .trueFalse:
-            return value ? "true" : "false"
+            case .trueFalse:
+                return value ? "true" : "false"
 
-        case .numeric:
-            return value ? "1" : "0"
+            case .numeric:
+                return value ? "1" : "0"
 
-        case .yesNo:
-            return value ? "yes" : "no"
+            case .yesNo:
+                return value ? "yes" : "no"
 
-        case .custom(let trueValue, let falseValue):
-            return value ? trueValue : falseValue
+            case .custom(let trueValue, let falseValue):
+                return value ? trueValue : falseValue
         }
     }
 
@@ -137,7 +137,8 @@ enum FormatterCache {
         return (template.copy() as? DateFormatter) ?? template
     }
 
-    /// DateFormatter pinned to `Locale.autoupdatingCurrent` / `TimeZone.autoupdatingCurrent`,
+    /// DateFormatter pinned to `Locale.autoupdatingCurrent` / `TimeZone.autoupdatingCurrent`,.
+    ///
     /// for the decoder's `.formatted(_:)` strategy which is expected to honour the user's
     /// locale. Cached separately from the POSIX variant.
     static func userLocaleDateFormatter(for format: String) -> DateFormatter {
@@ -154,5 +155,4 @@ enum FormatterCache {
         }
         return (template.copy() as? DateFormatter) ?? template
     }
-
 }

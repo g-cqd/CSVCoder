@@ -21,7 +21,7 @@ struct CSVDecoderCancellationTests {
     // The caller is responsible for cleanup via defer.
     private func makeCSVFile(rowCount: Int) throws -> URL {
         var lines = ["name,age"]
-        for i in 0 ..< rowCount {
+        for i in 0..<rowCount {
             lines.append("Person\(i),\(i)")
         }
         let csv = lines.joined(separator: "\n")
@@ -36,7 +36,7 @@ struct CSVDecoderCancellationTests {
     @Test("Cancelling a streaming decode task mid-stream completes without hanging")
     func cancelStreamingDecodeMidStream() async throws {
         // Build a large enough dataset so the stream is still producing when we cancel.
-        let csv = (["name,age"] + (0 ..< 500).map { "Person\($0),\($0)" }).joined(separator: "\n")
+        let csv = (["name,age"] + (0..<500).map { "Person\($0),\($0)" }).joined(separator: "\n")
         let data = Data(csv.utf8)
         let decoder = CSVDecoder()
 
@@ -93,7 +93,7 @@ struct CSVDecoderCancellationTests {
         // Give the waiter task time to actually suspend on the continuation before
         // we call cancelAllWaiters.  We yield a few times rather than sleeping so the
         // test stays deterministic.
-        for _ in 0 ..< 5 {
+        for _ in 0..<5 {
             await Task.yield()
         }
 

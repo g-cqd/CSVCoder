@@ -134,13 +134,19 @@ public final class CSVDecoder: Sendable {
 
         // MARK: Public
 
-        /// The delimiter character used to separate fields. Default is comma (,).
+        /// The delimiter character used to separate fields.
+        ///
+        /// Default is comma (,).
         public var delimiter: Character
 
-        /// Whether the first row contains headers. Default is true.
+        /// Whether the first row contains headers.
+        ///
+        /// Default is true.
         public var hasHeaders: Bool
 
-        /// The encoding to use when reading data. Default is UTF-8.
+        /// The encoding to use when reading data.
+        ///
+        /// Default is UTF-8.
         ///
         /// CSVCoder supports two categories of encodings:
         ///
@@ -157,7 +163,9 @@ public final class CSVDecoder: Sendable {
         /// BOM (Byte Order Mark) detection is automatic for all supported encodings.
         public var encoding: String.Encoding
 
-        /// Whether to trim whitespace from field values. Default is true.
+        /// Whether to trim whitespace from field values.
+        ///
+        /// Default is true.
         public var trimWhitespace: Bool
 
         /// The date decoding strategy.
@@ -176,18 +184,21 @@ public final class CSVDecoder: Sendable {
         public var keyDecodingStrategy: KeyDecodingStrategy
 
         /// Custom column mapping from CSV header names to property names.
+        ///
         /// Takes precedence over keyDecodingStrategy for specified columns.
         public var columnMapping: [String: String]
 
         /// Maps column indices to property names for headerless or index-based decoding.
+        ///
         /// When set, columns are accessed by index instead of header name.
-        /// Example: `[0: "name", 1: "age", 2: "score"]`
+        /// Example: `[0: "name", 1: "age", 2: "score"]`.
         public var indexMapping: [Int: String]
 
         /// The parsing mode for RFC 4180 compliance.
         public var parsingMode: ParsingMode
 
         /// Expected field count per row for strict mode validation.
+        ///
         /// Set to nil to skip field count validation.
         public var expectedFieldCount: Int?
 
@@ -328,6 +339,7 @@ public final class CSVDecoder: Sendable {
     ///   - type: The type to decode.
     ///   - data: The CSV data to decode.
     /// - Returns: An array of decoded values.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable>(_ type: [T].Type, from data: Data) throws -> [T] {
         // Runtime detection of CSVRowDecodable conformance
         let columnOrder = (T.self as? _CSVRowMarker.Type)?._csvColumnOrder
@@ -345,6 +357,7 @@ public final class CSVDecoder: Sendable {
     ///   - type: The type to decode.
     ///   - string: The CSV string to decode.
     /// - Returns: An array of decoded values.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable>(_ type: [T].Type, from string: String) throws -> [T] {
         // Runtime detection of CSVRowDecodable conformance
         let columnOrder = (T.self as? _CSVRowMarker.Type)?._csvColumnOrder
@@ -356,6 +369,7 @@ public final class CSVDecoder: Sendable {
     ///   - type: The type to decode.
     ///   - row: The dictionary representing a single CSV row.
     /// - Returns: The decoded value.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable>(_ type: T.Type, from row: [String: String]) throws -> T {
         let decoder = CSVRowDecoder(
             row: row,
@@ -376,6 +390,7 @@ public final class CSVDecoder: Sendable {
     ///
     /// - Parameter data: The CSV data to decode.
     /// - Returns: An array of decoded values.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable>(from data: Data) throws -> [T] {
         try decode([T].self, from: data)
     }
@@ -389,6 +404,7 @@ public final class CSVDecoder: Sendable {
     ///
     /// - Parameter string: The CSV string to decode.
     /// - Returns: An array of decoded values.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable>(from string: String) throws -> [T] {
         try decode([T].self, from: string)
     }
@@ -402,6 +418,7 @@ public final class CSVDecoder: Sendable {
     ///
     /// - Parameter row: The dictionary representing a single CSV row.
     /// - Returns: The decoded value.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable>(from row: [String: String]) throws -> T {
         try decode(T.self, from: row)
     }
@@ -416,23 +433,23 @@ public final class CSVDecoder: Sendable {
         }
 
         switch configuration.keyDecodingStrategy {
-        case .useDefaultKeys:
-            return key
+            case .useDefaultKeys:
+                return key
 
-        case .convertFromSnakeCase:
-            return convertFromSnakeCase(key)
+            case .convertFromSnakeCase:
+                return convertFromSnakeCase(key)
 
-        case .convertFromKebabCase:
-            return convertFromKebabCase(key)
+            case .convertFromKebabCase:
+                return convertFromKebabCase(key)
 
-        case .convertFromScreamingSnakeCase:
-            return convertFromScreamingSnakeCase(key)
+            case .convertFromScreamingSnakeCase:
+                return convertFromScreamingSnakeCase(key)
 
-        case .convertFromPascalCase:
-            return convertFromPascalCase(key)
+            case .convertFromPascalCase:
+                return convertFromPascalCase(key)
 
-        case .custom(let transform):
-            return transform(key)
+            case .custom(let transform):
+                return transform(key)
         }
     }
 
@@ -454,7 +471,7 @@ public final class CSVDecoder: Sendable {
         // 1. Explicit index mapping takes highest precedence
         if !configuration.indexMapping.isEmpty {
             let maxIndex = configuration.indexMapping.keys.max() ?? 0
-            return (0 ... maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
+            return (0...maxIndex).map { configuration.indexMapping[$0] ?? "column\($0)" }
         }
 
         // 2. If hasHeaders, use first row with key transformation
@@ -469,12 +486,13 @@ public final class CSVDecoder: Sendable {
 
         // 4. Generate column names based on count
         let count = columnCount ?? rawHeaders.count
-        return (0 ..< count).map { "column\($0)" }
+        return (0..<count).map { "column\($0)" }
     }
 
     // MARK: Private
 
     /// Internal method that handles both regular Decodable and CSVRowDecodable.
+    ///
     /// Uses CSVParser for consistent zero-copy performance.
     private func decodeRows<T: Decodable>(
         _ type: [T].Type,
@@ -571,7 +589,7 @@ public final class CSVDecoder: Sendable {
                 if headerMap == nil {
                     var rawHeaders: [String] = []
                     rawHeaders.reserveCapacity(row.count)
-                    for i in 0 ..< row.count {
+                    for i in 0..<row.count {
                         if let s = row.string(at: i, encoding: effectiveEncoding) {
                             rawHeaders.append(
                                 configuration.trimWhitespace

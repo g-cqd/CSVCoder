@@ -11,7 +11,8 @@ import Synchronization
 // MARK: - CSVSingleValueEncoder
 
 /// An encoder for single values in CSV fields.
-/// nonisolated utility type for encoding
+///
+/// A nonisolated utility type for encoding.
 nonisolated struct CSVSingleValueEncoder: Encoder {
     // MARK: Lifecycle
 
@@ -55,7 +56,8 @@ nonisolated struct CSVSingleValueEncoder: Encoder {
 nonisolated struct CSVThrowingKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
     let codingPath: [CodingKey]
 
-    /// Single error every protocol-required `encode(_:forKey:)` overload
+    /// Single error every protocol-required `encode(_:forKey:)` overload.
+    ///
     /// raises. Hoisted to a constant so the 15 typed entry points stay
     /// one-liners.
     private static var nestedError: CSVEncodingError {

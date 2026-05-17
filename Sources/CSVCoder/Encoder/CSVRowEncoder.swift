@@ -10,7 +10,8 @@ import Foundation
 // MARK: - CSVRowEncoder
 
 /// An encoder for a single CSV row.
-/// nonisolated utility type for encoding
+///
+/// A nonisolated utility type for encoding.
 nonisolated struct CSVRowEncoder: Encoder {
     // MARK: Lifecycle
 
@@ -83,17 +84,17 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     mutating func encode(_ value: Bool, forKey key: Key) throws {
         let stringValue: String =
             switch configuration.boolEncodingStrategy {
-            case .trueFalse:
-                value ? "true" : "false"
+                case .trueFalse:
+                    value ? "true" : "false"
 
-            case .numeric:
-                value ? "1" : "0"
+                case .numeric:
+                    value ? "1" : "0"
 
-            case .yesNo:
-                value ? "yes" : "no"
+                case .yesNo:
+                    value ? "yes" : "no"
 
-            case .custom(let trueValue, let falseValue):
-                value ? trueValue : falseValue
+                case .custom(let trueValue, let falseValue):
+                    value ? trueValue : falseValue
             }
         storage.setValue(stringValue, forKey: prefixedKey(key))
     }
@@ -167,29 +168,29 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
 
         // Handle nested Codable types based on strategy
         switch configuration.nestedTypeEncodingStrategy {
-        case .error:
-            // Try to encode using single value container (fails for complex types)
-            let singleValueEncoder = CSVSingleValueEncoder(
-                configuration: configuration,
-                codingPath: codingPath + [key],
-                storage: storage,
-            )
-            try value.encode(to: singleValueEncoder)
+            case .error:
+                // Try to encode using single value container (fails for complex types)
+                let singleValueEncoder = CSVSingleValueEncoder(
+                    configuration: configuration,
+                    codingPath: codingPath + [key],
+                    storage: storage,
+                )
+                try value.encode(to: singleValueEncoder)
 
-        case .flatten(let separator):
-            // Encode nested type with prefixed keys
-            let nestedEncoder = CSVNestedEncoder(
-                configuration: configuration,
-                codingPath: codingPath + [key],
-                storage: storage,
-                keyPrefix: fullKey + separator,
-            )
-            try value.encode(to: nestedEncoder)
+            case .flatten(let separator):
+                // Encode nested type with prefixed keys
+                let nestedEncoder = CSVNestedEncoder(
+                    configuration: configuration,
+                    codingPath: codingPath + [key],
+                    storage: storage,
+                    keyPrefix: fullKey + separator,
+                )
+                try value.encode(to: nestedEncoder)
 
-        case .json(let maxBytes):
-            // Encode as JSON string, enforcing the configured byte budget.
-            let jsonString = try Self.encodeJSON(value, maxBytes: maxBytes, key: fullKey)
-            storage.setValue(jsonString, forKey: fullKey)
+            case .json(let maxBytes):
+                // Encode as JSON string, enforcing the configured byte budget.
+                let jsonString = try Self.encodeJSON(value, maxBytes: maxBytes, key: fullKey)
+                storage.setValue(jsonString, forKey: fullKey)
         }
     }
 
@@ -218,35 +219,35 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
         forKey key: Key
     ) -> KeyedEncodingContainer<NestedKey> {
         switch configuration.nestedTypeEncodingStrategy {
-        case .error:
-            return KeyedEncodingContainer(
-                CSVPoisonKeyedEncodingContainer<NestedKey>(
-                    error: CSVEncodingError.unsupportedType(
-                        "Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable."
-                    ),
-                    codingPath: codingPath + [key],
+            case .error:
+                return KeyedEncodingContainer(
+                    CSVPoisonKeyedEncodingContainer<NestedKey>(
+                        error: CSVEncodingError.unsupportedType(
+                            "Nested containers are not supported in CSV. Configure nestedTypeEncodingStrategy to enable."
+                        ),
+                        codingPath: codingPath + [key],
+                    )
                 )
-            )
 
-        case .flatten(let separator):
-            let nestedPrefix = prefixedKey(key) + separator
-            let nestedContainer = CSVKeyedEncodingContainer<NestedKey>(
-                configuration: configuration,
-                codingPath: codingPath + [key],
-                storage: storage,
-                keyPrefix: nestedPrefix,
-            )
-            return KeyedEncodingContainer(nestedContainer)
-
-        case .json:
-            return KeyedEncodingContainer(
-                CSVPoisonKeyedEncodingContainer<NestedKey>(
-                    error: CSVEncodingError.unsupportedType(
-                        "JSON nested encoding requires using encode(_:forKey:) with the nested value directly"
-                    ),
+            case .flatten(let separator):
+                let nestedPrefix = prefixedKey(key) + separator
+                let nestedContainer = CSVKeyedEncodingContainer<NestedKey>(
+                    configuration: configuration,
                     codingPath: codingPath + [key],
+                    storage: storage,
+                    keyPrefix: nestedPrefix,
                 )
-            )
+                return KeyedEncodingContainer(nestedContainer)
+
+            case .json:
+                return KeyedEncodingContainer(
+                    CSVPoisonKeyedEncodingContainer<NestedKey>(
+                        error: CSVEncodingError.unsupportedType(
+                            "JSON nested encoding requires using encode(_:forKey:) with the nested value directly"
+                        ),
+                        codingPath: codingPath + [key],
+                    )
+                )
         }
     }
 

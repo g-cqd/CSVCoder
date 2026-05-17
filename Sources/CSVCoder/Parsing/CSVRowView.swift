@@ -83,7 +83,7 @@ public struct CSVRowView {
         let count = fieldStarts.count
         var packed: [Field] = []
         packed.reserveCapacity(count)
-        for i in 0 ..< count {
+        for i in 0..<count {
             packed.append(
                 Field(
                     start: Int32(fieldStarts[i]),

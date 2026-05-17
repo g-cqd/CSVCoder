@@ -35,26 +35,32 @@ extension CSVDecoder {
         // MARK: Public
 
         /// Maximum memory budget in bytes for buffering decoded values.
+        ///
         /// When exceeded, streaming will pause until consumer catches up.
         public var memoryBudget: Int
 
         /// Estimated memory per decoded row in bytes.
+        ///
         /// Used for calculating buffer capacity.
         public var estimatedRowSize: Int
 
         /// Batch size for yielding results.
+        ///
         /// Larger batches reduce overhead but increase memory spikes.
         public var batchSize: Int
 
         /// Whether to use high-water/low-water mark backpressure.
+        ///
         /// When true, production pauses at high water and resumes at low water.
         public var useWatermarks: Bool
 
         /// High water mark as fraction of memory budget (0.0-1.0).
+        ///
         /// Production pauses when buffer exceeds this threshold.
         public var highWaterMark: Double
 
         /// Low water mark as fraction of memory budget (0.0-1.0).
+        ///
         /// Production resumes when buffer drops below this threshold.
         public var lowWaterMark: Double
 
@@ -94,7 +100,9 @@ actor BackpressureController {
         (bufferedCount, config.maxBufferedRows, isPaused)
     }
 
-    /// Records items added to buffer. Returns true if should pause.
+    /// Records items added to buffer.
+    ///
+    /// Returns true if should pause.
     func recordProduced(_ count: Int) -> Bool {
         bufferedCount += count
 
@@ -113,7 +121,9 @@ actor BackpressureController {
         return isPaused
     }
 
-    /// Records items consumed from buffer. Signals waiters if below low water.
+    /// Records items consumed from buffer.
+    ///
+    /// Signals waiters if below low water.
     func recordConsumed(_ count: Int) {
         bufferedCount = max(0, bufferedCount - count)
 
@@ -134,7 +144,9 @@ actor BackpressureController {
         }
     }
 
-    /// Waits until buffer has space for more items.  Cooperates with task
+    /// Waits until buffer has space for more items.
+    ///
+    /// Cooperates with task
     /// cancellation: if the calling task is cancelled while suspended, the
     /// continuation is resumed promptly (no leak window).
     func waitForSpace() async {
@@ -161,6 +173,7 @@ actor BackpressureController {
     }
 
     /// Resumes all pending waiters and resets state.
+    ///
     /// Called on stream termination to prevent continuation leaks.
     func cancelAllWaiters() {
         isPaused = false
@@ -180,7 +193,9 @@ actor BackpressureController {
     private var waiters: [UInt64: CheckedContinuation<Void, Never>] = [:]
     private var nextWaiterID: UInt64 = 0
 
-    /// Adds a continuation to the waiter map.  If the calling Task is already
+    /// Adds a continuation to the waiter map.
+    ///
+    /// If the calling Task is already
     /// cancelled (or the controller is no longer paused) the continuation is
     /// resumed immediately to avoid a leak.
     private func registerWaiter(id: UInt64, continuation: CheckedContinuation<Void, Never>) {
@@ -204,6 +219,7 @@ actor BackpressureController {
 
 extension CSVDecoder {
     /// Decodes CSV with memory-aware backpressure.
+    ///
     /// Automatically pauses production when memory limits are approached.
     ///
     /// - Parameters:
@@ -271,6 +287,7 @@ extension CSVDecoder {
     }
 
     /// Decodes CSV in batches with memory-aware backpressure.
+    ///
     /// Each yielded batch respects memory limits.
     ///
     /// - Parameters:

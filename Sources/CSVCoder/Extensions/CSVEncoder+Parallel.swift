@@ -42,6 +42,7 @@ extension CSVEncoder {
     // MARK: - Parallel Encode to File
 
     /// Encodes an array in parallel and writes to a file.
+    ///
     /// Rows are encoded concurrently, then written in order.
     ///
     /// - Parameters:
@@ -55,6 +56,7 @@ extension CSVEncoder {
     /// try await encoder.encodeParallel(records, to: fileURL,
     ///     parallelConfig: .init(parallelism: 8, chunkSize: 5_000))
     /// ```
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeParallel<T: Encodable & Sendable>(
         _ values: [T],
         to url: URL,
@@ -116,6 +118,7 @@ extension CSVEncoder {
     ///   - values: The values to encode.
     ///   - parallelConfig: Configuration for parallel encoding.
     /// - Returns: The encoded CSV data.
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeParallel<T: Encodable & Sendable>(
         _ values: [T],
         parallelConfig: ParallelEncodingConfiguration = .default,
@@ -166,6 +169,7 @@ extension CSVEncoder {
     // MARK: - Chunked Parallel Encoding
 
     /// Encodes an array in parallel chunks, yielding each chunk as it completes.
+    ///
     /// Useful for progress reporting or incremental processing.
     ///
     /// - Parameters:
@@ -196,7 +200,7 @@ extension CSVEncoder {
                     }
 
                     let chunks = stride(from: 0, to: values.count, by: parallelConfig.chunkSize).map {
-                        Array(values[$0 ..< min($0 + parallelConfig.chunkSize, values.count)])
+                        Array(values[$0..<min($0 + parallelConfig.chunkSize, values.count)])
                     }
 
                     for chunk in chunks {
@@ -249,7 +253,7 @@ extension CSVEncoder {
         let chunks: [(offset: Int, values: ArraySlice<T>)] = stride(from: 0, to: values.count, by: effectiveChunkSize)
             .map {
                 let end = min($0 + effectiveChunkSize, values.count)
-                return ($0, values[$0 ..< end])
+                return ($0, values[$0..<end])
             }
 
         // Process chunks in parallel

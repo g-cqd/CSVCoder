@@ -85,7 +85,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel decode from Data")
     func parallelDecodeFromData() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 100 {
+        for i in 0..<100 {
             csvLines.append("Person\(i),\(20 + i % 50),\(Double(i) * 0.5)")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -107,7 +107,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel decode preserves order")
     func parallelDecodePreservesOrder() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 50 {
+        for i in 0..<50 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -132,7 +132,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel decode unordered")
     func parallelDecodeUnordered() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 50 {
+        for i in 0..<50 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -151,7 +151,7 @@ struct CSVDecoderParallelTests {
         #expect(records.count == 50)
 
         let names = Set(records.map(\.name))
-        for i in 0 ..< 50 {
+        for i in 0..<50 {
             #expect(names.contains("Person\(i)"))
         }
     }
@@ -159,7 +159,7 @@ struct CSVDecoderParallelTests {
     @Test("Parallel batched decode yields batches")
     func parallelBatchedDecode() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 100 {
+        for i in 0..<100 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -186,7 +186,7 @@ struct CSVDecoderParallelTests {
     func parallelDecodeFasterThanSequential() async throws {
         // Generate large dataset (10K rows with complex fields)
         var csvLines = ["id,name,email,value,active,notes"]
-        for i in 0 ..< 10000 {
+        for i in 0..<10000 {
             csvLines
                 .append(
                     "\(i),Person\(i),person\(i)@example.com,\(Double(i) * 1.5),\(i % 2 == 0),\"Notes for person \(i)\"",
@@ -249,7 +249,7 @@ struct CSVDecoderParallelTests {
     @Test("Decode with memory configuration")
     func decodeWithMemoryConfig() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 50 {
+        for i in 0..<50 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -280,7 +280,7 @@ struct CSVDecoderParallelTests {
     @Test("Batched decode with backpressure")
     func batchedDecodeWithBackpressure() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 100 {
+        for i in 0..<100 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")
@@ -308,7 +308,7 @@ struct CSVDecoderParallelTests {
     @Test("Decode with progress reporting")
     func decodeWithProgress() async throws {
         var csvLines = ["name,age,score"]
-        for i in 0 ..< 100 {
+        for i in 0..<100 {
             csvLines.append("Person\(i),\(i),\(Double(i))")
         }
         let csv = csvLines.joined(separator: "\n")

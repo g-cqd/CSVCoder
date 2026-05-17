@@ -12,6 +12,7 @@ extension CSVEncoder {
     // MARK: - Streaming to File
 
     /// Stream encodes values from an async sequence to a file.
+    ///
     /// Uses O(1) memory regardless of dataset size.
     ///
     /// - Parameters:
@@ -50,6 +51,7 @@ extension CSVEncoder {
     ///   - values: An async sequence of encodable values.
     ///   - handle: The file handle to write to.
     ///   - bufferSize: The write buffer size in bytes.
+    /// - Throws: An error if encoding or decoding fails.
     public func encode<S: AsyncSequence>(
         _ values: S,
         to handle: FileHandle,
@@ -90,12 +92,14 @@ extension CSVEncoder {
     // MARK: - Streaming Array to File
 
     /// Stream encodes an array to a file with O(1) memory.
+    ///
     /// Unlike `encode(_:)`, this writes incrementally instead of building the entire output in memory.
     ///
     /// - Parameters:
     ///   - values: The values to encode.
     ///   - url: The file URL to write to.
     ///   - bufferSize: The write buffer size in bytes.
+    /// - Throws: An error if encoding or decoding fails.
     public func encode(
         _ values: [some Encodable & Sendable],
         to url: URL,
@@ -113,6 +117,7 @@ extension CSVEncoder {
     // MARK: - Streaming to AsyncStream
 
     /// Encodes values and yields rows as an async stream.
+    ///
     /// Useful for piping to network streams or other async consumers.
     ///
     /// - Parameter values: An async sequence of encodable values.
@@ -162,6 +167,7 @@ extension CSVEncoder {
     // MARK: - Row-by-Row Encoding
 
     /// Encodes a single value to an ordered dictionary.
+    ///
     /// Returns both the dictionary and the key order.
     internal func encodeValue(_ value: some Encodable) throws -> (row: [String: String], keys: [String]) {
         let storage = CSVEncodingStorage()
@@ -172,6 +178,7 @@ extension CSVEncoder {
     }
 
     /// Processes encoding and header initialization for async streaming.
+    ///
     /// Returns row bytes if successful, writes header on first call.
     internal func processAsyncRow(
         _ value: some Encodable,
@@ -200,6 +207,7 @@ extension CSVEncoder {
     // MARK: - Actor-Isolated Async Encoding
 
     /// Stream encodes values using actor-isolated async writer.
+    ///
     /// Provides better isolation and backpressure handling.
     ///
     /// - Parameters:
@@ -233,6 +241,7 @@ extension CSVEncoder {
     }
 
     /// Stream encodes values with progress reporting.
+    ///
     /// Calls the progress handler after each row is written.
     ///
     /// - Parameters:
@@ -240,6 +249,7 @@ extension CSVEncoder {
     ///   - url: The file URL to write to.
     ///   - bufferSize: The write buffer size in bytes.
     ///   - progress: Handler called with (rowsWritten, bytesWritten) after each row.
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeAsync<S: AsyncSequence>(
         _ values: S,
         to url: URL,
@@ -273,6 +283,7 @@ extension CSVEncoder {
     // MARK: - Batched Async Encoding
 
     /// Encodes values in batches for improved throughput.
+    ///
     /// Buffers multiple rows before writing to reduce I/O overhead.
     ///
     /// - Parameters:
@@ -280,6 +291,7 @@ extension CSVEncoder {
     ///   - url: The file URL to write to.
     ///   - batchSize: Number of rows to buffer before writing. Default is 100.
     ///   - bufferSize: The write buffer size in bytes. Default is 64KB.
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeBatched<S: AsyncSequence>(
         _ values: S,
         to url: URL,

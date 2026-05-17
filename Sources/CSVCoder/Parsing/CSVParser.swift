@@ -163,6 +163,7 @@ public struct CSVParser: Sequence {
     public let delimiter: UInt8
 
     /// Safely parses CSV data within a closure scope, ensuring buffer validity.
+    ///
     /// This ensures the parser's underlying buffer remains valid during iteration.
     ///
     /// - Parameters:
@@ -430,6 +431,7 @@ public struct CSVParser: Sequence {
     }
 
     /// Attempts SIMD-accelerated advance for unquoted fields.
+    ///
     /// Returns the new cursor position after SIMD scanning.
     @inline(__always)
     private func trySIMDAdvance(from startOffset: Int, count: Int) -> Int {
@@ -449,7 +451,7 @@ public struct CSVParser: Sequence {
     /// Checks if there are any quote characters in the specified range.
     @inline(__always)
     private func checkForQuotes(from start: Int, to end: Int) -> Bool {
-        for i in start ..< end where buffer[i] == CSVParser.quote {
+        for i in start..<end where buffer[i] == CSVParser.quote {
             return true
         }
         return false

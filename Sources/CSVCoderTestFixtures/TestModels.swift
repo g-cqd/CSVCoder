@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Order
 
-/// Real-world model: E-commerce order
+/// Real-world model: E-commerce order.
 public struct Order: Codable, Sendable, Equatable {
     public let orderId: String
     public let customerId: Int
@@ -73,7 +73,7 @@ public struct Order: Codable, Sendable, Equatable {
 
 // MARK: - Transaction
 
-/// Real-world model: Financial transaction
+/// Real-world model: Financial transaction.
 public struct Transaction: Codable, Sendable, Equatable {
     public let transactionId: String
     public let accountFrom: String
@@ -122,7 +122,7 @@ public struct Transaction: Codable, Sendable, Equatable {
 
 // MARK: - LogEntry
 
-/// Real-world model: Server log entry
+/// Real-world model: Server log entry.
 public struct LogEntry: Codable, Sendable, Equatable {
     public let timestamp: String
     public let level: String

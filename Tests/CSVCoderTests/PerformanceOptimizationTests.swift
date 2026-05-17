@@ -308,7 +308,7 @@ struct CSVParserIntegrationTests {
 
         let rows = CSVParser.parse(data: data) { parser in
             parser.map { row in
-                (0 ..< row.count).map { row.string(at: $0) ?? "" }
+                (0..<row.count).map { row.string(at: $0) ?? "" }
             }
         }
 
@@ -340,7 +340,7 @@ struct CSVParserIntegrationTests {
     func parserLargeCSV() {
         // Generate 10K row CSV
         var csv = "id,name,value\n"
-        for i in 0 ..< 10000 {
+        for i in 0..<10000 {
             csv += "\(i),Name\(i),\(Double(i) * 1.5)\n"
         }
         let data = Data(csv.utf8)

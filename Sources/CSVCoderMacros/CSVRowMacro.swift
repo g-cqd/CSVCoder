@@ -31,7 +31,8 @@ private struct DuplicateColumnDiagnostic: DiagnosticMessage {
     var severity: DiagnosticSeverity { .error }
 }
 
-/// Diagnostic message emitted when `@CSVColumn` is applied to a property
+/// Diagnostic message emitted when `@CSVColumn` is applied to a property.
+///
 /// whose parent struct lacks `@CSVRow`. Without the row-level macro to
 /// read it, the column rename silently has no effect — surface that as a
 /// warning at expansion time.
@@ -47,7 +48,8 @@ private struct OrphanCSVColumnDiagnostic: DiagnosticMessage {
     var severity: DiagnosticSeverity { .warning }
 }
 
-/// Swift reserved keywords that need backtick-escaping when used as property
+/// Swift reserved keywords that need backtick-escaping when used as property.
+///
 /// names.  This is the subset that legally appears in a value declaration
 /// (so `Self` / `Any` etc. are intentionally excluded).
 private let swiftReservedWords: Set<String> = [
@@ -78,21 +80,22 @@ public enum CSVRowMacroError: Error, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .notAStruct:
-            "@CSVRow can only be applied to structs"
+            case .notAStruct:
+                "@CSVRow can only be applied to structs"
 
-        case .noStoredProperties:
-            "@CSVRow requires at least one stored property"
+            case .noStoredProperties:
+                "@CSVRow requires at least one stored property"
 
-        case .existingCodingKeysNotCaseIterable:
-            "Existing CodingKeys must conform to CaseIterable for @CSVRow"
+            case .existingCodingKeysNotCaseIterable:
+                "Existing CodingKeys must conform to CaseIterable for @CSVRow"
         }
     }
 }
 
 // MARK: - Property metadata
 
-/// Per-property metadata collected from the struct's stored declarations
+/// Per-property metadata collected from the struct's stored declarations.
+///
 /// and passed between the macro's internal helpers. File-scope so every
 /// helper signature stays under the `lineLength` cap.
 private typealias Property = (
@@ -235,7 +238,9 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - Direct-decode synthesis
 
-    /// Types supported by ``CSVDirectFieldDecoder``. The macro consults this
+    /// Types supported by ``CSVDirectFieldDecoder``.
+    ///
+    /// The macro consults this
     /// set to decide whether to emit ``CSVDirectDecodable`` conformance.
     private static let directlyDecodableTypes: Set<String> = [
         "String", "Bool", "Double", "Float",
@@ -270,7 +275,8 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
         return true
     }
 
-    /// Generates the body of the direct-decode init by emitting one
+    /// Generates the body of the direct-decode init by emitting one.
+    ///
     /// `CSVDirectFieldDecoder.*` call per stored property. Each call captures
     /// the per-property column index from `columnIndices`, plus the property
     /// name for error locations.
@@ -327,42 +333,42 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
 
         let optionalCall = isOptional ? "optional" : ""
         switch (bare, isOptional) {
-        case ("String", true):
-            // optionalString does not throw — no `try`.
-            return "CSVDirectFieldDecoder.optionalString(\(commonNoKey))"
-        case ("String", false):
-            return "try CSVDirectFieldDecoder.string(\(common))"
-        case ("Bool", _):
-            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Bool" : "bool")(\(common))"
-        case ("Double", _):
-            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Double" : "double")(\(common))"
-        case ("Float", _):
-            // No optionalFloat helper — route through optionalDouble for `Float?` and narrow.
-            if isOptional {
-                return "(try CSVDirectFieldDecoder.optionalDouble(\(common))).map(Float.init)"
-            }
-            return "try CSVDirectFieldDecoder.float(\(common))"
-        case ("Decimal", _):
-            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Decimal" : "decimal")(\(common))"
-        case ("UUID", _):
-            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "UUID" : "uuid")(\(common))"
-        case ("URL", _):
-            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "URL" : "url")(\(common))"
-        case ("Date", _):
-            return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Date" : "date")(\(common))"
-        case ("UInt64", false):
-            // UInt64 may exceed Int64 range — route through the dedicated helper.
-            return "try CSVDirectFieldDecoder.uInt64(\(common))"
-        case ("UInt64", true):
-            // No optionalUInt64 helper — fall back to optionalInteger which handles Int64-range values.
-            // Values exceeding Int64.max in an Optional context are an unsupported edge case.
-            return "try CSVDirectFieldDecoder.optionalInteger(UInt64.self, \(common))"
-        default:
-            // All other fixed-width integers route through the generic helper.
-            if isOptional {
-                return "try CSVDirectFieldDecoder.optionalInteger(\(bare).self, \(common))"
-            }
-            return "try CSVDirectFieldDecoder.integer(\(bare).self, \(common))"
+            case ("String", true):
+                // optionalString does not throw — no `try`.
+                return "CSVDirectFieldDecoder.optionalString(\(commonNoKey))"
+            case ("String", false):
+                return "try CSVDirectFieldDecoder.string(\(common))"
+            case ("Bool", _):
+                return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Bool" : "bool")(\(common))"
+            case ("Double", _):
+                return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Double" : "double")(\(common))"
+            case ("Float", _):
+                // No optionalFloat helper — route through optionalDouble for `Float?` and narrow.
+                if isOptional {
+                    return "(try CSVDirectFieldDecoder.optionalDouble(\(common))).map(Float.init)"
+                }
+                return "try CSVDirectFieldDecoder.float(\(common))"
+            case ("Decimal", _):
+                return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Decimal" : "decimal")(\(common))"
+            case ("UUID", _):
+                return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "UUID" : "uuid")(\(common))"
+            case ("URL", _):
+                return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "URL" : "url")(\(common))"
+            case ("Date", _):
+                return "try CSVDirectFieldDecoder.\(optionalCall)\(isOptional ? "Date" : "date")(\(common))"
+            case ("UInt64", false):
+                // UInt64 may exceed Int64 range — route through the dedicated helper.
+                return "try CSVDirectFieldDecoder.uInt64(\(common))"
+            case ("UInt64", true):
+                // No optionalUInt64 helper — fall back to optionalInteger which handles Int64-range values.
+                // Values exceeding Int64.max in an Optional context are an unsupported edge case.
+                return "try CSVDirectFieldDecoder.optionalInteger(UInt64.self, \(common))"
+            default:
+                // All other fixed-width integers route through the generic helper.
+                if isOptional {
+                    return "try CSVDirectFieldDecoder.optionalInteger(\(bare).self, \(common))"
+                }
+                return "try CSVDirectFieldDecoder.integer(\(bare).self, \(common))"
         }
     }
 
@@ -383,23 +389,23 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     private static func extractAccessLevel(from modifiers: DeclModifierListSyntax) -> AccessLevel {
         for modifier in modifiers {
             switch modifier.name.tokenKind {
-            case .keyword(.public):
-                return .public
+                case .keyword(.public):
+                    return .public
 
-            case .keyword(.open):
-                return .open
+                case .keyword(.open):
+                    return .open
 
-            case .keyword(.fileprivate):
-                return .fileprivate
+                case .keyword(.fileprivate):
+                    return .fileprivate
 
-            case .keyword(.private):
-                return .private
+                case .keyword(.private):
+                    return .private
 
-            case .keyword(.internal):
-                return .internal
+                case .keyword(.internal):
+                    return .internal
 
-            default:
-                continue
+                default:
+                    continue
             }
         }
         return .internal
@@ -413,6 +419,7 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     // MARK: - Helpers
 
     /// Extracts stored property metadata from a struct declaration.
+    ///
     /// Each entry captures the property name, an optional `@CSVColumn` rename
     /// (with the attribute syntax for diagnostics), the declared Swift type
     /// (as a string, e.g. `"Int"`, `"String?"`, `"[Double]"`), and whether
@@ -443,11 +450,11 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
                 if let accessor = binding.accessorBlock {
                     // If it has a getter but no setter, it's computed
                     switch accessor.accessors {
-                    case .getter:
-                        return true
+                        case .getter:
+                            return true
 
-                    case .accessors(let list):
-                        return list.contains { $0.accessorSpecifier.tokenKind == .keyword(.get) }
+                        case .accessors(let list):
+                            return list.contains { $0.accessorSpecifier.tokenKind == .keyword(.get) }
                     }
                 }
                 return false
@@ -480,7 +487,8 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
         return properties
     }
 
-    /// Extracts the Swift type spelling from a binding's `: T` annotation,
+    /// Extracts the Swift type spelling from a binding's `: T` annotation,.
+    ///
     /// trimming whitespace and detecting `Optional` shorthand (`T?`) and
     /// long-form (`Optional<T>`). Returns `(nil, false)` when no type
     /// annotation is present — in that case the macro cannot synthesise a
@@ -501,7 +509,7 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
         if typeText.hasPrefix("Optional<"), typeText.hasSuffix(">") {
             let start = typeText.index(typeText.startIndex, offsetBy: "Optional<".count)
             let end = typeText.index(before: typeText.endIndex)
-            return (String(typeText[start ..< end]), true)
+            return (String(typeText[start..<end]), true)
         }
         return (typeText, false)
     }
@@ -544,6 +552,7 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     }
 
     /// Generates the `CodingKeys` enum with `CaseIterable` conformance.
+    ///
     /// Property names that collide with Swift reserved keywords are
     /// backtick-escaped so `init` / `class` / `default` etc. compile cleanly.
     private static func generateCodingKeys(
@@ -572,6 +581,7 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
 // MARK: - CSVColumnMacro
 
 /// The `@CSVColumn` macro marks a property with a custom CSV column name.
+///
 /// This is a peer macro that doesn't generate any code itself; it's read by
 /// ``CSVRowMacro`` to customize `CodingKeys`.
 ///

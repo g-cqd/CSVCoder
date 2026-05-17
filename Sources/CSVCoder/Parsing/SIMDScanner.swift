@@ -12,6 +12,7 @@ import Foundation
 // MARK: - SWARUtils
 
 /// SWAR (SIMD Within A Register) utilities for 8-byte parallel operations.
+///
 /// Processes 8 bytes at a time using UInt64 bit manipulation.
 /// Used as fallback for fields smaller than 64 bytes.
 enum SWARUtils: Sendable {
@@ -22,6 +23,7 @@ enum SWARUtils: Sendable {
     }
 
     /// Returns a mask with high bit set for each byte matching the target.
+    ///
     /// Uses the classic "SWAR zero-byte detection" algorithm.
     @inline(__always)
     static func findByte(_ word: UInt64, target: UInt8) -> UInt64 {
@@ -48,6 +50,7 @@ enum SWARUtils: Sendable {
     }
 
     /// Loads 8 bytes from buffer as a UInt64 (little-endian).
+    ///
     /// Uses unaligned load to avoid alignment requirements.
     @inline(__always)
     static func load(_ buffer: UnsafePointer<UInt8>) -> UInt64 {
@@ -58,6 +61,7 @@ enum SWARUtils: Sendable {
 // MARK: - SIMD Loading
 
 /// Loads 64 bytes from a buffer into a SIMD64 vector.
+///
 /// Package-internal for use by SIMDScanner and its extensions.
 @inline(__always)
 func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
@@ -67,6 +71,7 @@ func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
 // MARK: - SIMDScanner
 
 /// SIMD-accelerated scanner for finding CSV structural characters.
+///
 /// Uses 64-byte SIMD vectors to scan for quotes, delimiters, and newlines.
 /// Falls back to SWAR (8-byte) for smaller data, then scalar for remainder.
 struct SIMDScanner: Sendable {
@@ -82,6 +87,7 @@ struct SIMDScanner: Sendable {
         var isNewline: Bool { byte == SIMDScanner.cr || byte == SIMDScanner.lf }
 
         /// Returns true when this position is the configured field separator.
+        ///
         /// Callers must pass the actual delimiter byte; the property version
         /// that hardcoded comma+tab was removed because it silently lied about
         /// configured non-comma delimiters such as semicolon.
@@ -99,6 +105,7 @@ struct SIMDScanner: Sendable {
     }
 
     /// Scans a buffer for structural CSV characters using SIMD.
+    ///
     /// Returns positions of all quotes, delimiters, and newlines.
     ///
     /// - Parameters:
@@ -145,7 +152,7 @@ struct SIMDScanner: Sendable {
             // of ANDs) measured no faster than the simple loop on Apple
             // silicon.  Keep the loop for portability; revisit when stdlib
             // gains a stable `bitPattern` accessor.
-            for i in 0 ..< 64 where structuralMask[i] {
+            for i in 0..<64 where structuralMask[i] {
                 positions.append(StructuralPosition(offset: offset + i, byte: buffer[offset + i]))
             }
 
@@ -157,7 +164,7 @@ struct SIMDScanner: Sendable {
             let word = SWARUtils.load(buffer.advanced(by: offset))
             if SWARUtils.hasAnyByte(word, quote, delimiter, cr, lf) {
                 // Found structural byte, scan individually
-                for i in 0 ..< 8 {
+                for i in 0..<8 {
                     let byte = buffer[offset + i]
                     if byte == quote || byte == delimiter || byte == cr || byte == lf {
                         positions.append(StructuralPosition(offset: offset + i, byte: byte))
@@ -180,6 +187,7 @@ struct SIMDScanner: Sendable {
     }
 
     /// Finds row boundaries in a buffer, accounting for quoted fields.
+    ///
     /// Uses SIMD scanning followed by state machine for quote tracking.
     ///
     /// - Parameters:
@@ -233,6 +241,7 @@ struct SIMDScanner: Sendable {
     }
 
     /// Counts approximate row count in buffer using SIMD newline detection.
+    ///
     /// Note: This is an approximation that doesn't account for quoted newlines.
     /// Use for chunk sizing estimates, not exact counting.
     ///
@@ -255,7 +264,7 @@ struct SIMDScanner: Sendable {
             let mask = chunk .== lfVec
 
             // Direct count - avoids bitmask conversion overhead
-            for i in 0 ..< 64 where mask[i] {
+            for i in 0..<64 where mask[i] {
                 total += 1
             }
             offset += 64
@@ -284,6 +293,7 @@ struct SIMDScanner: Sendable {
     // MARK: - Fast Field Boundary Detection
 
     /// Finds the next delimiter, newline, or quote in a buffer using SIMD.
+    ///
     /// Used for fast unquoted field parsing.
     ///
     /// - Parameters:
@@ -314,7 +324,7 @@ struct SIMDScanner: Sendable {
             let structuralMask = delimMask .| crMask .| lfMask
 
             // Linear scan - exits early on first hit
-            for i in 0 ..< 64 where structuralMask[i] {
+            for i in 0..<64 where structuralMask[i] {
                 return offset + i
             }
 
@@ -334,6 +344,7 @@ struct SIMDScanner: Sendable {
     }
 
     /// Finds the position of the first quote character using SIMD.
+    ///
     /// Returns count if no quote is found.
     @inline(__always)
     static func findNextQuote(
@@ -349,7 +360,7 @@ struct SIMDScanner: Sendable {
             let quoteMask = chunk .== quoteVec
 
             // Linear scan - exits early on first hit
-            for i in 0 ..< 64 where quoteMask[i] {
+            for i in 0..<64 where quoteMask[i] {
                 return offset + i
             }
 
@@ -379,7 +390,9 @@ struct SIMDScanner: Sendable {
         return count
     }
 
-    /// Shared SWAR + scalar tail for the field-quoting byte scan. The
+    /// Shared SWAR + scalar tail for the field-quoting byte scan.
+    ///
+    /// The
     /// SIMD-path (after the main 64-byte loop) and the small-field path in
     /// ``CSVFieldEscaper`` both terminate in this exact loop pair; lifting
     /// it here keeps one canonical implementation of the unrolled +

@@ -201,7 +201,8 @@ public enum CSVDirectFieldDecoder {
         return narrowed
     }
 
-    /// Variant that accepts values outside `Int64.max` (e.g., `UInt64` values
+    /// Variant that accepts values outside `Int64.max` (e.g., `UInt64` values.
+    ///
     /// up to `UInt64.max`). Uses direct `UInt64(_:)` parsing on `.standard`
     /// strategy, otherwise routes through the standard `parseInt64` path.
     public static func uInt64(
@@ -422,14 +423,14 @@ public enum CSVDirectFieldDecoder {
         guard let value = row.string(at: index, encoding: configuration.encoding) else { return nil }
         let trimmed = configuration.trimWhitespace ? value.trimmingCharacters(in: .whitespaces) : value
         switch configuration.nilDecodingStrategy {
-        case .emptyString:
-            return trimmed.isEmpty ? nil : trimmed
+            case .emptyString:
+                return trimmed.isEmpty ? nil : trimmed
 
-        case .nullLiteral:
-            return trimmed.isEmpty || trimmed.lowercased() == "null" ? nil : trimmed
+            case .nullLiteral:
+                return trimmed.isEmpty || trimmed.lowercased() == "null" ? nil : trimmed
 
-        case .custom(let nilValues):
-            return trimmed.isEmpty || nilValues.contains(trimmed) ? nil : trimmed
+            case .custom(let nilValues):
+                return trimmed.isEmpty || nilValues.contains(trimmed) ? nil : trimmed
         }
     }
 

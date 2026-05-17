@@ -156,7 +156,9 @@ struct CSVSingleValueContainer: SingleValueDecodingContainer {
         )
     }
 
-    /// Shared parse-then-narrow path for `FixedWidthInteger` types. Parses
+    /// Shared parse-then-narrow path for `FixedWidthInteger` types.
+    ///
+    /// Parses
     /// the trimmed field as `Int64`, then narrows via `T(exactly:)`. The
     /// type name in the diagnostic comes from `T` itself so adding a new
     /// integer width never drifts from the error message.

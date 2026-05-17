@@ -31,9 +31,9 @@ struct CSVConcurrencyStressTests {
 
         // Each task encodes a uniquely-identified batch and returns the CSV string.
         let results: [String] = try await withThrowingTaskGroup(of: String.self) { group in
-            for taskIndex in 0 ..< taskCount {
+            for taskIndex in 0..<taskCount {
                 group.addTask {
-                    let records = (0 ..< recordsPerTask).map { i in
+                    let records = (0..<recordsPerTask).map { i in
                         SimpleRecord(id: taskIndex * recordsPerTask + i, name: "Task\(taskIndex)_Record\(i)")
                     }
                     return try encoder.encodeToString(records)
@@ -81,8 +81,8 @@ struct CSVConcurrencyStressTests {
 
         // Pre-build all CSV strings up front so tasks are purely decode work.
         let encoder = CSVEncoder()
-        let payloads: [(expected: [SimpleRecord], csv: String)] = try (0 ..< taskCount).map { taskIndex in
-            let records = (0 ..< recordsPerTask).map { i in
+        let payloads: [(expected: [SimpleRecord], csv: String)] = try (0..<taskCount).map { taskIndex in
+            let records = (0..<recordsPerTask).map { i in
                 SimpleRecord(id: taskIndex * recordsPerTask + i, name: "Batch\(taskIndex)_Item\(i)")
             }
             let csv = try encoder.encodeToString(records)
@@ -130,9 +130,9 @@ struct CSVConcurrencyStressTests {
 
         // Flood the storage with concurrent writes from multiple tasks.
         await withTaskGroup(of: Void.self) { group in
-            for taskIndex in 0 ..< taskCount {
+            for taskIndex in 0..<taskCount {
                 group.addTask {
-                    for keyIndex in 0 ..< keysPerTask {
+                    for keyIndex in 0..<keysPerTask {
                         let key = "task\(taskIndex)_key\(keyIndex)"
                         let value = "value_\(taskIndex)_\(keyIndex)"
                         storage.setValue(value, forKey: key)
@@ -157,8 +157,8 @@ struct CSVConcurrencyStressTests {
         #expect(snap.keys.count == expectedKeyCount)
 
         // Spot-check: every expected key exists and has the correct value.
-        for taskIndex in 0 ..< taskCount {
-            for keyIndex in 0 ..< keysPerTask {
+        for taskIndex in 0..<taskCount {
+            for keyIndex in 0..<keysPerTask {
                 let key = "task\(taskIndex)_key\(keyIndex)"
                 let expectedValue = "value_\(taskIndex)_\(keyIndex)"
                 #expect(snap.values[key] == expectedValue, "Wrong value for key '\(key)'")

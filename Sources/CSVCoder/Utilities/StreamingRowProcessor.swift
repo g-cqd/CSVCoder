@@ -11,6 +11,7 @@ import Foundation
 // MARK: - StreamingRowProcessor
 
 /// Processes raw CSV rows into decoded values.
+///
 /// Handles header detection, dictionary building, and decoding.
 struct StreamingRowProcessor<T: Decodable> {
     // MARK: Lifecycle
@@ -28,6 +29,7 @@ struct StreamingRowProcessor<T: Decodable> {
     // MARK: Internal
 
     /// Processes a raw CSV row and returns a decoded value.
+    ///
     /// Returns nil for the header row (when `hasHeaders` is true).
     ///
     /// - Parameter row: The raw CSV row as an array of strings.
@@ -45,7 +47,7 @@ struct StreamingRowProcessor<T: Decodable> {
                 return nil
             } else {
                 headers = decoder.resolveHeaders(
-                    rawHeaders: (0 ..< row.count).map { "column\($0)" },
+                    rawHeaders: (0..<row.count).map { "column\($0)" },
                     columnOrder: nil,
                     columnCount: row.count
                 )

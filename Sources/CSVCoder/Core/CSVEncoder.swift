@@ -110,17 +110,23 @@ nonisolated public final class CSVEncoder: Sendable {
 
         // MARK: Public
 
-        /// The delimiter character used to separate fields. Default is comma (,).
+        /// The delimiter character used to separate fields.
+        ///
+        /// Default is comma (,).
         public var delimiter: Character
 
-        /// Whether to include a header row. Default is true.
+        /// Whether to include a header row.
+        ///
+        /// Default is true.
         /// Renamed from `includeHeaders` for symmetry with `CSVDecoder.Configuration.hasHeaders`.
         public var hasHeaders: Bool
 
         /// The date encoding strategy.
         public var dateEncodingStrategy: DateEncodingStrategy
 
-        /// How to encode nil values. Default is empty string.
+        /// How to encode nil values.
+        ///
+        /// Default is empty string.
         public var nilEncodingStrategy: NilEncodingStrategy
 
         /// The key encoding strategy for transforming property names to header names.
@@ -132,13 +138,17 @@ nonisolated public final class CSVEncoder: Sendable {
         /// The number encoding strategy.
         public var numberEncodingStrategy: NumberEncodingStrategy
 
-        /// The line ending to use. Default is LF (\n).
+        /// The line ending to use.
+        ///
+        /// Default is LF (\n).
         public var lineEnding: LineEnding
 
         /// Strategy for encoding nested Codable types.
         public var nestedTypeEncodingStrategy: NestedTypeEncodingStrategy
 
-        /// Whether to append a newline after the last row. Default is false.
+        /// Whether to append a newline after the last row.
+        ///
+        /// Default is false.
         public var includesTrailingNewline: Bool
     }
 
@@ -232,6 +242,7 @@ nonisolated public final class CSVEncoder: Sendable {
     /// Encodes an array of values to CSV data.
     /// - Parameter values: The values to encode.
     /// - Returns: The encoded CSV data.
+    /// - Throws: An error if encoding or decoding fails.
     public func encode<T: Encodable>(_ values: [T]) throws -> Data {
         var buffer: [UInt8] = []
         try encodeToBuffer(values, into: &buffer, columnOrder: Self.columnOrder(for: T.self))
@@ -241,6 +252,7 @@ nonisolated public final class CSVEncoder: Sendable {
     /// Encodes an array of values to a CSV string.
     /// - Parameter values: The values to encode.
     /// - Returns: The encoded CSV string.
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeToString<T: Encodable>(_ values: [T]) throws -> String {
         var buffer: [UInt8] = []
         try encodeToBuffer(values, into: &buffer, columnOrder: Self.columnOrder(for: T.self))
@@ -248,10 +260,12 @@ nonisolated public final class CSVEncoder: Sendable {
     }
 
     /// Encodes an array of values directly to a file URL.
+    ///
     /// Uses buffered writing to support large datasets with constant memory usage.
     /// - Parameters:
     ///   - values: The values to encode.
     ///   - url: The destination file URL.
+    /// - Throws: An error if encoding or decoding fails.
     public func encode<T: Encodable>(_ values: [T], to url: URL) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
@@ -267,6 +281,7 @@ nonisolated public final class CSVEncoder: Sendable {
     ///
     /// - Parameter value: The value to encode.
     /// - Returns: A single CSV row string.
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeRow<T: Encodable>(_ value: T) throws -> String {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
@@ -285,6 +300,7 @@ nonisolated public final class CSVEncoder: Sendable {
     ///
     /// - Parameter value: The value to encode.
     /// - Returns: A dictionary of field names to string values.
+    /// - Throws: An error if encoding or decoding fails.
     public func encodeToDictionary<T: Encodable>(_ value: T) throws -> [String: String] {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
@@ -309,6 +325,7 @@ nonisolated public final class CSVEncoder: Sendable {
     ///   - type: The type to get headers for.
     ///   - sample: A sample instance to encode for extracting property names.
     /// - Returns: An array of header names.
+    /// - Throws: An error if encoding or decoding fails.
     public func headers<T: Encodable>(for type: T.Type, sample: T) throws -> [String] {
         let storage = CSVEncodingStorage()
         let encoder = CSVRowEncoder(configuration: configuration, storage: storage)
@@ -322,7 +339,8 @@ nonisolated public final class CSVEncoder: Sendable {
 
     // MARK: - CSVRowEncodable Detection
 
-    /// Returns the canonical column order for `T` when the type opts in via
+    /// Returns the canonical column order for `T` when the type opts in via.
+    ///
     /// ``CSVRowEncodable`` / `@CSVRow`. Returns `nil` for plain `Encodable` types,
     /// in which case the encoder falls back to the order produced by `encode(to:)`.
     static func columnOrder<T>(for type: T.Type) -> [String]? {
@@ -334,26 +352,27 @@ nonisolated public final class CSVEncoder: Sendable {
     /// Transforms a property name using the configured strategy.
     func transformKey(_ key: String) -> String {
         switch configuration.keyEncodingStrategy {
-        case .useDefaultKeys:
-            key
+            case .useDefaultKeys:
+                key
 
-        case .convertToSnakeCase:
-            convertToSnakeCase(key)
+            case .convertToSnakeCase:
+                convertToSnakeCase(key)
 
-        case .convertToKebabCase:
-            convertToKebabCase(key)
+            case .convertToKebabCase:
+                convertToKebabCase(key)
 
-        case .convertToScreamingSnakeCase:
-            convertToScreamingSnakeCase(key)
+            case .convertToScreamingSnakeCase:
+                convertToScreamingSnakeCase(key)
 
-        case .custom(let transform):
-            transform(key)
+            case .custom(let transform):
+                transform(key)
         }
     }
 
     // MARK: - Field Escaping
 
     /// Escapes a field value for CSV output per RFC 4180.
+    ///
     /// Quotes fields containing delimiters, quotes, or newlines.
     func escapeField(_ value: String) -> String {
         CSVFieldEscaper.escapeField(value, delimiter: configuration.delimiter)
@@ -445,6 +464,7 @@ nonisolated public final class CSVEncoder: Sendable {
     }
 
     /// Appends an escaped field directly to the byte buffer.
+    ///
     /// Uses SIMD acceleration for fields >= 64 bytes.
     private func appendEscaped(_ value: String, to buffer: inout [UInt8], delimiter: UInt8) {
         CSVFieldEscaper.appendEscaped(value, to: &buffer, delimiter: delimiter)
@@ -470,6 +490,7 @@ nonisolated public final class CSVEncoder: Sendable {
 ///
 /// Splits a camelCase identifier on the same word boundaries the standard
 /// library uses, then joins the lowercased (or uppercased) parts with the
+/// - Returns: A view with the modifier applied.
 /// requested separator.
 ///
 /// Examples (snake_case form):
@@ -484,6 +505,7 @@ enum JSONStyleCaseConverter {
     ///   - key: The camelCase identifier.
     ///   - separator: The character to insert between words.
     ///   - uppercase: When `true`, joined words are uppercased; otherwise lowercased.
+    /// - Returns: A view with the modifier applied.
     static func convert(_ key: String, separator: Character, uppercase: Bool) -> String {
         guard !key.isEmpty else { return key }
 
@@ -499,41 +521,41 @@ enum JSONStyleCaseConverter {
 
         while searchIndex < key.endIndex {
             // Find the next uppercase character.
-            guard let upperBoundary = key[searchIndex ..< key.endIndex].firstIndex(where: { $0.isUppercase }) else {
-                wordRanges.append(wordStart ..< key.endIndex)
+            guard let upperBoundary = key[searchIndex..<key.endIndex].firstIndex(where: { $0.isUppercase }) else {
+                wordRanges.append(wordStart..<key.endIndex)
                 wordStart = key.endIndex
                 break
             }
 
             // Find the end of the uppercase run.
-            let upperRunEnd = key[upperBoundary ..< key.endIndex].firstIndex(where: { !$0.isUppercase })
+            let upperRunEnd = key[upperBoundary..<key.endIndex].firstIndex(where: { !$0.isUppercase })
 
             guard let upperRunEnd else {
                 // The uppercase run extends to the end of the string.
-                wordRanges.append(wordStart ..< upperBoundary)
-                wordRanges.append(upperBoundary ..< key.endIndex)
+                wordRanges.append(wordStart..<upperBoundary)
+                wordRanges.append(upperBoundary..<key.endIndex)
                 wordStart = key.endIndex
                 break
             }
             if upperRunEnd == key.index(after: upperBoundary) {
                 // Single uppercase letter (camelCase boundary).
-                wordRanges.append(wordStart ..< upperBoundary)
+                wordRanges.append(wordStart..<upperBoundary)
                 wordStart = upperBoundary
                 searchIndex = key.index(after: upperBoundary)
             } else {
                 // Run of uppercase letters: the previous word ends at the
                 // start of the run, and a new word begins at the last
                 // uppercase letter before a lowercase letter (acronym tail).
-                wordRanges.append(wordStart ..< upperBoundary)
+                wordRanges.append(wordStart..<upperBoundary)
                 let acronymTailStart = key.index(before: upperRunEnd)
-                wordRanges.append(upperBoundary ..< acronymTailStart)
+                wordRanges.append(upperBoundary..<acronymTailStart)
                 wordStart = acronymTailStart
                 searchIndex = upperRunEnd
             }
         }
 
         if wordStart < key.endIndex {
-            wordRanges.append(wordStart ..< key.endIndex)
+            wordRanges.append(wordStart..<key.endIndex)
         }
 
         // Drop empty ranges (defensive against single-character inputs).
@@ -547,7 +569,8 @@ enum JSONStyleCaseConverter {
         return words.map(transform).joined(separator: String(separator))
     }
 
-    /// Inverts the conversion above: splits on the separator and capitalises
+    /// Inverts the conversion above: splits on the separator and capitalises.
+    ///
     /// every word after the first.  This matches
     /// `JSONDecoder.KeyDecodingStrategy.convertFromSnakeCase`, which is lossy
     /// for acronyms (`my_url` → `myUrl`, not `myURL`).

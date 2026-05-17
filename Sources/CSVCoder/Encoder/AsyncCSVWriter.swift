@@ -15,6 +15,7 @@ actor AsyncCSVWriter {
     /// - Parameters:
     ///   - url: The file URL to write to.
     ///   - bufferCapacity: Size of internal buffer in bytes (default 64KB).
+    /// - Throws: An error if encoding or decoding fails.
     init(url: URL, bufferCapacity: Int = 65536) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         handle = try FileHandle(forWritingTo: url)

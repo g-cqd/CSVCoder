@@ -20,7 +20,7 @@ struct CSVEncoderParallelEncodingTests {
 
     @Test("Parallel encode preserves order")
     func parallelEncodePreservesOrder() async throws {
-        let records = (0 ..< 1000).map { SendableRecord(id: $0, name: "Record\($0)", value: Double($0)) }
+        let records = (0..<1000).map { SendableRecord(id: $0, name: "Record\($0)", value: Double($0)) }
 
         let encoder = CSVEncoder()
         let data = try await encoder.encodeParallel(records, parallelConfig: .init(parallelism: 4))
@@ -37,7 +37,7 @@ struct CSVEncoderParallelEncodingTests {
 
     @Test("Parallel encode to file")
     func parallelEncodeToFile() async throws {
-        let records = (0 ..< 500).map { SendableRecord(id: $0, name: "Parallel\($0)", value: Double($0) * 2.0) }
+        let records = (0..<500).map { SendableRecord(id: $0, name: "Parallel\($0)", value: Double($0) * 2.0) }
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("parallel_encode_test.csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -70,7 +70,7 @@ struct CSVEncoderParallelEncodingTests {
 
     @Test("Parallel batched encode yields chunks")
     func parallelBatchedEncodeYieldsChunks() async throws {
-        let records = (0 ..< 100).map { SendableRecord(id: $0, name: "Batch\($0)", value: Double($0)) }
+        let records = (0..<100).map { SendableRecord(id: $0, name: "Batch\($0)", value: Double($0)) }
 
         let encoder = CSVEncoder()
         var batches: [[String]] = []
@@ -142,7 +142,7 @@ struct CSVEncoderParallelEncodingTests {
 
     @Test("Parallel batched encode applies keyEncodingStrategy to header")
     func parallelBatchedEncodeAppliesKeyStrategy() async throws {
-        let records = (0 ..< 50).map { CamelRecord(firstName: "First\($0)", lastName: "Last\($0)") }
+        let records = (0..<50).map { CamelRecord(firstName: "First\($0)", lastName: "Last\($0)") }
         let config = CSVEncoder.Configuration(keyEncodingStrategy: .convertToSnakeCase)
         let encoder = CSVEncoder(configuration: config)
         var batches: [[String]] = []
@@ -154,7 +154,7 @@ struct CSVEncoderParallelEncodingTests {
 
     @Test("Parallel encode to file applies keyEncodingStrategy")
     func parallelEncodeToFileAppliesKeyStrategy() async throws {
-        let records = (0 ..< 100).map { CamelRecord(firstName: "F\($0)", lastName: "L\($0)") }
+        let records = (0..<100).map { CamelRecord(firstName: "F\($0)", lastName: "L\($0)") }
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("parallel_key_strategy_\(UUID().uuidString).csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -193,7 +193,7 @@ struct CSVEncoderParallelEncodingTests {
 
     @Test("Parallel encode is faster than sequential for large data")
     func parallelEncodeFasterThanSequential() async throws {
-        let records = (0 ..< 10000).map { i in
+        let records = (0..<10000).map { i in
             SendableRecord(id: i, name: "Person\(i) with a longer name", value: Double(i) * 1.5)
         }
 

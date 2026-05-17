@@ -10,6 +10,7 @@ import Foundation
 
 extension CSVDecoder {
     /// Decodes values from a CSV file URL, yielding each row as it's parsed.
+    ///
     /// Uses memory-mapped I/O for O(1) memory usage regardless of file size.
     ///
     /// For headerless CSV, the decoder automatically detects `CSVRowDecodable`
@@ -37,6 +38,7 @@ extension CSVDecoder {
     }
 
     /// Decodes values from CSV Data, yielding each row as it's parsed.
+    ///
     /// Uses streaming parser for efficient memory usage.
     ///
     /// For headerless CSV, the decoder automatically detects `CSVRowDecodable`
@@ -56,6 +58,7 @@ extension CSVDecoder {
     }
 
     /// Decodes all values from a CSV file URL into an array.
+    ///
     /// Convenience async method that collects all streamed results.
     ///
     /// For headerless CSV, the decoder automatically detects `CSVRowDecodable`
@@ -68,6 +71,7 @@ extension CSVDecoder {
     ///
     /// - Note: For very large files, prefer the streaming `decode(_:from:)` method
     ///   to avoid loading all records into memory.
+    /// - Throws: An error if encoding or decoding fails.
     public func decode<T: Decodable & Sendable>(
         _ type: [T].Type,
         from url: URL,
@@ -161,7 +165,7 @@ extension CSVDecoder {
                     // Extract potential headers
                     var firstRowStrings: [String] = []
                     firstRowStrings.reserveCapacity(rowView.count)
-                    for i in 0 ..< rowView.count {
+                    for i in 0..<rowView.count {
                         if let s = rowView.string(at: i) {
                             firstRowStrings.append(s)
                         } else {

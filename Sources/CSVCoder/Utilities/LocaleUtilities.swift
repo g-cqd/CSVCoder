@@ -72,6 +72,7 @@ enum LocaleUtilities {
     // MARK: - Number Parsing
 
     /// Strips currency symbols and unit suffixes from a string.
+    ///
     /// Uses system locale data for comprehensive currency coverage.
     static func stripCurrencyAndUnits(_ value: String) -> String {
         var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,7 +112,8 @@ enum LocaleUtilities {
         return cleaned.trimmingCharacters(in: .whitespaces)
     }
 
-    /// Strips a currency `symbol` from `cleaned` only when it appears at a
+    /// Strips a currency `symbol` from `cleaned` only when it appears at a.
+    ///
     /// boundary: the very start, the very end, or immediately after a leading
     /// sign character.  This preserves substrings in the middle of property
     /// values (e.g. `"Krakow,123"` does not lose its `kr`) while still
@@ -193,14 +195,14 @@ enum LocaleUtilities {
 
         let dateStyle: Date.FormatStyle.DateStyle =
             switch style {
-            case .numeric:
-                .numeric
+                case .numeric:
+                    .numeric
 
-            case .abbreviated:
-                .abbreviated
+                case .abbreviated:
+                    .abbreviated
 
-            case .long:
-                .long
+                case .long:
+                    .long
             }
 
         // Try strict parsing first
@@ -225,6 +227,7 @@ enum LocaleUtilities {
     // MARK: Private
 
     /// Normalizes a number string by detecting and converting decimal/grouping separators.
+    ///
     /// Delegates to CSVValueParser for the actual normalization logic.
     private static func parseNormalizedDouble(_ value: String) -> Double? {
         CSVValueParser.parseFlexibleDouble(value)

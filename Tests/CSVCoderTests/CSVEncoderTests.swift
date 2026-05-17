@@ -391,7 +391,7 @@ struct CSVEncoderTests {
 
     @Test("Stream encode to file")
     func streamEncodeToFile() async throws {
-        let records = (0 ..< 100).map { SendableRecord(id: $0, name: "Item\($0)", value: Double($0) * 1.5) }
+        let records = (0..<100).map { SendableRecord(id: $0, name: "Item\($0)", value: Double($0) * 1.5) }
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_encode_test.csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -411,7 +411,7 @@ struct CSVEncoderTests {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("stream_async_test.csv")
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
-        let records = (0 ..< 50).map { SendableRecord(id: $0, name: "Async\($0)", value: Double($0)) }
+        let records = (0..<50).map { SendableRecord(id: $0, name: "Async\($0)", value: Double($0)) }
         let stream = AsyncStream { continuation in
             for record in records {
                 continuation.yield(record)

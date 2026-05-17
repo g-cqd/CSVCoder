@@ -1,6 +1,6 @@
 import Foundation
 
-/// System hardware and environment information for benchmark context
+/// System hardware and environment information for benchmark context.
 struct HardwareInfo: Sendable {
     static let current: HardwareInfo = {
         let processInfo = ProcessInfo.processInfo
