@@ -28,8 +28,8 @@ Contributions are welcome! This document outlines how to contribute to CSVCoder.
 
 ## Requirements
 
-- Swift 6.2+
-- Xcode 26+ (Swift 6.2 toolchain)
+- Swift 6.3+
+- Xcode 26.4+ (Swift 6.3 toolchain)
 - macOS 15+ / iOS 18+ / tvOS 18+ / watchOS 11+ / visionOS 2+
 
 ## Code Style

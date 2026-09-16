@@ -25,7 +25,7 @@ A Swift CSV encoder/decoder using the `Codable` protocol, similar to `JSONEncode
 ## Requirements
 
 - iOS 18.0+ / macOS 15.0+
-- Swift 6.2+
+- Swift 6.3+
 
 ## Installation
 

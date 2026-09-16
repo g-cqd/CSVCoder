@@ -6,47 +6,10 @@
 //  conformance.
 //
 
-import SwiftDiagnostics
+import AemiMacroSupport
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-
-// MARK: - Diagnostics
-
-/// Diagnostic message emitted when two `@CSVColumn` attributes claim the
-/// same external column name on the same `@CSVRow` struct.
-private struct DuplicateColumnDiagnostic: DiagnosticMessage {
-    let columnName: String
-    let firstProperty: String
-    let secondProperty: String
-
-    var message: String {
-        "Duplicate CSV column name '\(columnName)' on '\(firstProperty)' and '\(secondProperty)'"
-    }
-
-    var diagnosticID: MessageID {
-        MessageID(domain: "CSVCoderMacros", id: "duplicateColumnName")
-    }
-
-    var severity: DiagnosticSeverity { .error }
-}
-
-/// Diagnostic message emitted when `@CSVColumn` is applied to a property.
-///
-/// whose parent struct lacks `@CSVRow`. Without the row-level macro to
-/// read it, the column rename silently has no effect — surface that as a
-/// warning at expansion time.
-private struct OrphanCSVColumnDiagnostic: DiagnosticMessage {
-    var message: String {
-        "@CSVColumn has no effect without @CSVRow on the containing struct"
-    }
-
-    var diagnosticID: MessageID {
-        MessageID(domain: "CSVCoderMacros", id: "orphanCSVColumn")
-    }
-
-    var severity: DiagnosticSeverity { .warning }
-}
 
 /// Swift reserved keywords that need backtick-escaping when used as property.
 ///
@@ -177,13 +140,10 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
             // bare properties always use their own name.
             guard let columnName = property.customName, let attribute = property.attribute else { continue }
             if let firstProperty = seen[columnName] {
-                let diag = Diagnostic(
-                    node: Syntax(attribute),
-                    message: DuplicateColumnDiagnostic(
-                        columnName: columnName,
-                        firstProperty: firstProperty,
-                        secondProperty: property.name,
-                    ),
+                let diag = MacroDiagnostics.make(
+                    attribute, domain: "CSVCoderMacros", id: "duplicateColumnName",
+                    "Duplicate CSV column name '\(columnName)' on '\(firstProperty)' and '\(property.name)'",
+                    severity: .error
                 )
                 context.diagnose(diag)
             } else {
@@ -606,7 +566,11 @@ public struct CSVColumnMacro: PeerMacro {
                 }
                 if !hasRowMacro {
                     context.diagnose(
-                        Diagnostic(node: Syntax(attribute), message: OrphanCSVColumnDiagnostic()),
+                        MacroDiagnostics.make(
+                            attribute, domain: "CSVCoderMacros", id: "orphanCSVColumn",
+                            "@CSVColumn has no effect without @CSVRow on the containing struct",
+                            severity: .warning
+                        ),
                     )
                 }
                 break
