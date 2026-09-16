@@ -161,6 +161,8 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
         conformingTo _: [TypeSyntax],
         in _: some MacroExpansionContext,
     ) throws -> [ExtensionDeclSyntax] {
+        // Member expansion diagnoses invalid declarations; do not emit invalid conformances too.
+        guard declaration.is(StructDeclSyntax.self) else { return [] }
         var extensions: [ExtensionDeclSyntax] = []
 
         // Always-emitted conformances. These carry the column-order metadata
@@ -425,7 +427,10 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
             // Extract property names
             for binding in varDecl.bindings {
                 guard let identifier = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
-                let propertyName = identifier.identifier.text
+                let spelling = identifier.identifier.text
+                let propertyName =
+                    spelling.hasPrefix("`") && spelling.hasSuffix("`")
+                    ? String(spelling.dropFirst().dropLast()) : spelling
 
                 // Check for @CSVColumn attribute
                 let (customName, attribute) = extractCSVColumnInfo(from: varDecl.attributes)
@@ -554,28 +559,25 @@ public struct CSVColumnMacro: PeerMacro {
         providingPeersOf declaration: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext,
     ) throws -> [DeclSyntax] {
-        // Walk up the syntax tree looking for the containing struct.
-        var parent: Syntax? = declaration.parent
-        while let node = parent {
-            if let structDecl = node.as(StructDeclSyntax.self) {
-                let hasRowMacro = structDecl.attributes.contains { element in
-                    guard case .attribute(let attr) = element,
-                        let identifier = attr.attributeName.as(IdentifierTypeSyntax.self)
-                    else { return false }
-                    return identifier.name.text == "CSVRow"
-                }
-                if !hasRowMacro {
-                    context.diagnose(
-                        MacroDiagnostics.make(
-                            attribute, domain: "CSVCoderMacros", id: "orphanCSVColumn",
-                            "@CSVColumn has no effect without @CSVRow on the containing struct",
-                            severity: .warning
-                        ),
-                    )
-                }
-                break
+        // Attached declarations are detached from their parent tree during expansion.
+        for node in context.lexicalContext {
+            guard let structDecl = node.as(StructDeclSyntax.self) else { continue }
+            let hasRowMacro = structDecl.attributes.contains { element in
+                guard case .attribute(let attr) = element,
+                    let identifier = attr.attributeName.as(IdentifierTypeSyntax.self)
+                else { return false }
+                return identifier.name.text == "CSVRow"
             }
-            parent = node.parent
+            if !hasRowMacro {
+                context.diagnose(
+                    MacroDiagnostics.make(
+                        attribute, domain: "CSVCoderMacros", id: "orphanCSVColumn",
+                        "@CSVColumn has no effect without @CSVRow on the containing struct",
+                        severity: .warning
+                    )
+                )
+            }
+            break
         }
 
         // This macro doesn't generate any code; it's a marker that @CSVRow reads.

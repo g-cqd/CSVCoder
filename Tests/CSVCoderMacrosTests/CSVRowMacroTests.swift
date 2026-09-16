@@ -67,41 +67,6 @@ import Testing
             )
         }
 
-        // MARK: - Basic Expansion Tests
-
-        @Test("Basic macro expansion generates CodingKeys and typealias")
-        func basicMacroExpansion() {
-            assertMacroExpansion(
-                """
-                @CSVRow
-                struct Person: Codable {
-                    let name: String
-                    let age: Int
-                }
-                """,
-                expandedSource: """
-                    struct Person: Codable {
-                        let name: String
-                        let age: Int
-
-                        enum CodingKeys: String, CodingKey, CaseIterable {
-                            case name
-                            case age
-                        }
-
-                        typealias CSVCodingKeys = CodingKeys
-                    }
-
-                    extension Person: CSVRowDecodable {
-                    }
-
-                    extension Person: CSVRowEncodable {
-                    }
-                    """,
-                macros: testMacros,
-            )
-        }
-
         @Test("Macro handles optional properties")
         func macroWithOptionalProperty() {
             assertMacroExpansion(
@@ -133,6 +98,19 @@ import Testing
 
                     extension User: CSVRowEncodable {
                     }
+
+                    extension User: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.id = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[0], configuration: configuration, key: "id", rowIndex: rowIndex)
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[1], configuration: configuration, key: "name", rowIndex: rowIndex)
+                            self.email = CSVDirectFieldDecoder.optionalString(from: csvRow, index: columnIndices[2], configuration: configuration)
+                        }
+                    }
                     """,
                 macros: testMacros,
             )
@@ -158,9 +136,7 @@ import Testing
                 expandedSource: """
                     struct Product: Codable {
                         let id: Int
-
                         let name: String
-
                         let price: Double
 
                         enum CodingKeys: String, CodingKey, CaseIterable {
@@ -176,6 +152,19 @@ import Testing
                     }
 
                     extension Product: CSVRowEncodable {
+                    }
+
+                    extension Product: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.id = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[0], configuration: configuration, key: "id", rowIndex: rowIndex)
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[1], configuration: configuration, key: "name", rowIndex: rowIndex)
+                            self.price = try CSVDirectFieldDecoder.double(from: csvRow, index: columnIndices[2], configuration: configuration, key: "price", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 macros: testMacros,
@@ -214,6 +203,19 @@ import Testing
                     }
 
                     extension Record: CSVRowEncodable {
+                    }
+
+                    extension Record: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.third = try CSVDirectFieldDecoder.double(from: csvRow, index: columnIndices[0], configuration: configuration, key: "third", rowIndex: rowIndex)
+                            self.first = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[1], configuration: configuration, key: "first", rowIndex: rowIndex)
+                            self.second = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[2], configuration: configuration, key: "second", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 macros: testMacros,
@@ -278,25 +280,16 @@ import Testing
 
                     extension WithComputed: CSVRowEncodable {
                     }
-                    """,
-                macros: testMacros,
-            )
-        }
 
-        // MARK: - @CSVColumn Alone Tests
-
-        @Test("@CSVColumn alone generates nothing")
-        func csvColumnMacroGeneratesNothing() {
-            assertMacroExpansion(
-                """
-                struct Standalone {
-                    @CSVColumn("custom_name")
-                    let field: String
-                }
-                """,
-                expandedSource: """
-                    struct Standalone {
-                        let field: String
+                    extension WithComputed: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.stored = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[0], configuration: configuration, key: "stored", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 macros: testMacros,
@@ -342,6 +335,21 @@ import Testing
 
                     extension LargeRecord: CSVRowEncodable {
                     }
+
+                    extension LargeRecord: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.a = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "a", rowIndex: rowIndex)
+                            self.b = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[1], configuration: configuration, key: "b", rowIndex: rowIndex)
+                            self.c = try CSVDirectFieldDecoder.double(from: csvRow, index: columnIndices[2], configuration: configuration, key: "c", rowIndex: rowIndex)
+                            self.d = try CSVDirectFieldDecoder.bool(from: csvRow, index: columnIndices[3], configuration: configuration, key: "d", rowIndex: rowIndex)
+                            self.e = try CSVDirectFieldDecoder.date(from: csvRow, index: columnIndices[4], configuration: configuration, key: "e", rowIndex: rowIndex)
+                        }
+                    }
                     """,
                 macros: testMacros,
             )
@@ -377,6 +385,18 @@ import Testing
 
                     extension PublicRecord: CSVRowEncodable {
                     }
+
+                    extension PublicRecord: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
+                            self.value = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[1], configuration: configuration, key: "value", rowIndex: rowIndex)
+                        }
+                    }
                     """,
                 macros: testMacros,
             )
@@ -398,7 +418,6 @@ import Testing
                 expandedSource: """
                     public struct PublicProduct: Codable, Sendable {
                         public let name: String
-
                         public let price: Double
 
                         public enum CodingKeys: String, CodingKey, CaseIterable {
@@ -413,6 +432,18 @@ import Testing
                     }
 
                     extension PublicProduct: CSVRowEncodable {
+                    }
+
+                    extension PublicProduct: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
+                            self.price = try CSVDirectFieldDecoder.double(from: csvRow, index: columnIndices[1], configuration: configuration, key: "price", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 macros: testMacros,
@@ -444,6 +475,17 @@ import Testing
 
                     extension InternalRecord: CSVRowEncodable {
                     }
+
+                    extension InternalRecord: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
+                        }
+                    }
                     """,
                 macros: testMacros,
             )
@@ -474,6 +516,17 @@ import Testing
 
                     extension FileprivateRecord: CSVRowEncodable {
                     }
+
+                    extension FileprivateRecord: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
+                        }
+                    }
                     """,
                 macros: testMacros,
             )
@@ -503,6 +556,17 @@ import Testing
                     }
 
                     extension PrivateRecord: CSVRowEncodable {
+                    }
+
+                    extension PrivateRecord: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.name = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[0], configuration: configuration, key: "name", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 macros: testMacros,
@@ -536,6 +600,17 @@ import Testing
 
                     extension DefaultRecord: CSVRowEncodable {
                     }
+
+                    extension DefaultRecord: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.value = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[0], configuration: configuration, key: "value", rowIndex: rowIndex)
+                        }
+                    }
                     """,
                 macros: testMacros,
             )
@@ -557,9 +632,7 @@ import Testing
                 """,
                 expandedSource: """
                     struct R: Codable {
-                        @CSVColumn("x")
                         let a: Int
-                        @CSVColumn("x")
                         let b: Int
 
                         enum CodingKeys: String, CodingKey, CaseIterable {
@@ -574,6 +647,18 @@ import Testing
                     }
 
                     extension R: CSVRowEncodable {
+                    }
+
+                    extension R: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.a = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[0], configuration: configuration, key: "a", rowIndex: rowIndex)
+                            self.b = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[1], configuration: configuration, key: "b", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 diagnostics: [
@@ -598,7 +683,6 @@ import Testing
                 """,
                 expandedSource: """
                     struct Loose: Codable {
-                        @CSVColumn("renamed")
                         let value: Int
                     }
                     """,
@@ -641,6 +725,18 @@ import Testing
                     }
 
                     extension K: CSVRowEncodable {
+                    }
+
+                    extension K: CSVDirectDecodable {
+                        public init(
+                            csvRow: CSVRowView,
+                            columnIndices: [Int],
+                            configuration: CSVDecoder.Configuration,
+                            rowIndex: Int?
+                        ) throws {
+                            self.`init` = try CSVDirectFieldDecoder.integer(Int.self, from: csvRow, index: columnIndices[0], configuration: configuration, key: "init", rowIndex: rowIndex)
+                            self.`class` = try CSVDirectFieldDecoder.string(from: csvRow, index: columnIndices[1], configuration: configuration, key: "class", rowIndex: rowIndex)
+                        }
                     }
                     """,
                 macros: testMacros,
