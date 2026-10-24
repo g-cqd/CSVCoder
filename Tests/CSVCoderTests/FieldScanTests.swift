@@ -73,7 +73,9 @@ struct FieldScanTests {
                 bytes[position] = 0x22
                 if Self.nextQuote(bytes) != position { failures.append("length \(length), quote at \(position)") }
             }
-            if Self.nextQuote([UInt8](repeating: 0x2C, count: length)) != length { failures.append("clean length \(length)") }
+            if Self.nextQuote([UInt8](repeating: 0x2C, count: length)) != length {
+                failures.append("clean length \(length)")
+            }
         }
         #expect(failures.isEmpty, "\(failures.prefix(5))")
     }
