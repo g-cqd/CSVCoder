@@ -248,20 +248,9 @@ nonisolated final class CSVEncodingStorage: Sendable {
         state.withLock { state in state.orderedKeys }
     }
 
-    func allValues() -> [String: String] {
-        state.withLock { state in state.values }
-    }
-
     /// Returns a consistent snapshot of keys and values under a single lock acquisition.
     func snapshot() -> (keys: [String], values: [String: String]) {
         state.withLock { state in (state.orderedKeys, state.values) }
-    }
-
-    func reset() {
-        state.withLock { state in
-            state.values.removeAll(keepingCapacity: true)
-            state.orderedKeys.removeAll(keepingCapacity: true)
-        }
     }
 
     // MARK: Private

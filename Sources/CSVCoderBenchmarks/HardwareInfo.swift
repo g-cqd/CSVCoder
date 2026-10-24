@@ -91,35 +91,4 @@ struct HardwareInfo: Sendable {
         print(separator)
         print()
     }
-
-    func markdownSummary() -> String {
-        var lines: [String] = []
-        lines.append("**Benchmark Environment:**")
-        lines.append("- CPU: \(cpuModel)")
-        if cpuPerformanceCores > 0 || cpuEfficiencyCores > 0 {
-            lines.append("- Cores: \(cpuCores) (\(cpuPerformanceCores) performance + \(cpuEfficiencyCores) efficiency)")
-        } else {
-            lines.append("- Cores: \(cpuCores)")
-        }
-        lines.append("- Memory: \(String(format: "%.0f", physicalMemoryGB)) GB")
-        lines.append("- OS: \(osVersion)")
-        lines.append("- Swift: \(swiftVersion)")
-        lines.append("- Build: \(buildConfiguration)")
-        return lines.joined(separator: "\n")
-    }
-
-    func jsonSummary() -> String {
-        """
-        {
-          "cpu_model": "\(cpuModel)",
-          "cpu_cores": \(cpuCores),
-          "cpu_performance_cores": \(cpuPerformanceCores),
-          "cpu_efficiency_cores": \(cpuEfficiencyCores),
-          "memory_gb": \(String(format: "%.1f", physicalMemoryGB)),
-          "os_version": "\(osVersion)",
-          "swift_version": "\(swiftVersion)",
-          "build_configuration": "\(buildConfiguration)"
-        }
-        """
-    }
 }
