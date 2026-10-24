@@ -1,0 +1,63 @@
+//
+//  FieldScan.swift
+//  CSVCoder
+//
+//  Finds the end of a CSV field: a short inline scan, then Aemi's vector kernels.
+//
+
+import AemiKernels
+
+/// Byte searches for the field scanner.
+///
+/// A CSV field is usually a few bytes, so a call into a vector kernel (about 4 ns of setup) costs more
+/// than scanning the field. The first ``inlineBytes`` bytes are scanned in place; only a longer field
+/// reaches the kernel, where it is faster at every length measured from 20 bytes up (11x at 400).
+enum FieldScan {
+    /// Bytes scanned in place before the vector kernel takes over.
+    ///
+    /// 16 was never slower than the previous scanner at any length from 2 to 4,000 bytes; 8 was 1.15x slower
+    /// at 10 bytes, 24 gave back the gain at 40 and 100.
+    static let inlineBytes = 16
+
+    private static let quote: UInt8 = 0x22
+    private static let cr: UInt8 = 0x0D
+    private static let lf: UInt8 = 0x0A
+
+    /// The offset of the first delimiter, CR, LF or quote in `base[0..<count]`.
+    ///
+    /// - Parameters:
+    ///   - base: The first byte to examine.
+    ///   - count: The number of readable bytes at `base`.
+    ///   - delimiter: The field delimiter.
+    /// - Returns: The offset of the match, or `count` if there is none.
+    /// - Complexity: O(*n*) in the distance to the match.
+    @inline(__always)
+    static func nextStructural(_ base: UnsafePointer<UInt8>, count: Int, delimiter: UInt8) -> Int {
+        let head = min(count, inlineBytes)
+        var index = 0
+        while index < head {
+            let byte = base[index]
+            if byte == delimiter || byte == cr || byte == lf || byte == quote { return index }
+            index += 1
+        }
+        guard count > head else { return count }
+        return head
+            + AemiKernels.firstIndexOfAny(
+                base: base + head, count: count - head, delimiter, cr, lf, quote, quote)
+    }
+
+    /// The offset of the first quote in `base[0..<count]`, or `count` if there is none.
+    ///
+    /// - Complexity: O(*n*) in the distance to the quote.
+    @inline(__always)
+    static func nextQuote(_ base: UnsafePointer<UInt8>, count: Int) -> Int {
+        let head = min(count, inlineBytes)
+        var index = 0
+        while index < head {
+            if base[index] == quote { return index }
+            index += 1
+        }
+        guard count > head else { return count }
+        return head + AemiKernels.firstIndexOfByte(base: base + head, count: count - head, needle: quote)
+    }
+}

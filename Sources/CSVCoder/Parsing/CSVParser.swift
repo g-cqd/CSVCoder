@@ -350,11 +350,7 @@ public struct CSVParser: Sequence {
             }
             return pos
         }
-        let relativeQuote = SIMDScanner.findNextQuote(
-            buffer: baseAddress.advanced(by: cursor),
-            count: count - cursor,
-        )
-        return cursor + relativeQuote
+        return cursor + FieldScan.nextQuote(baseAddress.advanced(by: cursor), count: count - cursor)
     }
 
     /// Creates a FieldResult for a quoted field.
@@ -384,40 +380,28 @@ public struct CSVParser: Sequence {
         var cursor = startOffset
         var hasQuoteInField = false
 
-        // Use SIMD for fields >= 64 bytes
-        cursor = trySIMDAdvance(from: cursor, count: count)
+        // Jump from one structural byte to the next. A quote is not a terminator here, but it is
+        // recorded: strict mode rejects it, and the jump would otherwise skip over it.
+        while let baseAddress = buffer.baseAddress, cursor < count {
+            cursor += FieldScan.nextStructural(
+                baseAddress.advanced(by: cursor), count: count - cursor, delimiter: delimiter)
+            guard cursor < count else { break }
 
-        if cursor >= count {
-            // EOF reached via SIMD - check for quotes in scanned region
-            hasQuoteInField = checkForQuotes(from: startOffset, to: cursor)
+            let byte = buffer[cursor]
+            if byte == CSVParser.quote {
+                hasQuoteInField = true
+                cursor += 1
+                continue
+            }
+
+            let (nextOffset, isRowEnd) = resolveTerminator(at: cursor, count: count)
             return makeUnquotedFieldResult(
                 contentStart: startOffset,
                 contentEnd: cursor,
-                nextOffset: cursor,
-                isRowEnd: true,
+                nextOffset: nextOffset,
+                isRowEnd: isRowEnd,
                 hasQuoteInUnquoted: hasQuoteInField,
             )
-        }
-
-        // Scalar handling for short fields or post-SIMD
-        while cursor < count {
-            let byte = buffer[cursor]
-
-            if byte == CSVParser.quote {
-                hasQuoteInField = true
-            }
-
-            if byte == delimiter || byte == CSVParser.lf || byte == CSVParser.cr {
-                let (nextOffset, isRowEnd) = resolveTerminator(at: cursor, count: count)
-                return makeUnquotedFieldResult(
-                    contentStart: startOffset,
-                    contentEnd: cursor,
-                    nextOffset: nextOffset,
-                    isRowEnd: isRowEnd,
-                    hasQuoteInUnquoted: hasQuoteInField,
-                )
-            }
-            cursor += 1
         }
 
         // EOF
@@ -428,33 +412,6 @@ public struct CSVParser: Sequence {
             isRowEnd: true,
             hasQuoteInUnquoted: hasQuoteInField,
         )
-    }
-
-    /// Attempts SIMD-accelerated advance for unquoted fields.
-    ///
-    /// Returns the new cursor position after SIMD scanning.
-    @inline(__always)
-    private func trySIMDAdvance(from startOffset: Int, count: Int) -> Int {
-        let remaining = count - startOffset
-        guard remaining >= 64, let basePtr = buffer.baseAddress else {
-            return startOffset
-        }
-
-        let simdOffset = SIMDScanner.findNextStructural(
-            buffer: basePtr.advanced(by: startOffset),
-            count: remaining,
-            delimiter: delimiter,
-        )
-        return startOffset + simdOffset
-    }
-
-    /// Checks if there are any quote characters in the specified range.
-    @inline(__always)
-    private func checkForQuotes(from start: Int, to end: Int) -> Bool {
-        for i in start..<end where buffer[i] == CSVParser.quote {
-            return true
-        }
-        return false
     }
 
     /// Creates a FieldResult for an unquoted field.
