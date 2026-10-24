@@ -29,18 +29,22 @@ struct FieldScanTests {
     @Test("The first structural byte is found at every length and position", arguments: [0x2C, 0x3B, 0x09] as [UInt8])
     func structuralAtEveryPosition(delimiter: UInt8) {
         let others: [UInt8] = [delimiter, 0x0D, 0x0A, 0x22]
+        // One expectation for the whole sweep: thousands of #expect calls in an unoptimized build would keep
+        // a core busy long enough to disturb the wall-clock tests that run beside this one.
+        var failures: [String] = []
         for length in 0...70 {
-            for position in 0..<max(length, 1) {
+            for position in 0..<length {
                 for needle in others {
                     var bytes = [UInt8](repeating: 0x61, count: length)
-                    guard position < length else { continue }
                     bytes[position] = needle
-                    #expect(Self.nextStructural(bytes, delimiter: delimiter) == position)
+                    let found = Self.nextStructural(bytes, delimiter: delimiter)
+                    if found != position { failures.append("length \(length), \(needle) at \(position): \(found)") }
                 }
             }
             let clean = [UInt8](repeating: 0x61, count: length)
-            #expect(Self.nextStructural(clean, delimiter: delimiter) == length)
+            if Self.nextStructural(clean, delimiter: delimiter) != length { failures.append("clean length \(length)") }
         }
+        #expect(failures.isEmpty, "\(failures.prefix(5))")
     }
 
     @Test("The earliest of several structural bytes wins")
@@ -62,14 +66,16 @@ struct FieldScanTests {
 
     @Test("The first quote is found at every length and position")
     func quoteAtEveryPosition() {
+        var failures: [String] = []
         for length in 1...70 {
             for position in 0..<length {
                 var bytes = [UInt8](repeating: 0x61, count: length)
                 bytes[position] = 0x22
-                #expect(Self.nextQuote(bytes) == position)
+                if Self.nextQuote(bytes) != position { failures.append("length \(length), quote at \(position)") }
             }
-            #expect(Self.nextQuote([UInt8](repeating: 0x2C, count: length)) == length)
+            if Self.nextQuote([UInt8](repeating: 0x2C, count: length)) != length { failures.append("clean length \(length)") }
         }
+        #expect(failures.isEmpty, "\(failures.prefix(5))")
     }
 }
 
@@ -82,16 +88,19 @@ extension FieldScanTests {
                 return FieldScan.containsStructural(base, count: buffer.count, delimiter: 0x2C)
             }
         }
+        var failures: [String] = []
         for length in 0...140 {
-            #expect(!contains([UInt8](repeating: 0x61, count: length)))
-            #expect(!contains([UInt8](repeating: 0x2B, count: length)))  // one below the delimiter
+            if contains([UInt8](repeating: 0x61, count: length)) { failures.append("clean length \(length)") }
+            // 0x2B is one below the delimiter.
+            if contains([UInt8](repeating: 0x2B, count: length)) { failures.append("lookalike length \(length)") }
             for position in 0..<length {
                 for needle: UInt8 in [0x2C, 0x0D, 0x0A, 0x22] {
                     var bytes = [UInt8](repeating: 0x61, count: length)
                     bytes[position] = needle
-                    #expect(contains(bytes))
+                    if !contains(bytes) { failures.append("length \(length), \(needle) at \(position)") }
                 }
             }
         }
+        #expect(failures.isEmpty, "\(failures.prefix(5))")
     }
 }
