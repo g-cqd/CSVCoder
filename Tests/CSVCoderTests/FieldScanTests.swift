@@ -6,8 +6,9 @@
 //  across the boundary where it hands over from the inline scan to the vector kernel.
 //
 
-@testable import CSVCoder
 import Testing
+
+@testable import CSVCoder
 
 @Suite("FieldScan")
 struct FieldScanTests {

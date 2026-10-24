@@ -6,9 +6,10 @@
 //  ahead of it. Formal model: formal/BackpressureOld.tla (deadlock) and BackpressureNew.tla.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder backpressure delivery")
 struct CSVDecoderBackpressureTests {

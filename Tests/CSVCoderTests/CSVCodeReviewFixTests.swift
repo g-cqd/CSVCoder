@@ -5,9 +5,10 @@
 //  Tests verifying fixes from code review findings.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("Code Review Fix Tests")
 struct CSVCodeReviewFixTests {
