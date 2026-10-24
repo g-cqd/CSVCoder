@@ -7,10 +7,9 @@
 //  - CSVUnescaper: Zero-allocation field unescaping
 //
 
+@testable import CSVCoder
 import Foundation
 import Testing
-
-@testable import CSVCoder
 
 // MARK: - SWARUtilsTests
 
@@ -412,55 +411,6 @@ struct SIMDScannerIntegrationTests {
         }
 
         #expect(count == 1000)
-    }
-
-    @Test("findNextStructural finds delimiter")
-    func findNextStructuralDelimiter() {
-        let csv = "hello,world"
-        let bytes = Array(csv.utf8)
-
-        let pos = bytes.withUnsafeBufferPointer { buffer in
-            SIMDScanner.findNextStructural(buffer: buffer.baseAddress!, count: buffer.count, delimiter: 0x2C)
-        }
-
-        #expect(pos == 5)
-    }
-
-    @Test("findNextStructural finds newline")
-    func findNextStructuralNewline() {
-        let csv = "hello\nworld"
-        let bytes = Array(csv.utf8)
-
-        let pos = bytes.withUnsafeBufferPointer { buffer in
-            SIMDScanner.findNextStructural(buffer: buffer.baseAddress!, count: buffer.count, delimiter: 0x2C)
-        }
-
-        #expect(pos == 5)
-    }
-
-    @Test("findNextStructural returns count when not found")
-    func findNextStructuralNotFound() {
-        let csv = "helloworld"
-        let bytes = Array(csv.utf8)
-
-        let pos = bytes.withUnsafeBufferPointer { buffer in
-            SIMDScanner.findNextStructural(buffer: buffer.baseAddress!, count: buffer.count, delimiter: 0x2C)
-        }
-
-        #expect(pos == bytes.count)
-    }
-
-    @Test("findNextQuote finds quote in large buffer")
-    func findNextQuoteLarge() {
-        let prefix = String(repeating: "a", count: 200)
-        let csv = prefix + "\""
-        let bytes = Array(csv.utf8)
-
-        let pos = bytes.withUnsafeBufferPointer { buffer in
-            SIMDScanner.findNextQuote(buffer: buffer.baseAddress!, count: buffer.count)
-        }
-
-        #expect(pos == 200)
     }
 
     @Test("findRowBoundaries handles CRLF")

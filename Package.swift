@@ -28,7 +28,10 @@ let package = Package(
         // Main library
         .target(
             name: "CSVCoder",
-            dependencies: ["CSVCoderMacros"]
+            dependencies: [
+                "CSVCoderMacros",
+                .product(name: "AemiKernels", package: "aemi"),
+            ]
         ),
 
         // Macro implementation (compiler plugin)
