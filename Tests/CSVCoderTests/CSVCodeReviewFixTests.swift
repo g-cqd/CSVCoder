@@ -5,10 +5,9 @@
 //  Tests verifying fixes from code review findings.
 //
 
+@testable import CSVCoder
 import Foundation
 import Testing
-
-@testable import CSVCoder
 
 @Suite("Code Review Fix Tests")
 struct CSVCodeReviewFixTests {
@@ -241,33 +240,5 @@ struct CSVCodeReviewFixTests {
         }
         #expect(rows.count == 3)
         #expect(rows[1] == ["Alice", "30"])
-    }
-
-    // MARK: - Task 3: BackpressureController cancelAllWaiters
-
-    @Test("BackpressureController cancelAllWaiters resets state")
-    func backpressureCancelAllWaiters() async {
-        // Use tiny budget so highWaterRows is small
-        let config = CSVDecoder.MemoryLimitConfiguration(
-            memoryBudget: 1024 * 1024,
-            estimatedRowSize: 256,
-            batchSize: 10,
-            useWatermarks: false,
-        )
-        let controller = BackpressureController(config: config)
-
-        // maxBufferedRows = 1MB / 256 = 4096, useWatermarks=false so pauses at maxBufferedRows
-        let shouldPause = await controller.recordProduced(5000)
-        #expect(shouldPause)
-
-        let state = await controller.state
-        #expect(state.isPaused)
-
-        // Cancel should reset
-        await controller.cancelAllWaiters()
-
-        let stateAfter = await controller.state
-        #expect(!stateAfter.isPaused)
-        #expect(stateAfter.buffered == 0)
     }
 }

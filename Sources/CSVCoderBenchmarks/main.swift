@@ -802,6 +802,26 @@ benchmark("Decode 100K from file (parallel)") {
     precondition(count == 100_000)
 }
 
+benchmark("Stream 100K from file (backpressure, rows)") {
+    let count = try runAsync {
+        var n = 0
+        for try await _ in CSVDecoder().decodeWithBackpressure(SimpleRecord.self, from: parallelTempURL) { n += 1 }
+        return n
+    }
+    precondition(count == 100_000, "stream delivered \(count) of 100000 rows")
+}
+
+benchmark("Stream 100K from file (backpressure, batches)") {
+    let count = try runAsync {
+        var n = 0
+        for try await batch in CSVDecoder().decodeBatchedWithBackpressure(SimpleRecord.self, from: parallelTempURL) {
+            n += batch.count
+        }
+        return n
+    }
+    precondition(count == 100_000, "stream delivered \(count) of 100000 rows")
+}
+
 benchmark("Encode 100K to file (parallel)") {
     _ = try runAsync {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".csv")
