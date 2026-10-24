@@ -22,15 +22,29 @@ enum SWARUtils: Sendable {
         UInt64(byte) &* 0x0101_0101_0101_0101
     }
 
-    /// Returns a mask with high bit set for each byte matching the target.
+    /// Returns a mask whose lowest set byte is the first byte equal to the target.
     ///
-    /// Uses the classic "SWAR zero-byte detection" algorithm.
+    /// Uses the classic "SWAR zero-byte detection" algorithm. It is exact for "is there a match"
+    /// and for the lowest match, and nothing else: the borrow out of a zero byte also flags the byte
+    /// above it when that byte is 0x01, so do not count its set bits. Use ``exactMatchMask(_:target:)``
+    /// to count.
     @inline(__always)
     static func findByte(_ word: UInt64, target: UInt8) -> UInt64 {
         let broadcast = broadcast(target)
         let xored = word ^ broadcast
         // Zero bytes in xored become 0x80 in result
         return (xored &- 0x0101_0101_0101_0101) & ~xored & 0x8080_8080_8080_8080
+    }
+
+    /// Returns a mask with the high bit set in exactly the bytes equal to the target.
+    ///
+    /// The low seven bits are added without a carry out of any byte and the high bit is OR-ed back
+    /// in, so no byte influences its neighbour. One operation dearer than ``findByte(_:target:)``.
+    @inline(__always)
+    static func exactMatchMask(_ word: UInt64, target: UInt8) -> UInt64 {
+        let xored = word ^ broadcast(target)
+        let low7: UInt64 = 0x7F7F_7F7F_7F7F_7F7F
+        return ~(((xored & low7) &+ low7) | xored) & 0x8080_8080_8080_8080
     }
 
     /// Checks if any byte in the word matches any of the four targets.
@@ -273,7 +287,7 @@ struct SIMDScanner: Sendable {
         // SWAR fallback for 8-63 remaining bytes
         while offset + 8 <= count {
             let word = SWARUtils.load(buffer.advanced(by: offset))
-            let lfMask = SWARUtils.findByte(word, target: lf)
+            let lfMask = SWARUtils.exactMatchMask(word, target: lf)
             // Count high bits set (each match has 0x80 pattern)
             total += (lfMask / 0x80).nonzeroBitCount
             offset += 8
