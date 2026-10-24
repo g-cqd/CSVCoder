@@ -6,14 +6,18 @@
 //  reports a false match in the byte above a real one (an LF followed by 0x0B).
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("SIMDScanner newline count")
 struct SIMDScannerCountTests {
     private static func count(_ bytes: [UInt8]) -> Int {
-        bytes.withUnsafeBufferPointer { SIMDScanner.countNewlinesApprox(buffer: $0.baseAddress!, count: $0.count) }
+        bytes.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return 0 }
+            return SIMDScanner.countNewlinesApprox(buffer: base, count: buffer.count)
+        }
     }
 
     @Test("An LF followed by a byte one above it is counted once", arguments: [8, 9, 15, 63])

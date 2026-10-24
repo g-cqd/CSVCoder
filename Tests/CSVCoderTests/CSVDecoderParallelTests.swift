@@ -5,9 +5,10 @@
 //  Tests for SIMD scanner, parallel decoding, backpressure, and memory configuration.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Parallel Tests")
 struct CSVDecoderParallelTests {

@@ -7,9 +7,10 @@
 //  - CSVUnescaper: Zero-allocation field unescaping
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 // MARK: - SWARUtilsTests
 

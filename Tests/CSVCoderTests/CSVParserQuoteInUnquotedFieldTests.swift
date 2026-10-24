@@ -6,9 +6,10 @@
 //  wherever the field sits in the buffer, not only in the last 64 bytes.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVParser quote in an unquoted field")
 struct CSVParserQuoteInUnquotedFieldTests {

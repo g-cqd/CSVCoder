@@ -5,9 +5,10 @@
 //  Tests for cancellation safety in streaming and backpressure decoding.
 //
 
-@testable import CSVCoder
 import Foundation
 import Testing
+
+@testable import CSVCoder
 
 @Suite("CSVDecoder Cancellation Tests")
 struct CSVDecoderCancellationTests {
