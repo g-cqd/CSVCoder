@@ -316,21 +316,14 @@ enum CSVFieldEscaper: Sendable {
 
     /// Checks if a field needs quoting per RFC 4180 using raw pointer.
     ///
-    /// Uses SWAR for medium-sized fields, SIMD for large ones.
-    ///
     /// - Parameters:
     ///   - buffer: Pointer to UTF-8 bytes.
     ///   - count: Number of bytes.
     ///   - delimiter: The field delimiter byte.
-    /// - Returns: `true` if the field contains characters requiring quoting.
+    /// - Returns: `true` if the field contains the delimiter, a quote, CR or LF.
     @inline(__always)
     static func needsQuoting(buffer: UnsafePointer<UInt8>, count: Int, delimiter: UInt8) -> Bool {
-        // Use SIMD for large fields; the SWAR+scalar tail lives on
-        // SIMDScanner so both size buckets share one implementation.
-        if count >= 64 {
-            return SIMDScanner.needsQuoting(buffer: buffer, count: count, delimiter: delimiter)
-        }
-        return SIMDScanner.scanForQuotingBytes(buffer: buffer, from: 0, count: count, delimiter: delimiter)
+        FieldScan.containsStructural(buffer, count: count, delimiter: delimiter)
     }
 
     /// Checks if a field needs quoting per RFC 4180.

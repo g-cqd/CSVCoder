@@ -19,6 +19,9 @@ enum FieldScan {
     /// at 10 bytes, 24 gave back the gain at 40 and 100.
     static let inlineBytes = 16
 
+    /// Bytes tested in a register before the kernel takes over in ``containsStructural(_:count:delimiter:)``.
+    static let swarBytes = 64
+
     private static let quote: UInt8 = 0x22
     private static let cr: UInt8 = 0x0D
     private static let lf: UInt8 = 0x0A
@@ -44,6 +47,31 @@ enum FieldScan {
         return head
             + AemiKernels.firstIndexOfAny(
                 base: base + head, count: count - head, delimiter, cr, lf, quote, quote)
+    }
+
+    /// Whether `base[0..<count]` holds a delimiter, CR, LF or quote: whether a field needs quoting.
+    ///
+    /// The first ``swarBytes`` bytes are tested eight at a time in a register, which beat a byte loop
+    /// and the 16-byte kernel head at every length from 1 to 63 (a 24-byte field: 7.4 ns against 21.6);
+    /// a longer field hands the rest to the vector kernel.
+    ///
+    /// - Complexity: O(*n*).
+    @inline(__always)
+    static func containsStructural(_ base: UnsafePointer<UInt8>, count: Int, delimiter: UInt8) -> Bool {
+        let head = min(count, swarBytes)
+        var offset = 0
+        while offset + 8 <= head {
+            if SWARUtils.hasAnyByte(SWARUtils.load(base + offset), quote, delimiter, cr, lf) { return true }
+            offset += 8
+        }
+        while offset < head {
+            let byte = base[offset]
+            if byte == delimiter || byte == cr || byte == lf || byte == quote { return true }
+            offset += 1
+        }
+        guard count > head else { return false }
+        return AemiKernels.firstIndexOfAny(base: base + head, count: count - head, delimiter, cr, lf, quote, quote)
+            < count - head
     }
 
     /// The offset of the first quote in `base[0..<count]`, or `count` if there is none.
