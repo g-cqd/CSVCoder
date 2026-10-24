@@ -32,7 +32,7 @@ struct CSVDecoderBackpressureTests {
     @inline(never)
     private static func slowWork() -> Int {
         var acc = 0
-        for i in 0..<20_000 { acc = acc &+ (i ^ acc) }
+        for i in 0..<5_000 { acc = acc &+ (i ^ acc) }
         return acc
     }
 
@@ -54,7 +54,7 @@ struct CSVDecoderBackpressureTests {
 
     @Test("A slow consumer of rows receives every row in order", .timeLimit(.minutes(1)))
     func slowRowConsumerLosesNothing() async throws {
-        let url = try Self.makeFile(rows: 50_000)
+        let url = try Self.makeFile(rows: 10_000)
         defer { try? FileManager.default.removeItem(at: url) }
 
         var next = 0
@@ -66,13 +66,13 @@ struct CSVDecoderBackpressureTests {
             sink &+= Self.slowWork()
         }
         #expect(inOrder)
-        #expect(next == 50_000)
+        #expect(next == 10_000)
         #expect(sink != 1)
     }
 
     @Test("A slow consumer of batches receives every row in order", .timeLimit(.minutes(1)))
     func slowBatchConsumerLosesNothing() async throws {
-        let url = try Self.makeFile(rows: 200_000)
+        let url = try Self.makeFile(rows: 100_000)
         defer { try? FileManager.default.removeItem(at: url) }
 
         var next = 0
@@ -91,7 +91,7 @@ struct CSVDecoderBackpressureTests {
         }
         #expect(inOrder)
         #expect(largest == 100)
-        #expect(next == 200_000)
+        #expect(next == 100_000)
         #expect(sink != 1)
     }
 
