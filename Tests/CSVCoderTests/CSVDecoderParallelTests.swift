@@ -182,6 +182,14 @@ struct CSVDecoderParallelTests {
         #expect(totalRecords == 100)
     }
 
+    private static var isOptimizedBuild: Bool {
+        #if DEBUG
+            false
+        #else
+            true
+        #endif
+    }
+
     @Test("Parallel decode is faster than sequential for large data")
     func parallelDecodeFasterThanSequential() async throws {
         // Generate large dataset (10K rows with complex fields)
@@ -230,9 +238,12 @@ struct CSVDecoderParallelTests {
         #expect(sequentialResult.count == 10000)
         #expect(parallelResult.count == 10000)
 
-        // On multi-core machines, parallel should be faster
+        // On multi-core machines, parallel should be faster. Only an optimized build says anything about
+        // speed: unoptimized, the sequential path now runs 5x faster than before FieldScan (387 -> 77 ms
+        // on the CI runner) while the allocation-bound parallel path does not (257 -> 196 ms), so the
+        // ratio there describes the debug build. The release job runs this assertion.
         let coreCount = ProcessInfo.processInfo.activeProcessorCount
-        if coreCount > 1 {
+        if coreCount > 1, Self.isOptimizedBuild {
             let seqNanos =
                 Double(sequentialDuration.components.seconds) * 1e9 + Double(sequentialDuration.components.attoseconds)
                 / 1e9

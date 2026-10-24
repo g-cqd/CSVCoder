@@ -5,6 +5,26 @@ All notable changes to CSVCoder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-10-24
+
+### Fixed
+
+- `decodeWithBackpressure` no longer stalls past the high-water mark, and neither it nor
+  `decodeBatchedWithBackpressure` drops rows for a slow consumer. Both are pull-based: a row is decoded when
+  the consumer asks for it. `MemoryLimitConfiguration` keeps its fields; only `batchSize` acts.
+- Strict mode rejects a quote inside an unquoted field wherever the field sits in the input, not only in the
+  last 64 bytes.
+- `SIMDScanner.countNewlinesApprox` no longer overcounts a line feed followed by `0x0B`.
+
+### Changed
+
+- Field scanning and quoting detection use `AemiKernels` (NEON on Apple silicon) after a short inline head.
+  Raw parse of 1M rows 87 to 76 ms; 500-byte fields decode 22.5 to 13.1 ms and encode 23.1 to 13.9 ms;
+  10 KB fields decode 21.3 to 3.8 ms; no benchmark is slower. `AemiKernels` is now a dependency of the
+  `CSVCoder` target.
+- CI gates on deadwood, dolly and arcleak, checks the formal models in `Formal/`, and runs the tests
+  optimized.
+
 ## [1.0.0] - 2026-05-15
 
 First stable release.
