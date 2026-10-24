@@ -12,6 +12,10 @@ import Foundation
 
 extension CSVDecoder {
     /// Configuration for memory-limited streaming operations.
+    ///
+    /// The backpressure streams are pull-based, so they hold at most one row (or one batch) ahead
+    /// of the consumer whatever the file size. Only ``batchSize`` still affects their behaviour;
+    /// the budget, row-size estimate and watermark fields are kept so existing code compiles.
     public struct MemoryLimitConfiguration: Sendable {
         // MARK: Lifecycle
 
@@ -63,271 +67,55 @@ extension CSVDecoder {
         ///
         /// Production resumes when buffer drops below this threshold.
         public var lowWaterMark: Double
-
-        // MARK: Internal
-
-        /// Maximum rows that fit in memory budget.
-        var maxBufferedRows: Int {
-            memoryBudget / estimatedRowSize
-        }
-
-        /// High water mark in row count.
-        var highWaterRows: Int {
-            Int(Double(maxBufferedRows) * highWaterMark)
-        }
-
-        /// Low water mark in row count.
-        var lowWaterRows: Int {
-            Int(Double(maxBufferedRows) * lowWaterMark)
-        }
-    }
-}
-
-// MARK: - BackpressureController
-
-/// Actor managing backpressure state for memory-aware streaming.
-actor BackpressureController {
-    // MARK: Lifecycle
-
-    init(config: CSVDecoder.MemoryLimitConfiguration) {
-        self.config = config
-    }
-
-    // MARK: Internal
-
-    /// Current buffer state for diagnostics.
-    var state: (buffered: Int, maxAllowed: Int, isPaused: Bool) {
-        (bufferedCount, config.maxBufferedRows, isPaused)
-    }
-
-    /// Records items added to buffer.
-    ///
-    /// Returns true if should pause.
-    func recordProduced(_ count: Int) -> Bool {
-        bufferedCount += count
-
-        if config.useWatermarks {
-            if bufferedCount >= config.highWaterRows, !isPaused {
-                isPaused = true
-                return true
-            }
-        } else {
-            if bufferedCount >= config.maxBufferedRows {
-                isPaused = true
-                return true
-            }
-        }
-
-        return isPaused
-    }
-
-    /// Records items consumed from buffer.
-    ///
-    /// Signals waiters if below low water.
-    func recordConsumed(_ count: Int) {
-        bufferedCount = max(0, bufferedCount - count)
-
-        let shouldResume: Bool =
-            if config.useWatermarks {
-                isPaused && bufferedCount <= config.lowWaterRows
-            } else {
-                isPaused && bufferedCount < config.maxBufferedRows
-            }
-
-        if shouldResume {
-            isPaused = false
-            let snapshot = waiters
-            waiters.removeAll()
-            for (_, continuation) in snapshot {
-                continuation.resume()
-            }
-        }
-    }
-
-    /// Waits until buffer has space for more items.
-    ///
-    /// Cooperates with task
-    /// cancellation: if the calling task is cancelled while suspended, the
-    /// continuation is resumed promptly (no leak window).
-    func waitForSpace() async {
-        guard isPaused else { return }
-
-        // If the task is already cancelled there is no point parking — bail
-        // before reserving a continuation slot.
-        guard !Task.isCancelled else { return }
-
-        let id = nextWaiterID
-        nextWaiterID &+= 1
-
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                // We are running on the actor's executor (called via `await self.waitForSpace`),
-                // so registering the continuation is synchronous and atomic with the suspend.
-                registerWaiter(id: id, continuation: continuation)
-            }
-        } onCancel: {
-            // The cancellation handler runs outside actor isolation, so it
-            // must hop back onto the actor to mutate the waiter map.
-            Task { await self.resumeWaiter(id: id) }
-        }
-    }
-
-    /// Resumes all pending waiters and resets state.
-    ///
-    /// Called on stream termination to prevent continuation leaks.
-    func cancelAllWaiters() {
-        isPaused = false
-        bufferedCount = 0
-        let snapshot = waiters
-        waiters.removeAll()
-        for (_, continuation) in snapshot {
-            continuation.resume()
-        }
-    }
-
-    // MARK: Private
-
-    private let config: CSVDecoder.MemoryLimitConfiguration
-    private var bufferedCount: Int = 0
-    private var isPaused: Bool = false
-    private var waiters: [UInt64: CheckedContinuation<Void, Never>] = [:]
-    private var nextWaiterID: UInt64 = 0
-
-    /// Adds a continuation to the waiter map.
-    ///
-    /// If the calling Task is already
-    /// cancelled (or the controller is no longer paused) the continuation is
-    /// resumed immediately to avoid a leak.
-    private func registerWaiter(id: UInt64, continuation: CheckedContinuation<Void, Never>) {
-        guard isPaused else {
-            continuation.resume()
-            return
-        }
-        waiters[id] = continuation
-    }
-
-    /// Resumes (and removes) the continuation associated with the given ID,
-    /// if it is still present in the waiter map.
-    private func resumeWaiter(id: UInt64) {
-        if let continuation = waiters.removeValue(forKey: id) {
-            continuation.resume()
-        }
     }
 }
 
 // MARK: - Memory-Aware Streaming Extension
 
 extension CSVDecoder {
-    /// Decodes CSV with memory-aware backpressure.
+    /// Decodes CSV one row at a time, never reading ahead of the consumer.
     ///
-    /// Automatically pauses production when memory limits are approached.
+    /// The stream is pull-based: a row is parsed and decoded when the consumer asks for it, so a
+    /// slow consumer holds production back by construction and no row is ever dropped.
     ///
     /// - Parameters:
     ///   - type: The type to decode.
     ///   - url: The file URL to read CSV data from.
-    ///   - memoryConfig: Configuration for memory limits and backpressure.
-    /// - Returns: An AsyncThrowingStream yielding decoded values with backpressure.
+    ///   - memoryConfig: Retained for source compatibility; see ``MemoryLimitConfiguration``.
+    /// - Returns: An AsyncThrowingStream yielding every decoded value in file order.
     ///
-    /// - Note: The stream applies backpressure when buffered rows exceed
-    ///         the configured memory budget, pausing production until
-    ///         the consumer catches up.
+    /// - Note: Cancelling the consuming task ends the stream at the next row.
     public func decodeWithBackpressure<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
         memoryConfig: MemoryLimitConfiguration = MemoryLimitConfiguration(),
     ) -> AsyncThrowingStream<T, Error> {
-        AsyncThrowingStream(bufferingPolicy: .bufferingNewest(memoryConfig.batchSize * 2)) { continuation in
-            let controller = BackpressureController(config: memoryConfig)
-
-            Task {
-                do {
-                    var producer = try CSVRowStreamProducer(url: url, configuration: configuration)
-                    var processor = StreamingRowProcessor<T>(configuration: configuration)
-                    var batchBuffer: [T] = []
-                    batchBuffer.reserveCapacity(memoryConfig.batchSize)
-
-                    while let row = try producer.nextRow() {
-                        guard let value = try processor.process(row) else { continue }
-                        batchBuffer.append(value)
-
-                        // Flush batch when full
-                        if batchBuffer.count >= memoryConfig.batchSize {
-                            // Check backpressure before yielding
-                            let shouldPause = await controller.recordProduced(batchBuffer.count)
-                            if shouldPause {
-                                await controller.waitForSpace()
-                            }
-
-                            for item in batchBuffer {
-                                continuation.yield(item)
-                            }
-                            batchBuffer.removeAll(keepingCapacity: true)
-                        }
-                    }
-
-                    // Flush remaining
-                    if !batchBuffer.isEmpty {
-                        for item in batchBuffer {
-                            continuation.yield(item)
-                        }
-                    }
-
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-
-            continuation.onTermination = { @Sendable _ in
-                Task {
-                    await controller.cancelAllWaiters()
-                }
-            }
-        }
+        let source = PulledRowSource<T>(url: url, configuration: configuration)
+        return AsyncThrowingStream(unfolding: {
+            guard !Task.isCancelled else { return nil }
+            return try source.next()
+        })
     }
 
-    /// Decodes CSV in batches with memory-aware backpressure.
-    ///
-    /// Each yielded batch respects memory limits.
+    /// Decodes CSV in batches of `memoryConfig.batchSize` rows, never reading ahead of the consumer.
     ///
     /// - Parameters:
     ///   - type: The type to decode.
     ///   - url: The file URL to read CSV data from.
-    ///   - memoryConfig: Configuration for memory limits.
-    /// - Returns: An AsyncThrowingStream yielding batches of decoded values.
+    ///   - memoryConfig: `batchSize` sets the rows per batch; the other fields are retained for
+    ///     source compatibility.
+    /// - Returns: An AsyncThrowingStream yielding every row, in file order, in batches.
     public func decodeBatchedWithBackpressure<T: Decodable & Sendable>(
         _ type: T.Type,
         from url: URL,
         memoryConfig: MemoryLimitConfiguration = MemoryLimitConfiguration(),
     ) -> AsyncThrowingStream<[T], Error> {
-        AsyncThrowingStream(bufferingPolicy: .bufferingNewest(4)) { continuation in
-            Task {
-                do {
-                    var producer = try CSVRowStreamProducer(url: url, configuration: configuration)
-                    var processor = StreamingRowProcessor<T>(configuration: configuration)
-                    var batch: [T] = []
-                    batch.reserveCapacity(memoryConfig.batchSize)
-
-                    while let row = try producer.nextRow() {
-                        guard let value = try processor.process(row) else { continue }
-                        batch.append(value)
-
-                        if batch.count >= memoryConfig.batchSize {
-                            continuation.yield(batch)
-                            batch.removeAll(keepingCapacity: true)
-                        }
-                    }
-
-                    if !batch.isEmpty {
-                        continuation.yield(batch)
-                    }
-
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-        }
+        let source = PulledRowSource<T>(url: url, configuration: configuration)
+        let batchSize = memoryConfig.batchSize
+        return AsyncThrowingStream(unfolding: {
+            guard !Task.isCancelled else { return nil }
+            return try source.nextBatch(limit: batchSize)
+        })
     }
 }
 

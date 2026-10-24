@@ -5,10 +5,9 @@
 //  Tests for cancellation safety in streaming and backpressure decoding.
 //
 
+@testable import CSVCoder
 import Foundation
 import Testing
-
-@testable import CSVCoder
 
 @Suite("CSVDecoder Cancellation Tests")
 struct CSVDecoderCancellationTests {
@@ -65,49 +64,6 @@ struct CSVDecoderCancellationTests {
         _ = try? await task.value
 
         #expect(await counter.value >= 5)
-    }
-
-    // MARK: - Test 2: BackpressureController.cancelAllWaiters resumes pending continuations
-
-    @Test("cancelAllWaiters resumes pending continuations without hanging")
-    func cancelAllWaitersResumesPendingContinuations() async {
-        // Use a tiny memory budget so the controller hits the high-water mark
-        // after just a few rows, parking the producer in waitForSpace().
-        let config = CSVDecoder.MemoryLimitConfiguration(
-            memoryBudget: 1024 * 1024,  // 1 MB
-            estimatedRowSize: 512 * 1024,  // 512 KB per row — 2 rows fill the budget
-            batchSize: 1,
-            useWatermarks: false,
-        )
-        let controller = BackpressureController(config: config)
-
-        // Fill the buffer past the limit so the controller is paused.
-        let shouldPause = await controller.recordProduced(config.maxBufferedRows + 1)
-        #expect(shouldPause)
-
-        // Park a waiter in the background; it must resume once cancelAllWaiters() fires.
-        let waiterCompleted = Task {
-            await controller.waitForSpace()
-        }
-
-        // Give the waiter task time to actually suspend on the continuation before
-        // we call cancelAllWaiters.  We yield a few times rather than sleeping so the
-        // test stays deterministic.
-        for _ in 0..<5 {
-            await Task.yield()
-        }
-
-        // Cancel all waiters — the waiter task must unblock.
-        await controller.cancelAllWaiters()
-
-        // If cancelAllWaiters works correctly this returns immediately;
-        // a continuation leak would cause the task to hang and eventually time out.
-        await waiterCompleted.value
-
-        // The controller should have been reset.
-        let stateAfter = await controller.state
-        #expect(stateAfter.isPaused == false)
-        #expect(stateAfter.buffered == 0)
     }
 
     // MARK: - Test 3: Backpressure stream task cancellation triggers onTermination cleanup

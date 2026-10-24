@@ -5,10 +5,9 @@
 //  Tests for SIMD scanner, parallel decoding, backpressure, and memory configuration.
 //
 
+@testable import CSVCoder
 import Foundation
 import Testing
-
-@testable import CSVCoder
 
 @Suite("CSVDecoder Parallel Tests")
 struct CSVDecoderParallelTests {
@@ -356,7 +355,6 @@ struct CSVDecoderParallelTests {
         #expect(config.batchSize == 1000)
         #expect(config.highWaterMark == 0.8)
         #expect(config.lowWaterMark == 0.4)
-        #expect(config.maxBufferedRows > 0)
     }
 
     @Test("Parallel configuration defaults")
