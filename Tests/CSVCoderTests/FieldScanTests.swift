@@ -71,3 +71,26 @@ struct FieldScanTests {
         }
     }
 }
+
+extension FieldScanTests {
+    @Test("needsQuoting agrees with a byte-by-byte test at every length and position")
+    func containsStructuralAtEveryPosition() {
+        func contains(_ bytes: [UInt8]) -> Bool {
+            bytes.withUnsafeBufferPointer { buffer in
+                guard let base = buffer.baseAddress else { return false }
+                return FieldScan.containsStructural(base, count: buffer.count, delimiter: 0x2C)
+            }
+        }
+        for length in 0...140 {
+            #expect(!contains([UInt8](repeating: 0x61, count: length)))
+            #expect(!contains([UInt8](repeating: 0x2B, count: length)))  // one below the delimiter
+            for position in 0..<length {
+                for needle: UInt8 in [0x2C, 0x0D, 0x0A, 0x22] {
+                    var bytes = [UInt8](repeating: 0x61, count: length)
+                    bytes[position] = needle
+                    #expect(contains(bytes))
+                }
+            }
+        }
+    }
+}
