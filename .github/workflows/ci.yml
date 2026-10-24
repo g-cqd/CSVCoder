@@ -33,35 +33,6 @@ jobs:
   # ============================================================================
   # STAGE 1: Setup & Code Quality Checks (parallel)
   # ============================================================================
-  setup-swa:
-    name: Setup SWA
-    runs-on: macos-26
-    steps:
-      - name: Cache SWA Binary
-        id: cache-swa
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: /usr/local/bin/swa
-          key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
-
-      - name: Download SWA
-        if: steps.cache-swa.outputs.cache-hit != 'true'
-        run: |
-          DOWNLOAD_URL="https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v${{ env.SWA_VERSION }}/swa-${{ env.SWA_VERSION }}-macos-universal.tar.gz"
-          echo "Downloading SWA from ${DOWNLOAD_URL}..."
-          curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz
-          tar -xzf /tmp/swa.tar.gz -C /tmp
-          sudo mv /tmp/swa /usr/local/bin/swa
-          sudo chmod +x /usr/local/bin/swa
-          echo "Installed SWA ${{ env.SWA_VERSION }}"
-
-      - name: Upload SWA Binary
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: swa-binary
-          path: /usr/local/bin/swa
-          retention-days: 1
-
   format-check:
     name: Format Check
     runs-on: macos-26
@@ -77,60 +48,37 @@ jobs:
           swift format lint --strict --parallel --ignore-unparsable-files \
             --recursive Sources Tests
 
-  duplicates-check:
-    name: Duplicates Check
-    runs-on: macos-26
-    needs: setup-swa
+  static-analysis:
+    name: Static analysis (deadwood, dolly, arcleak)
+    # Gates, unlike the SwiftStaticAnalysis jobs it replaces (both ran with continue-on-error, so they never
+    # failed a build). Tool versions and archive hashes are pinned in Scripts/analyzers.sh; dolly compares
+    # against .dolly-baseline.json, so only a NEW clone fails. The tools read source, so Linux is enough.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Download SWA Binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: swa-binary
-          path: /tmp
+      - name: Run the analyzers
+        run: Scripts/analyzers.sh
 
-      - name: Setup SWA
-        run: |
-          sudo mv /tmp/swa /usr/local/bin/swa
-          sudo chmod +x /usr/local/bin/swa
-
-      - name: Check Duplicates
-        run: |
-          swa duplicates Sources \
-            --min-tokens 100 \
-            --format text
-        continue-on-error: true
-
-  unused-check:
-    name: Unused Code Check
-    runs-on: macos-26
-    needs: setup-swa
+  formal:
+    name: Formal models (TLA+ and Lean)
+    # Re-checks Formal/: the streaming protocol in TLC (the broken design must still deadlock, the shipped one
+    # must hold) and the SWAR proofs in Lean. Pinned in Scripts/formal.sh and Formal/lean-toolchain.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Download SWA Binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: swa-binary
-          path: /tmp
-
-      - name: Setup SWA
+      - name: Install Lean (elan)
         run: |
-          sudo mv /tmp/swa /usr/local/bin/swa
-          sudo chmod +x /usr/local/bin/swa
+          curl -fsSL --retry 3 -o elan-init.sh https://raw.githubusercontent.com/leanprover/elan/227caca133724d5516bee25c2aeb3e609478f2d8/elan-init.sh
+          # elan v4.2.4, by commit
+          sh elan-init.sh -y --default-toolchain "$(cat Formal/lean-toolchain)" --no-modify-path
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Check Unused Code
-        run: |
-          swa unused Sources \
-            --mode reachability \
-            --min-confidence high \
-            --exclude-paths Tests/* \
-            --exclude-enum-cases \
-            --format text
-        continue-on-error: true
+      - name: Check the models
+        run: Scripts/formal.sh
 
   # ============================================================================
   # STAGE 2: Build & Test
@@ -138,12 +86,7 @@ jobs:
   test:
     name: Test
     runs-on: macos-26
-    needs: [format-check, duplicates-check, unused-check]
-    if: |
-      always() &&
-      needs.format-check.result == 'success' &&
-      (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped') &&
-      (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped')
+    needs: [format-check, static-analysis, formal]
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -206,10 +149,33 @@ jobs:
           retention-days: 30
         continue-on-error: true
 
+  test-release:
+    name: Test (release, optimized)
+    # Shipping builds are optimized, and the performance-sensitive tests assert on optimized code, so the
+    # suite also runs there. @testable needs the flag; `swift build --build-tests -c release` does not work.
+    runs-on: macos-26
+    needs: [format-check, static-analysis, formal]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Cache SPM Dependencies
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .build
+          key: spm-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-release-${{ runner.os }}-
+
+      - name: Run Tests
+        run: swift test -c release --enable-testable-imports
+
   build-platforms:
     name: Build (${{ matrix.platform }})
     runs-on: macos-26
-    needs: test
+    needs: [test, test-release]
     strategy:
       fail-fast: false
       matrix:
