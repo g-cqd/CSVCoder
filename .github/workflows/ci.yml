@@ -206,13 +206,17 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
 
+      # Xcode 26.6 builds package dependencies with -suppress-warnings, and Aemi's targets also pass
+      # -warnings-as-errors, which the driver rejects ("conflicting options"). Keeping warnings on for
+      # dependencies removes the conflict; the other variant tried, SWIFT_TREAT_WARNINGS_AS_ERRORS=NO, did not.
       - name: Build for ${{ matrix.platform }}
         run: |
           xcodebuild build \
             -scheme CSVCoder \
             -destination '${{ matrix.destination }}' \
             -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_SUPPRESS_WARNINGS=NO
 
   # ============================================================================
   # STAGE 3: Prepare Release, Documentation (after tests)
