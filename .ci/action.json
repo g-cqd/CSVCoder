@@ -52,5 +52,15 @@
   ],
   "quality": {
     "discipline": {}
-  }
+  },
+  "commands": [
+    {
+      "id": "tla-models",
+      "title": "Verification · TLA+ Models",
+      "tla": {
+        "models": "Formal"
+      },
+      "after": "macos-release"
+    }
+  ]
 }

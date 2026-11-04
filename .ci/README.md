@@ -12,7 +12,8 @@ executable reads `sysctlbyname`), so there is no Linux leg.
 The platform builds use the device SDKs: aemi's `CAemiCPU` does not build for a simulator yet (its `timingsafe.h`
 exists in every device SDK and in no simulator SDK).
 
-The workflow's own jobs: the TLA+ and Lean models (`Scripts/formal.sh`), documentation (validated on every run,
+The TLA+ models run after the macOS release tests (the `tla-models` command: `Formal/*.cfg` must hold,
+`Formal/*.buggy.cfg` must be refuted). The workflow's own jobs: the Lean proofs (`Scripts/formal.sh lean`), documentation (validated on every run,
 published to GitHub Pages from main), and, when `.version` names a version without a tag, the release with its
 benchmarks.
 

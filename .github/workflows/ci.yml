@@ -36,14 +36,15 @@ jobs:
   # checks on a developer's machine. The jobs after it are this package's own: release, benchmarks and documentation.
   ci:
     name: Checks
-    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@c930444a6f6f462ddce3fbad7df9f8e2acc3e04b # swift-ci c930444
+    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@e33bcf9ab71a43f4decd5a100c8a78b96c02a87a # swift-ci e33bcf9
     permissions:
       contents: write # reusable publish permission; releases are this workflow's own jobs
 
   formal:
-    name: Verification · TLA+ & Lean · Linux
-    # Re-checks Formal/: the streaming protocol in TLC (the broken design must still deadlock, the shipped one
-    # must hold) and the SWAR proofs in Lean. Pinned in Scripts/formal.sh and Formal/lean-toolchain.
+    name: Verification · Lean · Linux
+    # Re-checks the SWAR proofs in Formal/ with Lean, pinned in Formal/lean-toolchain. The TLA+ models (the broken
+    # streaming design must be refuted, the shipped one must hold) are swift-ci's `tla-models` command, after the
+    # macOS release tests.
     runs-on: ubuntu-latest
     steps:
       - name: Setup · Check Out Sources
@@ -57,8 +58,8 @@ jobs:
           sh elan-init.sh -y --default-toolchain "$(cat Formal/lean-toolchain)" --no-modify-path
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Verification · Check the Models
-        run: Scripts/formal.sh
+      - name: Verification · Check the Proofs
+        run: Scripts/formal.sh lean
 
   prepare-release:
     name: Release · Prepare
