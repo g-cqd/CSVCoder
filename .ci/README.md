@@ -9,8 +9,8 @@ tests (the performance-sensitive tests assert on optimized code), and `xcodebuil
 watchOS and visionOS. The sanitizers run nightly or manually. CSVCoder is an Apple-platforms library (its benchmark
 executable reads `sysctlbyname`), so there is no Linux leg.
 
-The platform builds use the device SDKs: aemi's `CAemiCPU` does not build for a simulator yet (its `timingsafe.h`
-exists in every device SDK and in no simulator SDK).
+The platform builds use the simulator SDKs, as before the migration (aemi builds for them since 15217a0, where
+`CAemiCPU` checks for `timingsafe.h`, which only the device SDKs have).
 
 The TLA+ models run after the macOS release tests (the `tla-models` command: `Formal/*.cfg` must hold,
 `Formal/*.buggy.cfg` must be refuted). The workflow's own jobs: the Lean proofs (`Scripts/formal.sh lean`), documentation (validated on every run,

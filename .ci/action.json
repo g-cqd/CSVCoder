@@ -35,19 +35,23 @@
   },
   "platforms": [
     {
-      "name": "iOS"
+      "name": "iOS",
+      "destination": "generic/platform=iOS Simulator"
     },
     {
       "name": "macOS"
     },
     {
-      "name": "tvOS"
+      "name": "tvOS",
+      "destination": "generic/platform=tvOS Simulator"
     },
     {
-      "name": "watchOS"
+      "name": "watchOS",
+      "destination": "generic/platform=watchOS Simulator"
     },
     {
-      "name": "visionOS"
+      "name": "visionOS",
+      "destination": "generic/platform=visionOS Simulator"
     }
   ],
   "quality": {
