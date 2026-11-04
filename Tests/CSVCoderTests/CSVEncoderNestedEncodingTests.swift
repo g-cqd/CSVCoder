@@ -151,7 +151,7 @@ struct CSVEncoderNestedEncodingTests {
         let config = CSVEncoder.Configuration(nestedTypeEncodingStrategy: .error)
         let encoder = CSVEncoder(configuration: config)
 
-        #expect(throws: (any Error).self) {
+        #expect(throws: CSVEncodingError.self) {
             _ = try encoder.encodeToString(records)
         }
     }

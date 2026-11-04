@@ -1,0 +1,19 @@
+# CI
+
+`.github/workflows/ci.yml` calls the family's pinned swift-ci workflow (`Checks`), configured by `action.json`; run
+the same checks here with `.ci/swift-ci local`.
+
+Each change runs quality (swift-format and SwiftLint, strict; the shipped-library discipline; deadwood, dolly and
+arcleak against `baselines/`), the macOS debug tests on Swift 6.4.1 and 6.3.3 (the manifest's floor), the release
+tests (the performance-sensitive tests assert on optimized code), and `xcodebuild` builds for iOS, macOS, tvOS,
+watchOS and visionOS. The sanitizers run nightly or manually. CSVCoder is an Apple-platforms library (its benchmark
+executable reads `sysctlbyname`), so there is no Linux leg.
+
+The platform builds use the device SDKs: aemi's `CAemiCPU` does not build for a simulator yet (its `timingsafe.h`
+exists in every device SDK and in no simulator SDK).
+
+The workflow's own jobs: the TLA+ and Lean models (`Scripts/formal.sh`), documentation (validated on every run,
+published to GitHub Pages from main), and, when `.version` names a version without a tag, the release with its
+benchmarks.
+
+`baselines/dolly.json` accepts the 281 clone findings that predate this configuration; only a new one fails.

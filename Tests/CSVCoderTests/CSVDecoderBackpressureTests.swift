@@ -132,8 +132,9 @@ struct CSVDecoderBackpressureTests {
     @Test("A missing file fails the stream instead of hanging", .timeLimit(.minutes(1)))
     func missingFileFails() async {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".csv")
-        await #expect(throws: (any Error).self) {
+        let error = await #expect(throws: CocoaError.self) {
             for try await _ in CSVDecoder().decodeBatchedWithBackpressure(NameAge.self, from: url) {}
         }
+        #expect(error?.code == .fileReadNoSuchFile)
     }
 }

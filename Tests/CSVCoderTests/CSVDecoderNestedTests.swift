@@ -138,7 +138,7 @@ struct CSVDecoderNestedTests {
         let decoder = CSVDecoder(configuration: config)
 
         // With .error strategy, decoding nested types should fail
-        #expect(throws: (any Error).self) {
+        #expect(throws: CSVDecodingError.self) {
             _ = try decoder.decode([PersonWithAddress].self, from: csv)
         }
     }

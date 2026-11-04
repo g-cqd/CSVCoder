@@ -1,0 +1,56 @@
+{
+  "project": {
+    "linux": false,
+    "schemes": [
+      "CSVCoder"
+    ]
+  },
+  "swift": {
+    "versions": [
+      "6.4.1",
+      "6.3.3"
+    ],
+    "matrix": [
+      "macos-debug"
+    ],
+    "xcode": "26.6"
+  },
+  "checks": {
+    "macos-release": [
+      "push",
+      "pull-request",
+      "merge-queue",
+      "tag",
+      "dispatch",
+      "nightly"
+    ],
+    "platforms": [
+      "push",
+      "pull-request",
+      "merge-queue",
+      "tag",
+      "dispatch",
+      "nightly"
+    ]
+  },
+  "platforms": [
+    {
+      "name": "iOS"
+    },
+    {
+      "name": "macOS"
+    },
+    {
+      "name": "tvOS"
+    },
+    {
+      "name": "watchOS"
+    },
+    {
+      "name": "visionOS"
+    }
+  ],
+  "quality": {
+    "discipline": {}
+  }
+}
