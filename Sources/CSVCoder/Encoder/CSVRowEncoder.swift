@@ -364,6 +364,7 @@ nonisolated struct CSVKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingConta
     }
 
     /// Shared write path for optional `FixedWidthInteger` keyed encoding.
+    ///
     /// `nil` becomes the empty CSV field, matching Swift's synthesized
     /// `encodeIfPresent` semantics for missing data.
     private mutating func encodeIntegerIfPresent<T: FixedWidthInteger>(_ value: T?, forKey key: Key) {

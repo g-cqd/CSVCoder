@@ -268,9 +268,10 @@ public struct CSVRowMacro: MemberMacro, ExtensionMacro {
     }
 
     /// Returns the `CSVDirectFieldDecoder.*` invocation that decodes the
-    /// given property type at the supplied column offset. `propertyName` is
-    /// used both for the `key` parameter (error locations) and for the
-    /// stored-property assignment on the caller side.
+    /// given property type at the supplied column offset.
+    ///
+    /// `propertyName` is used both for the `key` parameter (error locations)
+    /// and for the stored-property assignment on the caller side.
     private static func directDecodeCall(
         forType type: String,
         isOptional: Bool,

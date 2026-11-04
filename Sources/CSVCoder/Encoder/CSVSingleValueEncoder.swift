@@ -207,9 +207,10 @@ nonisolated struct CSVSingleValueEncodingContainer: SingleValueEncodingContainer
         codingPath.last?.stringValue ?? ""
     }
 
-    /// Shared write path for every `FixedWidthInteger`. `String(value)` uses
-    /// the type's own `LosslessStringConvertible` conformance, identical to
-    /// the per-type bodies it replaces.
+    /// Shared write path for every `FixedWidthInteger`.
+    ///
+    /// `String(value)` uses the type's own `LosslessStringConvertible`
+    /// conformance, identical to the per-type bodies it replaces.
     private mutating func encodeInteger<T: FixedWidthInteger>(_ value: T) {
         storage.setValue(String(value), forKey: currentKey)
     }
