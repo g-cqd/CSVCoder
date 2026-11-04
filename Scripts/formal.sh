@@ -34,13 +34,19 @@ if [ ! -f "$JAR" ]; then
 fi
 command -v java >/dev/null 2>&1 || fail "java is not installed" 2
 
+# TLC names its state directory after the current second, beside the model, and aborts when it exists: the control
+# fails within a second, so its twin could start in the same second and be reported as broken. Each run gets a state
+# directory of its own, outside the repository.
+STATES=$(mktemp -d)
+trap 'rm -rf "$STATES"' EXIT
+
 # tlc MODEL EXPECTATION: EXPECTATION is `pass` or a phrase TLC must print.
 tlc() {
     model=$1 expect=$2
     printf '==> TLC %s (expects %s)\n' "$model" "$expect"
     out=$(mktemp)
     # TLC exits non-zero on a violation, so judge by its report, not its status.
-    java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -nowarning -workers 1 \
+    java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -nowarning -workers 1 -metadir "$STATES/$model" \
         -config "Formal/$model.cfg" "Formal/$model.tla" >"$out" 2>&1 || true
     if [ "$expect" = pass ]; then
         grep -q "Model checking completed. No error has been found." "$out" \
