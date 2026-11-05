@@ -19,7 +19,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "60bbc3e4ff29107e13de69931456f29ae5375ffa"),
+        .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "2b2dbe6d0bc3dcb5ec48093c02a2e279d03a37a8"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.5.0"),
         .package(url: "https://github.com/google/swift-benchmark", from: "0.1.2"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.1"..<"700.0.0"),
@@ -30,6 +30,7 @@ let package = Package(
             name: "CSVCoder",
             dependencies: [
                 "CSVCoderMacros",
+                .product(name: "AemiKernel", package: "aemi"),
                 .product(name: "AemiKernels", package: "aemi"),
             ]
         ),

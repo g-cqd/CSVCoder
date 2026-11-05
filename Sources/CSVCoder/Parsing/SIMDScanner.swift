@@ -7,6 +7,7 @@
 //  Includes SWAR (SIMD Within A Register) for 8-byte operations on smaller fields.
 //
 
+import AemiKernel
 import Foundation
 
 // MARK: - SWARUtils
@@ -22,29 +23,20 @@ enum SWARUtils: Sendable {
         UInt64(byte) &* 0x0101_0101_0101_0101
     }
 
-    /// Returns a mask whose lowest set byte is the first byte equal to the target.
+    /// Returns a mask whose lowest set byte is the first byte equal to the target: aemi's `SWAR.equals`.
     ///
-    /// Uses the classic "SWAR zero-byte detection" algorithm. It is exact for "is there a match"
-    /// and for the lowest match, and nothing else: the borrow out of a zero byte also flags the byte
-    /// above it when that byte is 0x01, so do not count its set bits. Use ``exactMatchMask(_:target:)``
-    /// to count.
+    /// Exact for "is there a match" and for the lowest match, and nothing else: the borrow out of a zero byte also flags the
+    /// byte above it when that byte is 0x01, so do not count its set bits. Use ``exactMatchMask(_:target:)`` to count.
     @inline(__always)
     static func findByte(_ word: UInt64, target: UInt8) -> UInt64 {
-        let broadcast = broadcast(target)
-        let xored = word ^ broadcast
-        // Zero bytes in xored become 0x80 in result
-        return (xored &- 0x0101_0101_0101_0101) & ~xored & 0x8080_8080_8080_8080
+        SWAR.equals(word, target)
     }
 
-    /// Returns a mask with the high bit set in exactly the bytes equal to the target.
-    ///
-    /// The low seven bits are added without a carry out of any byte and the high bit is OR-ed back
-    /// in, so no byte influences its neighbour. One operation dearer than ``findByte(_:target:)``.
+    /// Returns a mask with the high bit set in exactly the bytes equal to the target: aemi's `SWAR.equalLanes` (no byte
+    /// influences its neighbour; one operation dearer than ``findByte(_:target:)``).
     @inline(__always)
     static func exactMatchMask(_ word: UInt64, target: UInt8) -> UInt64 {
-        let xored = word ^ broadcast(target)
-        let low7: UInt64 = 0x7F7F_7F7F_7F7F_7F7F
-        return ~(((xored & low7) &+ low7) | xored) & 0x8080_8080_8080_8080
+        SWAR.equalLanes(word, target)
     }
 
     /// Checks if any byte in the word matches any of the four targets.
