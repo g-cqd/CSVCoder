@@ -19,7 +19,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "528804643f693104656a02449cfa59131556f616"),
+        .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "e30aad82377cbea62171cc722a88041e97021db2"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.5.0"),
         .package(url: "https://github.com/google/swift-benchmark", from: "0.1.2"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.1"..<"700.0.0"),
