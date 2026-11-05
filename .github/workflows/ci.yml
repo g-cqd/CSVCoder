@@ -36,7 +36,7 @@ jobs:
   # checks on a developer's machine. The jobs after it are this package's own: release, benchmarks and documentation.
   ci:
     name: Checks
-    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@e33bcf9ab71a43f4decd5a100c8a78b96c02a87a # swift-ci e33bcf9
+    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@9c17e1df69c73bc602160caee5dd10257d6de2c4 # swift-ci 9c17e1d
     permissions:
       contents: write # reusable publish permission; releases are this workflow's own jobs
 
