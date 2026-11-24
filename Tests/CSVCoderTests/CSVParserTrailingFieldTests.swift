@@ -3,13 +3,15 @@ import Testing
 
 @testable import CSVCoder
 
-/// A delimiter ends a field, so the data that ends on one has an empty field after it (RFC 4180: `a,` is two fields). The parser stopped at
-/// the end of the data and dropped it, when there was no line ending to end the row (found 2026-11-24 by a round-trip property in Sunset).
+/// The last field after a final delimiter.
+///
+/// A delimiter ends a field, so data that ends on one has an empty field after it (RFC 4180: `a,` is two fields). The parser stopped at the
+/// end of the data and dropped it when no line ending ended the row (found 2026-11-24 by a round-trip property in Sunset).
 @Suite("The last field after a final delimiter")
 struct CSVParserTrailingFieldTests {
     private func rows(_ text: String) -> [[String]] {
         CSVParser.parse(data: Data(text.utf8), delimiter: 0x2C) { parser in
-            parser.map { row in (0 ..< row.count).map { row.string(at: $0) ?? "?" } }
+            parser.map { row in (0..<row.count).map { row.string(at: $0) ?? "?" } }
         }
     }
 
