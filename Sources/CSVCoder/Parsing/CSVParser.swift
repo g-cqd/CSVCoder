@@ -131,6 +131,11 @@ public struct CSVParser: Sequence {
                 rowEnded = result.isRowEnd
             }
 
+            // The data ended right after a delimiter: a delimiter ends a field, so one more, empty, follows it (`a,` is two fields).
+            if !rowEnded {
+                fields.append(CSVRowView.Field(start: Int32(offset), length: 0, flags: 0))
+            }
+
             // Handle trailing empty line (EOF after newline)
             if fields.isEmpty || (fields.count == 1 && fields[0].length == 0 && offset >= parser.buffer.count) {
                 if offset >= parser.buffer.count, fields.isEmpty {
