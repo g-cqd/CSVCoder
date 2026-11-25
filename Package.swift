@@ -25,7 +25,6 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.1"..<"700.0.0"),
     ],
     targets: [
-        // Main library
         .target(
             name: "CSVCoder",
             dependencies: [
@@ -35,7 +34,6 @@ let package = Package(
             ]
         ),
 
-        // Macro implementation (compiler plugin)
         .macro(
             name: "CSVCoderMacros",
             dependencies: [
@@ -47,13 +45,11 @@ let package = Package(
             ]
         ),
 
-        // Shared test fixtures
         .target(
             name: "CSVCoderTestFixtures",
             dependencies: []
         ),
 
-        // Tests
         .testTarget(
             name: "CSVCoderTests",
             dependencies: ["CSVCoder", "CSVCoderTestFixtures"]
@@ -66,7 +62,6 @@ let package = Package(
             ]
         ),
 
-        // Benchmarks
         .executableTarget(
             name: "CSVCoderBenchmarks",
             dependencies: [
