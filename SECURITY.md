@@ -36,3 +36,16 @@ CSVCoder is designed to handle untrusted CSV input safely. Defences in depth:
 - **No dynamic code execution**, **no network access**, **no implicit
   file system writes** — file output occurs only through the explicit
   `encode(_:to:URL)` family.
+
+## Response targets (SLAs)
+
+| Milestone | Target |
+| --- | --- |
+| Private acknowledgement | Within **3 working days** |
+| Initial triage & severity confirmation | Within **7 calendar days** |
+| Fix & advisory — **Critical** | Within **7 calendar days** |
+| Fix & advisory — **High** | Within **30 calendar days** |
+| Fix — **Medium / Low** | Next scheduled release |
+
+Security fixes in released versions are published with a GitHub Security Advisory (and CVE identifier where applicable)
+and named in the release notes.
