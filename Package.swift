@@ -31,6 +31,9 @@ let package = Package(
                 "CSVCoderMacros",
                 .product(name: "AemiKernel", package: "aemi"),
                 .product(name: "AemiKernels", package: "aemi"),
+            ],
+            swiftSettings: [
+                .strictMemorySafety()
             ]
         ),
 

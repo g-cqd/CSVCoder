@@ -39,12 +39,12 @@ enum FieldScan {
         let head = min(count, inlineBytes)
         var index = 0
         while index < head {
-            let byte = base[index]
+            let byte = unsafe base[index]
             if byte == delimiter || byte == cr || byte == lf || byte == quote { return index }
             index += 1
         }
         guard count > head else { return count }
-        return head
+        return unsafe head
             + AemiKernels.firstIndexOfAny(
                 base: base + head, count: count - head, delimiter, cr, lf, quote, quote)
     }
@@ -61,16 +61,17 @@ enum FieldScan {
         let head = min(count, swarBytes)
         var offset = 0
         while offset + 8 <= head {
-            if SWARUtils.hasAnyByte(SWARUtils.load(base + offset), quote, delimiter, cr, lf) { return true }
+            if unsafe SWARUtils.hasAnyByte(SWARUtils.load(base + offset), quote, delimiter, cr, lf) { return true }
             offset += 8
         }
         while offset < head {
-            let byte = base[offset]
+            let byte = unsafe base[offset]
             if byte == delimiter || byte == cr || byte == lf || byte == quote { return true }
             offset += 1
         }
         guard count > head else { return false }
-        return AemiKernels.firstIndexOfAny(base: base + head, count: count - head, delimiter, cr, lf, quote, quote)
+        return unsafe AemiKernels.firstIndexOfAny(
+            base: base + head, count: count - head, delimiter, cr, lf, quote, quote)
             < count - head
     }
 
@@ -82,10 +83,10 @@ enum FieldScan {
         let head = min(count, inlineBytes)
         var index = 0
         while index < head {
-            if base[index] == quote { return index }
+            if unsafe base[index] == quote { return index }
             index += 1
         }
         guard count > head else { return count }
-        return head + AemiKernels.firstIndexOfByte(base: base + head, count: count - head, needle: quote)
+        return unsafe head + AemiKernels.firstIndexOfByte(base: base + head, count: count - head, needle: quote)
     }
 }

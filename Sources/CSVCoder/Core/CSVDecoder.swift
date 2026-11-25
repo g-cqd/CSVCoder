@@ -539,11 +539,11 @@ public final class CSVDecoder: Sendable {
         // standard path.
         let directType = T.self as? any CSVDirectDecodable.Type
 
-        return try effectiveData.withUnsafeBytes { buffer in
-            guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else { return [] }
+        return try unsafe effectiveData.withUnsafeBytes { buffer in
+            guard let bytes = unsafe CSVUtilities.adjustedBuffer(from: buffer) else { return [] }
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
 
-            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
+            let parser = unsafe CSVParser(buffer: bytes, delimiter: delimiter)
             var iterator = parser.makeIterator()
             let isStrict = configuration.parsingMode == .strict
             let expectedFieldCount = configuration.expectedFieldCount

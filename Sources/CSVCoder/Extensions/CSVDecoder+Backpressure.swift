@@ -159,10 +159,10 @@ extension CSVDecoder {
                     let totalBytes = data.count
 
                     // Estimate total rows using SIMD newline count
-                    let estimatedRows = data.withUnsafeBytes { buffer -> Int in
+                    let estimatedRows = unsafe data.withUnsafeBytes { buffer -> Int in
                         guard let baseAddress = buffer.baseAddress else { return 0 }
-                        let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
-                        return SIMDScanner.countNewlinesApprox(buffer: bytes, count: totalBytes)
+                        let bytes = unsafe baseAddress.assumingMemoryBound(to: UInt8.self)
+                        return unsafe SIMDScanner.countNewlinesApprox(buffer: bytes, count: totalBytes)
                     }
 
                     var producer = try CSVRowStreamProducer(data: data, configuration: configuration)

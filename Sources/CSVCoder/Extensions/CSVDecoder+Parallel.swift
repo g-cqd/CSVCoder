@@ -131,12 +131,12 @@ extension CSVDecoder {
             effectiveData = data
         }
 
-        return effectiveData.withUnsafeBytes { buffer in
-            guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else {
+        return unsafe effectiveData.withUnsafeBytes { buffer in
+            guard let bytes = unsafe CSVUtilities.adjustedBuffer(from: buffer) else {
                 return ([:], [])
             }
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
-            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
+            let parser = unsafe CSVParser(buffer: bytes, delimiter: delimiter)
 
             var allRows: [[String]] = []
             var headers: [String] = []

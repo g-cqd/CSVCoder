@@ -59,21 +59,21 @@ struct CSVRowStreamProducer: Sendable {
     /// at end of input.  Throws `CSVDecodingError.parsingError` if strict
     /// mode (or unterminated-quote enforcement) is violated.
     mutating func nextRow() throws -> [String]? {
-        try data.withUnsafeBytes { buffer -> [String]? in
+        try unsafe data.withUnsafeBytes { buffer -> [String]? in
             guard let baseAddress = buffer.baseAddress else { return nil }
-            let bytes = UnsafeBufferPointer(
+            let bytes = unsafe UnsafeBufferPointer(
                 start: baseAddress.assumingMemoryBound(to: UInt8.self),
                 count: buffer.count,
             )
 
             // Skip BOM on the very first call (sentinel offset == -1).
             if offset < 0 {
-                offset = CSVUtilities.bomOffset(in: bytes)
+                offset = unsafe CSVUtilities.bomOffset(in: bytes)
             }
 
             guard offset < bytes.count else { return nil }
 
-            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
+            let parser = unsafe CSVParser(buffer: bytes, delimiter: delimiter)
             var iterator = CSVParser.Iterator(parser: parser)
             iterator.offset = offset
 
@@ -142,10 +142,10 @@ struct CSVRowStreamProducer: Sendable {
             // silently substituting U+FFFD.  Unquoted fields can be validated
             // directly; quoted fields with escapes need to be unescaped first
             // and then re-validated.
-            let raw = view.getBytes(at: index)
+            let raw = unsafe view.getBytes(at: index)
             let field = view.fields[index]
             if !field.quoted || !field.hasEscapedQuote {
-                guard let str = String(bytes: raw, encoding: .utf8) else {
+                guard let str = unsafe String(bytes: raw, encoding: .utf8) else {
                     throw CSVDecodingError.parsingError(
                         "Invalid UTF-8 byte sequence in field",
                         line: rowIndex,

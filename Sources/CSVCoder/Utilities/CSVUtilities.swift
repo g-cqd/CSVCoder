@@ -33,9 +33,9 @@ enum CSVUtilities {
     @inline(__always)
     static func bomOffset(in bytes: UnsafeBufferPointer<UInt8>) -> Int {
         guard bytes.count >= 3,
-            bytes[0] == utf8BOM.0,
-            bytes[1] == utf8BOM.1,
-            bytes[2] == utf8BOM.2
+            unsafe bytes[0] == utf8BOM.0,
+            unsafe bytes[1] == utf8BOM.1,
+            unsafe bytes[2] == utf8BOM.2
         else {
             return 0
         }
@@ -50,9 +50,9 @@ enum CSVUtilities {
     @inline(__always)
     static func bomOffset(baseAddress: UnsafePointer<UInt8>, count: Int) -> Int {
         guard count >= 3,
-            baseAddress[0] == utf8BOM.0,
-            baseAddress[1] == utf8BOM.1,
-            baseAddress[2] == utf8BOM.2
+            unsafe baseAddress[0] == utf8BOM.0,
+            unsafe baseAddress[1] == utf8BOM.1,
+            unsafe baseAddress[2] == utf8BOM.2
         else {
             return 0
         }
@@ -165,15 +165,15 @@ enum CSVUtilities {
     static func adjustedBuffer(from buffer: UnsafeRawBufferPointer) -> UnsafeBufferPointer<UInt8>? {
         guard let baseAddress = buffer.baseAddress else { return nil }
 
-        let rawBytes = UnsafeBufferPointer(
+        let rawBytes = unsafe UnsafeBufferPointer(
             start: baseAddress.assumingMemoryBound(to: UInt8.self),
             count: buffer.count
         )
-        let startOffset = bomOffset(in: rawBytes)
+        let startOffset = unsafe bomOffset(in: rawBytes)
 
-        let adjustedBase = baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
+        let adjustedBase = unsafe baseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: startOffset)
         let adjustedCount = buffer.count - startOffset
-        return UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
+        return unsafe UnsafeBufferPointer(start: adjustedBase, count: adjustedCount)
     }
 }
 
@@ -201,8 +201,8 @@ enum CSVUnescaper: Sendable {
 
         // SWAR check for 8+ bytes: look for consecutive quotes
         while offset + 9 <= count {
-            let word = SWARUtils.load(buffer.advanced(by: offset))
-            let nextWord = SWARUtils.load(buffer.advanced(by: offset + 1))
+            let word = unsafe SWARUtils.load(buffer.advanced(by: offset))
+            let nextWord = unsafe SWARUtils.load(buffer.advanced(by: offset + 1))
 
             // Find quotes in both positions
             let quoteMask1 = SWARUtils.findByte(word, target: quote)
@@ -212,7 +212,7 @@ enum CSVUnescaper: Sendable {
             if quoteMask1 != 0, quoteMask2 != 0 {
                 // Check byte-by-byte in this region
                 for i in 0..<8 {
-                    if buffer[offset + i] == quote, buffer[offset + i + 1] == quote {
+                    if unsafe buffer[offset + i] == quote, unsafe buffer[offset + i + 1] == quote {
                         return true
                     }
                 }
@@ -222,7 +222,7 @@ enum CSVUnescaper: Sendable {
 
         // Scalar fallback for remainder
         while offset < count - 1 {
-            if buffer[offset] == quote, buffer[offset + 1] == quote {
+            if unsafe buffer[offset] == quote, unsafe buffer[offset + 1] == quote {
                 return true
             }
             offset += 1
@@ -245,8 +245,8 @@ enum CSVUnescaper: Sendable {
         let count = buffer.count
 
         // Fast path: no escaped quotes
-        if !hasEscapedQuotes(buffer: baseAddress, count: count) {
-            return String(decoding: buffer, as: UTF8.self)
+        if unsafe !hasEscapedQuotes(buffer: baseAddress, count: count) {
+            return unsafe String(decoding: buffer, as: UTF8.self)
         }
 
         // Slow path: build unescaped result
@@ -255,8 +255,8 @@ enum CSVUnescaper: Sendable {
 
         var i = 0
         while i < count {
-            let byte = baseAddress[i]
-            if byte == quote, i + 1 < count, baseAddress[i + 1] == quote {
+            let byte = unsafe baseAddress[i]
+            if byte == quote, i + 1 < count, unsafe baseAddress[i + 1] == quote {
                 // Escaped quote: append single quote, skip both
                 result.append(quote)
                 i += 2
@@ -284,17 +284,17 @@ enum CSVUnescaper: Sendable {
 
         // For UTF-8, use optimized path
         if encoding == .utf8 {
-            return unescape(buffer: buffer)
+            return unsafe unescape(buffer: buffer)
         }
 
         // For other encodings, convert first then unescape
-        let data = Data(bytes: baseAddress, count: count)
+        let data = unsafe Data(bytes: baseAddress, count: count)
         guard let str = String(data: data, encoding: encoding) else {
             return nil
         }
 
         // Check if unescaping is needed
-        if !hasEscapedQuotes(buffer: baseAddress, count: count) {
+        if unsafe !hasEscapedQuotes(buffer: baseAddress, count: count) {
             return str
         }
 
@@ -323,7 +323,7 @@ enum CSVFieldEscaper: Sendable {
     /// - Returns: `true` if the field contains the delimiter, a quote, CR or LF.
     @inline(__always)
     static func needsQuoting(buffer: UnsafePointer<UInt8>, count: Int, delimiter: UInt8) -> Bool {
-        FieldScan.containsStructural(buffer, count: count, delimiter: delimiter)
+        unsafe FieldScan.containsStructural(buffer, count: count, delimiter: delimiter)
     }
 
     /// Checks if a field needs quoting per RFC 4180.
@@ -335,7 +335,7 @@ enum CSVFieldEscaper: Sendable {
     static func needsQuoting(_ bytes: [UInt8], delimiter: UInt8) -> Bool {
         bytes.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return false }
-            return needsQuoting(buffer: base, count: buffer.count, delimiter: delimiter)
+            return unsafe needsQuoting(buffer: base, count: buffer.count, delimiter: delimiter)
         }
     }
 
@@ -357,12 +357,12 @@ enum CSVFieldEscaper: Sendable {
             }
 
             let count = utf8.count
-            let needsQuotes = needsQuoting(buffer: baseAddress, count: count, delimiter: delimiter)
+            let needsQuotes = unsafe needsQuoting(buffer: baseAddress, count: count, delimiter: delimiter)
 
             if needsQuotes {
                 buffer.append(quote)
                 for i in 0..<count {
-                    let byte = baseAddress[i]
+                    let byte = unsafe baseAddress[i]
                     if byte == quote {
                         buffer.append(quote)  // Escape quote by doubling
                     }
@@ -370,7 +370,7 @@ enum CSVFieldEscaper: Sendable {
                 }
                 buffer.append(quote)
             } else {
-                buffer.append(contentsOf: UnsafeBufferPointer(start: baseAddress, count: count))
+                unsafe buffer.append(contentsOf: UnsafeBufferPointer(start: baseAddress, count: count))
             }
             return true
         }

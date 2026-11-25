@@ -107,14 +107,14 @@ extension CSVDecoder {
         columnOrder: [String]?,
         continuation: AsyncThrowingStream<T, Error>.Continuation,
     ) throws {
-        data.withUnsafeBytes { buffer in
-            guard let bytes = CSVUtilities.adjustedBuffer(from: buffer) else {
+        unsafe data.withUnsafeBytes { buffer in
+            guard let bytes = unsafe CSVUtilities.adjustedBuffer(from: buffer) else {
                 continuation.finish()
                 return
             }
             let delimiter = configuration.delimiter.asciiValue ?? 0x2C
 
-            let parser = CSVParser(buffer: bytes, delimiter: delimiter)
+            let parser = unsafe CSVParser(buffer: bytes, delimiter: delimiter)
             var iterator = parser.makeIterator()
             var headers: [String]?
             var headerMap: [String: Int]?

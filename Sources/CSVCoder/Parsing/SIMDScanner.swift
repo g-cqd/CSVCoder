@@ -60,7 +60,7 @@ enum SWARUtils: Sendable {
     /// Uses unaligned load to avoid alignment requirements.
     @inline(__always)
     static func load(_ buffer: UnsafePointer<UInt8>) -> UInt64 {
-        UnsafeRawPointer(buffer).loadUnaligned(as: UInt64.self)
+        unsafe UnsafeRawPointer(buffer).loadUnaligned(as: UInt64.self)
     }
 }
 
@@ -71,7 +71,7 @@ enum SWARUtils: Sendable {
 /// Package-internal for use by SIMDScanner and its extensions.
 @inline(__always)
 func loadSIMD64(from buffer: UnsafePointer<UInt8>) -> SIMD64<UInt8> {
-    UnsafeRawPointer(buffer).loadUnaligned(as: SIMD64<UInt8>.self)
+    unsafe UnsafeRawPointer(buffer).loadUnaligned(as: SIMD64<UInt8>.self)
 }
 
 // MARK: - SIMDScanner
@@ -128,7 +128,7 @@ struct SIMDScanner: Sendable {
 
         // Process 64 bytes at a time using SIMD
         while offset + 64 <= count {
-            let chunk = loadSIMD64(from: buffer.advanced(by: offset))
+            let chunk = unsafe loadSIMD64(from: buffer.advanced(by: offset))
 
             // Create comparison masks
             let quoteVec = SIMD64<UInt8>(repeating: quote)
@@ -152,7 +152,7 @@ struct SIMDScanner: Sendable {
             // silicon.  Keep the loop for portability; revisit when stdlib
             // gains a stable `bitPattern` accessor.
             for i in 0..<64 where structuralMask[i] {
-                positions.append(StructuralPosition(offset: offset + i, byte: buffer[offset + i]))
+                unsafe positions.append(StructuralPosition(offset: offset + i, byte: buffer[offset + i]))
             }
 
             offset += 64
@@ -160,11 +160,11 @@ struct SIMDScanner: Sendable {
 
         // SWAR fallback for 8-63 remaining bytes
         while offset + 8 <= count {
-            let word = SWARUtils.load(buffer.advanced(by: offset))
+            let word = unsafe SWARUtils.load(buffer.advanced(by: offset))
             if SWARUtils.hasAnyByte(word, quote, delimiter, cr, lf) {
                 // Found structural byte, scan individually
                 for i in 0..<8 {
-                    let byte = buffer[offset + i]
+                    let byte = unsafe buffer[offset + i]
                     if byte == quote || byte == delimiter || byte == cr || byte == lf {
                         positions.append(StructuralPosition(offset: offset + i, byte: byte))
                     }
@@ -175,7 +175,7 @@ struct SIMDScanner: Sendable {
 
         // Scalar fallback for remaining 0-7 bytes
         while offset < count {
-            let byte = buffer[offset]
+            let byte = unsafe buffer[offset]
             if byte == quote || byte == delimiter || byte == cr || byte == lf {
                 positions.append(StructuralPosition(offset: offset, byte: byte))
             }
@@ -202,7 +202,7 @@ struct SIMDScanner: Sendable {
         startOffset: Int = 0,
     ) -> RowBoundaries {
         // Fast path: scan for structural characters
-        let structural = scanStructural(buffer: buffer, count: count, delimiter: delimiter)
+        let structural = unsafe scanStructural(buffer: buffer, count: count, delimiter: delimiter)
 
         var rowStarts: [Int] = [startOffset]
         var inQuotes = false
@@ -216,12 +216,12 @@ struct SIMDScanner: Sendable {
                 var endOffset = pos.offset
 
                 // Handle CRLF as single newline
-                if pos.byte == cr, pos.offset + 1 < count, buffer[pos.offset + 1] == lf {
+                if pos.byte == cr, pos.offset + 1 < count, unsafe buffer[pos.offset + 1] == lf {
                     endOffset = pos.offset + 1
                 }
 
                 // Skip if this is the LF of a CRLF we already processed
-                if pos.byte == lf, pos.offset > 0, buffer[pos.offset - 1] == cr {
+                if pos.byte == lf, pos.offset > 0, unsafe buffer[pos.offset - 1] == cr {
                     continue
                 }
 
@@ -258,7 +258,7 @@ struct SIMDScanner: Sendable {
 
         // Process 64 bytes at a time using SIMD
         while offset + 64 <= count {
-            let chunk = loadSIMD64(from: buffer.advanced(by: offset))
+            let chunk = unsafe loadSIMD64(from: buffer.advanced(by: offset))
             let lfVec = SIMD64<UInt8>(repeating: lf)
             let mask = chunk .== lfVec
 
@@ -271,7 +271,7 @@ struct SIMDScanner: Sendable {
 
         // SWAR fallback for 8-63 remaining bytes
         while offset + 8 <= count {
-            let word = SWARUtils.load(buffer.advanced(by: offset))
+            let word = unsafe SWARUtils.load(buffer.advanced(by: offset))
             let lfMask = SWARUtils.exactMatchMask(word, target: lf)
             // Count high bits set (each match has 0x80 pattern)
             total += (lfMask / 0x80).nonzeroBitCount
@@ -280,7 +280,7 @@ struct SIMDScanner: Sendable {
 
         // Scalar fallback for remaining 0-7 bytes
         while offset < count {
-            if buffer[offset] == lf {
+            if unsafe buffer[offset] == lf {
                 total += 1
             }
             offset += 1

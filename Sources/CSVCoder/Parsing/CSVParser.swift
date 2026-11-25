@@ -62,6 +62,7 @@ import Foundation
 ///
 /// `CSVParser` and its iterator are not `Sendable`. The parser borrows
 /// the underlying buffer and must be used within the same isolation context.
+@safe
 public struct CSVParser: Sequence {
     // MARK: Lifecycle
 
@@ -78,7 +79,7 @@ public struct CSVParser: Sequence {
         buffer: UnsafeBufferPointer<UInt8>,
         delimiter: UInt8,
     ) {
-        self.buffer = buffer
+        unsafe self.buffer = unsafe buffer
         self.delimiter = delimiter
     }
 
@@ -96,7 +97,7 @@ public struct CSVParser: Sequence {
 
         /// Advances to and returns the next row, or `nil` if no more rows exist.
         public mutating func next() -> CSVRowView? {
-            guard offset < parser.buffer.count else {
+            guard unsafe offset < parser.buffer.count else {
                 return nil
             }
 
@@ -107,7 +108,7 @@ public struct CSVParser: Sequence {
 
             var rowEnded = false
 
-            while !rowEnded && offset < parser.buffer.count {
+            while unsafe !rowEnded && offset < parser.buffer.count {
                 // Parse Field
                 let result = parser.parseField(from: offset)
                 var flags: UInt8 = 0
@@ -137,8 +138,8 @@ public struct CSVParser: Sequence {
             }
 
             // Handle trailing empty line (EOF after newline)
-            if fields.isEmpty || (fields.count == 1 && fields[0].length == 0 && offset >= parser.buffer.count) {
-                if offset >= parser.buffer.count, fields.isEmpty {
+            if unsafe fields.isEmpty || (fields.count == 1 && fields[0].length == 0 && offset >= parser.buffer.count) {
+                if unsafe offset >= parser.buffer.count, fields.isEmpty {
                     return nil
                 }
                 // If it's a single empty field at EOF, usually we skip it if it was just a newline
@@ -147,7 +148,7 @@ public struct CSVParser: Sequence {
                 }
             }
 
-            return CSVRowView(
+            return unsafe CSVRowView(
                 buffer: parser.buffer,
                 fields: fields,
                 hasUnterminatedQuote: hasUnterminatedQuote,
@@ -181,8 +182,8 @@ public struct CSVParser: Sequence {
         delimiter: UInt8 = 0x2C,
         body: (CSVParser) throws -> R,
     ) rethrows -> R {
-        try data.withUnsafeBytes { buffer in
-            let parser = CSVParser(
+        try unsafe data.withUnsafeBytes { buffer in
+            let parser = unsafe CSVParser(
                 buffer: buffer.bindMemory(to: UInt8.self),
                 delimiter: delimiter,
             )
@@ -235,12 +236,12 @@ public struct CSVParser: Sequence {
     /// Parses a single field starting at the given offset.
     @inline(__always)
     fileprivate func parseField(from startOffset: Int) -> FieldResult {
-        let count = buffer.count
+        let count = unsafe buffer.count
         guard startOffset < count else {
             return makeEmptyFieldResult(at: startOffset)
         }
 
-        guard buffer[startOffset] == CSVParser.quote else {
+        guard unsafe buffer[startOffset] == CSVParser.quote else {
             return parseUnquotedField(from: startOffset, count: count)
         }
         return parseQuotedField(from: startOffset, count: count)
@@ -269,13 +270,13 @@ public struct CSVParser: Sequence {
         at cursor: Int,
         count: Int,
     ) -> (nextOffset: Int, isRowEnd: Bool) {
-        let byte = buffer[cursor]
+        let byte = unsafe buffer[cursor]
         if byte == delimiter {
             return (cursor + 1, false)
         } else if byte == CSVParser.lf {
             return (cursor + 1, true)
         } else if byte == CSVParser.cr {
-            let isCRLF = cursor + 1 < count && buffer[cursor + 1] == CSVParser.lf
+            let isCRLF = unsafe cursor + 1 < count && buffer[cursor + 1] == CSVParser.lf
             return (isCRLF ? cursor + 2 : cursor + 1, true)
         }
         // Garbage after quote - treat as field boundary without advancing
@@ -303,7 +304,7 @@ public struct CSVParser: Sequence {
             }
 
             // Check for escaped quote ""
-            if cursor + 1 < count, buffer[cursor + 1] == CSVParser.quote {
+            if cursor + 1 < count, unsafe buffer[cursor + 1] == CSVParser.quote {
                 cursor += 2
                 hasEscapedQuote = true
                 continue
@@ -348,14 +349,14 @@ public struct CSVParser: Sequence {
     /// Advances cursor to the next quote character using SIMD when available.
     @inline(__always)
     private func advanceToNextQuote(from cursor: Int, count: Int) -> Int {
-        guard let baseAddress = buffer.baseAddress else {
+        guard let baseAddress = unsafe buffer.baseAddress else {
             var pos = cursor
-            while pos < count, buffer[pos] != CSVParser.quote {
+            while pos < count, unsafe buffer[pos] != CSVParser.quote {
                 pos += 1
             }
             return pos
         }
-        return cursor + FieldScan.nextQuote(baseAddress.advanced(by: cursor), count: count - cursor)
+        return unsafe cursor + FieldScan.nextQuote(baseAddress.advanced(by: cursor), count: count - cursor)
     }
 
     /// Creates a FieldResult for a quoted field.
@@ -387,12 +388,12 @@ public struct CSVParser: Sequence {
 
         // Jump from one structural byte to the next. A quote is not a terminator here, but it is
         // recorded: strict mode rejects it, and the jump would otherwise skip over it.
-        while let baseAddress = buffer.baseAddress, cursor < count {
-            cursor += FieldScan.nextStructural(
+        while let baseAddress = unsafe buffer.baseAddress, cursor < count {
+            unsafe cursor += FieldScan.nextStructural(
                 baseAddress.advanced(by: cursor), count: count - cursor, delimiter: delimiter)
             guard cursor < count else { break }
 
-            let byte = buffer[cursor]
+            let byte = unsafe buffer[cursor]
             if byte == CSVParser.quote {
                 hasQuoteInField = true
                 cursor += 1

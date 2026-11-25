@@ -45,6 +45,7 @@ import Foundation
 /// - Field access via ``string(at:)`` is O(1) for unquoted fields
 /// - Quoted fields with escaped quotes (`""`) require O(n) unescaping
 /// - Use ``getBytes(at:)`` for maximum performance when UTF-8 bytes suffice
+@safe
 public struct CSVRowView {
     // MARK: Lifecycle
 
@@ -60,7 +61,7 @@ public struct CSVRowView {
         hasUnterminatedQuote: Bool,
         hasQuoteInUnquotedField: Bool,
     ) {
-        self.buffer = buffer
+        unsafe self.buffer = unsafe buffer
         self.fields = fields
         self.hasUnterminatedQuote = hasUnterminatedQuote
         self.hasQuoteInUnquotedField = hasQuoteInUnquotedField
@@ -93,7 +94,7 @@ public struct CSVRowView {
                 )
             )
         }
-        self.init(
+        unsafe self.init(
             buffer: buffer,
             fields: packed,
             hasUnterminatedQuote: hasUnterminatedQuote,
@@ -163,12 +164,12 @@ public struct CSVRowView {
     /// - Warning: The returned buffer is only valid while the parent `CSVParser`'s
     ///   data remains in scope. Do not store the buffer beyond the parsing closure.
     public func getBytes(at index: Int) -> UnsafeBufferPointer<UInt8> {
-        guard index < fields.count else { return UnsafeBufferPointer(start: nil, count: 0) }
+        guard index < fields.count else { return unsafe UnsafeBufferPointer(start: nil, count: 0) }
         let field = fields[index]
         let start = Int(field.start)
         let length = Int(field.length)
-        guard start + length <= buffer.count else { return UnsafeBufferPointer(start: nil, count: 0) }
-        return UnsafeBufferPointer(start: buffer.baseAddress?.advanced(by: start), count: length)
+        guard unsafe start + length <= buffer.count else { return unsafe UnsafeBufferPointer(start: nil, count: 0) }
+        return unsafe UnsafeBufferPointer(start: buffer.baseAddress?.advanced(by: start), count: length)
     }
 
     /// Decodes and returns the string value for the field at the given index.
@@ -204,27 +205,27 @@ public struct CSVRowView {
         let isQuoted = field.quoted
         let hasEscapedQuote = field.hasEscapedQuote
 
-        guard let base = buffer.baseAddress else { return nil }
+        guard let base = unsafe buffer.baseAddress else { return nil }
 
-        let ptr = base.advanced(by: start)
-        let fieldBuffer = UnsafeBufferPointer(start: ptr, count: length)
+        let ptr = unsafe base.advanced(by: start)
+        let fieldBuffer = unsafe UnsafeBufferPointer(start: ptr, count: length)
 
         // Fast path for UTF-8 (most common case)
         if encoding == .utf8 {
             guard isQuoted, hasEscapedQuote else {
                 // No unescaping needed - direct decode
-                return String(decoding: fieldBuffer, as: UTF8.self)
+                return unsafe String(decoding: fieldBuffer, as: UTF8.self)
             }
             // Use zero-allocation unescaper
-            return CSVUnescaper.unescape(buffer: fieldBuffer)
+            return unsafe CSVUnescaper.unescape(buffer: fieldBuffer)
         }
 
         // Non-UTF-8 encoding path (ASCII-compatible encodings like ISO-8859-1, Windows-1252)
         if isQuoted, hasEscapedQuote {
-            return CSVUnescaper.unescape(buffer: fieldBuffer, encoding: encoding)
+            return unsafe CSVUnescaper.unescape(buffer: fieldBuffer, encoding: encoding)
         }
 
-        let data = Data(bytes: ptr, count: length)
+        let data = unsafe Data(bytes: ptr, count: length)
         return String(data: data, encoding: encoding)
     }
 }
